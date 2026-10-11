@@ -15,7 +15,7 @@ export default defineConfig({
     passWithNoTests: true,
     coverage: {
       provider: 'v8',
-      include: ['src/modules/**/*.ts', 'src/main/**/*.ts'],
+      include: ['src/**/*.ts'],
       reporter: ['text', 'lcov'],
       reportsDirectory: 'coverage',
       thresholds: {
