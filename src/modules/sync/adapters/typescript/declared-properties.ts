@@ -13,7 +13,21 @@ function reactiveDecorator(member: ts.PropertyDeclaration): DeclaredProperty['de
   return null;
 }
 
-function stringLiteralUnion(type: ts.TypeNode | undefined): string[] {
+type TypeAliases = ReadonlyMap<string, ts.TypeNode>;
+
+function typeAliasesOf(sourceFile: ts.SourceFile): TypeAliases {
+  return new Map(sourceFile.statements.filter(ts.isTypeAliasDeclaration).map(({ name, type }) => [name.text, type]));
+}
+
+function resolvedType(type: ts.TypeNode | undefined, aliases: TypeAliases): ts.TypeNode | undefined {
+  if (type !== undefined && ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName)) {
+    return aliases.get(type.typeName.text);
+  }
+  return type;
+}
+
+function stringLiteralUnion(declared: ts.TypeNode | undefined, aliases: TypeAliases): string[] {
+  const type = resolvedType(declared, aliases);
   if (type === undefined || !ts.isUnionTypeNode(type)) {
     return [];
   }
@@ -27,7 +41,11 @@ function stringLiteralUnion(type: ts.TypeNode | undefined): string[] {
   return values;
 }
 
-function readProperty(member: ts.ClassElement, sourceFile: ts.SourceFile): DeclaredProperty | null {
+function readProperty(
+  member: ts.ClassElement,
+  sourceFile: ts.SourceFile,
+  aliases: TypeAliases,
+): DeclaredProperty | null {
   if (!ts.isPropertyDeclaration(member) || !(ts.isIdentifier(member.name) || ts.isStringLiteral(member.name))) {
     return null;
   }
@@ -39,15 +57,16 @@ function readProperty(member: ts.ClassElement, sourceFile: ts.SourceFile): Decla
     name: member.name.text,
     decorator,
     type: member.type?.getText(sourceFile) ?? null,
-    literalValues: stringLiteralUnion(member.type),
+    literalValues: stringLiteralUnion(member.type, aliases),
     defaultValue: member.initializer?.getText(sourceFile) ?? null,
     range: { start: member.getStart(sourceFile), end: member.end },
   };
 }
 
 export function readDeclaredProperties(classNode: ts.ClassDeclaration, sourceFile: ts.SourceFile): DeclaredProperty[] {
+  const aliases = typeAliasesOf(sourceFile);
   return classNode.members.flatMap((member) => {
-    const property = readProperty(member, sourceFile);
+    const property = readProperty(member, sourceFile, aliases);
     return property === null ? [] : [property];
   });
 }

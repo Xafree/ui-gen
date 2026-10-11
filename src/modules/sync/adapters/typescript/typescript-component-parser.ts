@@ -5,6 +5,7 @@ import { installFrenchDiagnosticMessages, readSyntaxDiagnostics } from './compil
 import { findComponentClasses } from './component-declarations.js';
 import { readDeclaredProperties } from './declared-properties.js';
 import { readRenderTemplate } from './render-template.js';
+import { readStaticStyles } from './styles/static-styles.js';
 
 const SOURCE_FILE_NAME = 'component.ts';
 
@@ -26,6 +27,7 @@ function readDeclaration(sourceFile: ts.SourceFile): ParsedDeclaration {
     className: component.className,
     properties: readDeclaredProperties(component.node, sourceFile),
     template: readRenderTemplate(component.node, sourceFile),
+    styles: readStaticStyles(component.node, sourceFile),
   };
 }
 

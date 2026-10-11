@@ -1,6 +1,7 @@
 import type { Diagnostic, DiagnosticDraft, DiagnosticSeverity } from '../model/diagnostic.js';
 import type { TemplateNode } from '../model/template-node.js';
-import { NOT_REPRESENTABLE_CODE, NOT_REPRESENTABLE_MESSAGE } from './representability.js';
+import type { TextRange } from '../model/text-range.js';
+import { NOT_PROJECTABLE_MESSAGE, NOT_REPRESENTABLE_CODE, NOT_REPRESENTABLE_MESSAGE } from './representability.js';
 import { opaqueRanges } from './template-tree.js';
 import { createPositionLocator } from './text-position.js';
 
@@ -32,11 +33,18 @@ export function declarationDiagnostics(text: string, problem: MissingDeclaration
   return diagnosticsAt(text, [issue], 'error');
 }
 
-export function notRepresentableDiagnostics(text: string, template: readonly TemplateNode[]): Diagnostic[] {
-  const issues = opaqueRanges(template).map((range) => ({
-    range,
-    code: NOT_REPRESENTABLE_CODE,
-    message: NOT_REPRESENTABLE_MESSAGE,
-  }));
+function visualSyncIssues(ranges: readonly TextRange[], message: string): DiagnosticDraft[] {
+  return ranges.map((range) => ({ range, code: NOT_REPRESENTABLE_CODE, message }));
+}
+
+export function visualSyncDiagnostics(
+  text: string,
+  template: readonly TemplateNode[],
+  unprojectableStyles: readonly TextRange[],
+): Diagnostic[] {
+  const issues = [
+    ...visualSyncIssues(opaqueRanges(template), NOT_REPRESENTABLE_MESSAGE),
+    ...visualSyncIssues(unprojectableStyles, NOT_PROJECTABLE_MESSAGE),
+  ];
   return diagnosticsAt(text, issues, 'warning');
 }
