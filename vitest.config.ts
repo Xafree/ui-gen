@@ -38,16 +38,18 @@ export default defineConfig({
         extends: true,
         esbuild: litDecorators,
         optimizeDeps: {
-          include: ['lit', 'lit/decorators.js'],
+          include: ['lit', 'lit/decorators.js', 'lit/directives/repeat.js', 'lit/directives/unsafe-svg.js', 'gsap'],
         },
         test: {
           name: 'browser',
           include: ['tests/renderer/**/*.test.ts'],
+          setupFiles: ['tests/renderer/setup.ts'],
           browser: {
             enabled: true,
             headless: true,
             provider: playwright(),
             instances: [{ browser: 'chromium' }],
+            viewport: { width: 1440, height: 900 },
           },
         },
       },

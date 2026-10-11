@@ -1,0 +1,151 @@
+    /* ======================================================================
+       Accueil du studio (aucun projet ouvert) : tokens --ui-* uniquement.
+       ====================================================================== */
+
+    /* ---------- Barre du haut sobre : marque, thème, compte ---------- */
+    .ac-topbar { position: sticky; top: 0; }
+    .ac-topbar .ui-topbar__meta { font-family: var(--ui-font-sans); }
+
+    /* ---------- Mise en page : démarrer à gauche, projets récents à droite ---------- */
+    .ac-main { max-width: 1040px; }
+    .ac-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+      gap: var(--ui-space-12);
+      align-items: start;
+    }
+
+    .ac-start { display: grid; gap: var(--ui-space-5); }
+    .ac-start__mark {
+      display: grid; place-items: center;
+      width: 40px; height: 40px;
+      border-radius: var(--ui-radius-lg);
+      background: var(--ui-surface-inverse);
+      color: var(--ui-text-inverse);
+    }
+    .ac-start__mark svg { width: 24px; height: 24px; }
+    .ac-start__head { display: grid; gap: var(--ui-space-2); }
+    .ac-start__lead { color: var(--ui-text-2); font-size: var(--ui-text-md); line-height: var(--ui-lh-md); max-width: 40ch; }
+    .ac-actions { display: grid; gap: var(--ui-space-2); }
+    .ac-actions .ui-btn { justify-content: flex-start; }
+    .ac-note {
+      display: flex; align-items: flex-start; gap: var(--ui-space-2);
+      padding-top: var(--ui-space-4);
+      border-top: 1px solid var(--ui-border);
+      color: var(--ui-text-3); font-size: var(--ui-text-xs); line-height: 18px;
+    }
+    .ac-note .icon { flex: none; width: 14px; height: 14px; margin-top: 2px; }
+    .ac-note code { color: var(--ui-text-2); }
+
+    /* ---------- Projets récents ---------- */
+    .ac-recent { padding: 0; overflow: hidden; }
+    .ac-recent__head {
+      display: flex; align-items: center; gap: var(--ui-space-2);
+      min-height: 44px; padding: 0 var(--ui-space-2) 0 var(--ui-space-4);
+      border-bottom: 1px solid var(--ui-border);
+    }
+    .ac-recent__title { font-size: var(--ui-text-md); line-height: var(--ui-lh-md); font-weight: var(--ui-weight-semibold); }
+    .ac-recent__body { min-height: 240px; display: grid; }
+    .ac-recent__list { padding: var(--ui-space-1); align-content: start; display: grid; gap: 1px; }
+    .ac-recent__foot { padding: var(--ui-space-2) var(--ui-space-4); border-top: 1px solid var(--ui-border); color: var(--ui-text-3); font-size: var(--ui-text-xs); line-height: var(--ui-lh-xs); }
+
+    .ac-row { min-height: 52px; padding: var(--ui-space-2); gap: var(--ui-space-3); }
+    .ac-row__icon {
+      display: grid; place-items: center; flex: none;
+      width: 32px; height: 32px;
+      border: 1px solid var(--ui-border);
+      border-radius: var(--ui-radius-md);
+      background: var(--ui-surface-sunken);
+      color: var(--ui-text-2);
+    }
+    .ac-row .ui-list-item__title { font-size: var(--ui-text-md); line-height: var(--ui-lh-md); }
+    .ac-row .ui-list-item__meta { font-family: var(--ui-font-mono); }
+    .ac-row__when { flex: none; color: var(--ui-text-3); font-size: var(--ui-text-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .ac-row__go { flex: none; color: var(--ui-text-3); transition: transform var(--ui-dur-base) var(--ui-ease-out), color var(--ui-dur-fast) var(--ui-ease-out); }
+    a.ac-row:hover .ac-row__go,
+    a.ac-row:focus-visible .ac-row__go { color: var(--ui-text); transform: translateX(2px); }
+
+    /* Projet introuvable : pas de lien, état et action visibles */
+    .ac-row.is-missing { flex-wrap: wrap; }
+    .ac-row.is-missing .ac-row__icon { color: var(--ui-warning); background: var(--ui-warning-soft); border-color: transparent; }
+    .ac-row.is-missing .ui-list-item__title { color: var(--ui-text-2); }
+    .ac-row__state { display: flex; align-items: center; gap: var(--ui-space-2); flex: none; margin-left: auto; }
+
+    .ac-recent .ui-empty { align-self: center; }
+
+    /* ---------- Dialogues ---------- */
+    .ac-form { display: grid; gap: var(--ui-space-4); }
+    .ac-form fieldset { margin: 0; padding: 0; border: 0; display: grid; gap: var(--ui-space-3); min-width: 0; }
+    .ac-form legend { margin-bottom: var(--ui-space-3); padding: 0; font-size: var(--ui-text-sm); font-weight: var(--ui-weight-semibold); color: var(--ui-text); }
+    .ac-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-3); }
+    .ac-path { display: flex; gap: var(--ui-space-2); min-width: 0; }
+    .ac-path .ui-input { flex: 1; }
+    .ac-help-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ui-space-1) var(--ui-space-2); }
+    .ac-help-row .ui-btn--link { font-size: var(--ui-text-xs); }
+
+    .ac-preview {
+      display: grid; gap: var(--ui-space-2);
+      padding: var(--ui-space-3);
+      border: 1px solid var(--ui-border);
+      border-radius: var(--ui-radius-md);
+      background: var(--ui-surface-sunken);
+    }
+    .ac-preview > div { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--ui-space-2); align-items: baseline; }
+    .ac-preview dt { color: var(--ui-text-3); font-size: var(--ui-text-xs); line-height: var(--ui-lh-xs); }
+    .ac-preview dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--ui-text); font-family: var(--ui-font-mono); font-size: var(--ui-text-xs); line-height: var(--ui-lh-xs); }
+    .ac-preview dd.is-pending { color: var(--ui-text-3); font-family: var(--ui-font-sans); }
+
+    /* Sélecteur de dossier simulé */
+    .ac-picker-note { display: flex; align-items: flex-start; gap: var(--ui-space-2); color: var(--ui-text-3); font-size: var(--ui-text-xs); line-height: 18px; }
+    .ac-picker-note .icon { flex: none; width: 14px; height: 14px; margin-top: 2px; }
+    .ac-folders { padding: var(--ui-space-1); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface-raised); display: grid; gap: 1px; }
+    .ac-folders .ui-list-item { min-height: 44px; cursor: default; }
+    .ac-folders .ui-list-item__title { font-family: var(--ui-font-mono); font-size: var(--ui-text-xs); color: var(--ui-text); }
+    .ac-folders .ui-list-item__meta { font-family: var(--ui-font-sans); }
+    .ac-folders [aria-selected="true"] > .icon { color: var(--ui-accent-text); }
+
+    /* Dialogue de confirmation d'une bibliothèque Lit existante */
+    .ac-facts { display: grid; gap: var(--ui-space-1-5); padding: var(--ui-space-3); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); }
+    .ac-facts > div { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--ui-space-2); align-items: baseline; }
+    .ac-facts dt { color: var(--ui-text-3); font-size: var(--ui-text-xs); line-height: var(--ui-lh-xs); }
+    .ac-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--ui-text); font-size: var(--ui-text-sm); line-height: var(--ui-lh-sm); }
+    .ac-facts dd code { font-size: var(--ui-text-xs); }
+    .ac-json { border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); overflow: hidden; }
+    .ac-json__head {
+      display: flex; align-items: center; gap: var(--ui-space-2);
+      min-height: 28px; padding: 0 var(--ui-space-3);
+      border-bottom: 1px solid var(--ui-border);
+      background: var(--ui-surface-sunken);
+      color: var(--ui-text-2); font-size: var(--ui-text-xs);
+    }
+    .ac-json__head .icon { width: 14px; height: 14px; color: var(--ui-text-3); }
+    .ac-json__head code { color: var(--ui-text); }
+    .ac-json__head .ui-badge { margin-left: auto; }
+    .ac-json .ui-code__pre { padding: var(--ui-space-2) 0; overflow-x: auto; }
+    .ac-json .ui-code__line::before { width: 36px; margin-right: var(--ui-space-3); padding-right: var(--ui-space-2); }
+
+    .ac-footer {
+      width: 100%; max-width: 1040px; margin: 0 auto;
+      padding: var(--ui-space-5) var(--ui-space-8) var(--ui-space-8);
+      border-top: 1px solid var(--ui-border);
+      color: var(--ui-text-3); font-size: var(--ui-text-xs); line-height: 18px;
+    }
+
+    /* ---------- Points de rupture ---------- */
+    @media (max-width: 899px) {
+      .ac-layout { grid-template-columns: minmax(0, 1fr); gap: var(--ui-space-8); }
+      .ac-start { max-width: 520px; }
+      .ac-actions { grid-template-columns: repeat(2, minmax(0, max-content)); }
+    }
+    @media (max-width: 640px) {
+      .ac-pair { grid-template-columns: minmax(0, 1fr); }
+      .ac-row__when { display: none; }
+      .ac-row.is-missing .ac-row__state { flex-basis: calc(100% - 44px); margin-left: 44px; justify-content: space-between; }
+      .ac-footer { padding: var(--ui-space-5) var(--ui-space-4) var(--ui-space-6); }
+      .ac-preview > div, .ac-facts > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+    }
+    @media (max-width: 479px) {
+      .ac-actions { grid-template-columns: minmax(0, 1fr); }
+      .ac-path { flex-wrap: wrap; }
+      .ac-path .ui-btn { width: 100%; }
+    }
