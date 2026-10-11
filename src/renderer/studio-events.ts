@@ -5,6 +5,7 @@ export const PROJECT_OPENED = 'project-opened';
 export const PROJECT_CLOSED = 'project-closed';
 export const PROJECT_CREATED = 'project-created';
 export const PROJECT_ADOPTED = 'project-adopted';
+export const NOTICE_REQUESTED = 'notice-requested';
 
 export interface ProjectOpenedDetail {
   readonly project: OpenedProject;
@@ -22,4 +23,8 @@ export interface ProjectCreatedDetail {
 
 export interface ProjectAdoptedDetail {
   readonly project: OpenedProject;
+}
+
+export interface NoticeRequestedDetail {
+  readonly notice: ToastRequest;
 }

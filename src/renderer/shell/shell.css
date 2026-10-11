@@ -1,0 +1,19 @@
+    /* ======================================================================
+       Écran à venir : coque commune + état vide centré dans la scène.
+       Tokens --ui-* uniquement.
+       ====================================================================== */
+
+    /* ---------- Barre du haut : mêmes boutons que l'Éditeur ---------- */
+    .ed-topbar-btn .icon { margin: 0 -2px; }
+    @media (max-width: 1279px) { .ed-hide-md { display: none; } }
+    /* Sous 480 px, l'export reste accessible par le menu « Export » des écrans */
+    @media (max-width: 479px) { .ed-hide-xs { display: none; } }
+    @media (max-width: 699px) {
+      .ed-hide-sm {
+        position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+        overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+      }
+    }
+
+    /* ---------- Scène : l'état vide se centre dans les deux axes ---------- */
+    .av-stage { display: grid; overflow: auto; }
