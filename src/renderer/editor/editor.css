@@ -239,6 +239,7 @@
 .ed-insp-head__sub { color: var(--ui-text-3); font-size: var(--ui-text-xs); line-height: var(--ui-lh-xs); }
 .ed-readonly { display: flex; align-items: center; gap: var(--ui-space-2); min-height: var(--ui-control-h); color: var(--ui-text); font-family: var(--ui-font-mono); font-size: var(--ui-text-xs); font-variant-numeric: tabular-nums; }
 .ed-readonly code { color: var(--ui-text-3); }
+.ed-pad-grid .ed-readonly { overflow: hidden; }
 .ed-pad-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-2); }
 .ed-pad-grid .ui-label { font-size: var(--ui-text-xs); color: var(--ui-text-3); font-weight: var(--ui-weight-regular); }
 .ed-select-swatch { position: relative; min-width: 0; flex: 1; }

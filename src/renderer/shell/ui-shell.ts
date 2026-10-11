@@ -89,7 +89,7 @@ export class UiShell extends LitElement {
           <div class="ui-empty" id="av-empty">
             <span class="ui-empty__icon">${icon(shown.icon)}</span>
             <p class="ui-empty__title">Disponible dans un prochain lot</p>
-            <p class="ui-empty__text" id="av-text">L'écran ${shown.label} arrive avec le lot ${String(shown.lot)}.</p>
+            <p class="ui-empty__text" id="av-text">${`L'écran ${shown.label} arrive avec le lot ${String(shown.lot)}.`}</p>
           </div>
         </main>
         <ui-editor .api=${this.api} .projectPath=${this.project.path} ?hidden=${!editorShown}></ui-editor>

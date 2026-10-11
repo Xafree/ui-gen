@@ -295,7 +295,7 @@ export class UiEditor extends LitElement {
       <footer class="ui-statusbar" aria-label="Barre d'état">
         <span class="ui-statusbar__item">${icon('code')}<span><span class="ed-status-long">Cible : </span>Lit<span class="ed-status-long"> + TypeScript</span></span></span>
         <span class="ui-statusbar__item" id="status-sync" role="status"><span class="ui-status-dot ui-status-dot--${sync.tone}" aria-hidden="true"></span><span id="status-sync-label">${sync.status}</span></span>
-        ${counter === null ? nothing : html`<button class="ed-status-btn ed-status-warn${counter.hasError ? ' is-error' : ''}" type="button" id="status-warn" aria-label=${counter.name} @click=${this.onProblemsClick}>${icon('alerte')}<span id="status-warn-label">${String(counter.count)}<span class="ed-status-long"> ${counter.word}</span></span></button>`}
+        ${counter === null ? nothing : html`<button class="ed-status-btn ed-status-warn${counter.hasError ? ' is-error' : ''}" type="button" id="status-warn" aria-label=${counter.name} @click=${this.onProblemsClick}>${icon('alerte')}<span id="status-warn-label">${String(counter.count)}<span class="ed-status-long">${` ${counter.word}`}</span></span></button>`}
         <span class="ui-statusbar__spacer"></span>
         ${this.opened === null ? nothing : html`<span class="ui-statusbar__item ed-status-opt" id="status-sel">${this.selectedLayer === null ? this.tag : selectionLabel(this.selectedLayer)}</span><span class="ui-statusbar__item ed-status-num" id="status-cursor">Ligne ${String(this.cursor.line)}, col. ${String(this.cursor.column)}</span>`}
         <span class="ui-statusbar__item ed-status-opt">Espaces : 2</span>
