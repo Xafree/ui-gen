@@ -45,7 +45,11 @@ export async function writeFiles(root: string, files: Readonly<Record<string, st
 }
 
 export async function launchStudio(userData: string): Promise<Studio> {
-  const app = await electron.launch({ args: ['.', `--user-data-dir=${userData}`], cwd: process.cwd() });
+  const app = await electron.launch({
+    args: ['.', `--user-data-dir=${userData}`],
+    cwd: process.cwd(),
+    colorScheme: null,
+  });
   try {
     const window = await app.firstWindow();
     await window.waitForLoadState('domcontentloaded');
