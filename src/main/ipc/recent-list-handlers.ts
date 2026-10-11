@@ -34,10 +34,16 @@ export interface RestorePayload {
   readonly projects: RecentProject[];
 }
 
-const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?$/;
+const LOCAL_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?/;
+const UTC_OFFSET = /^(?:Z|[+-]\d{2}:\d{2})?$/;
+
+function hasIsoDateTimeShape(value: string): boolean {
+  const local = LOCAL_DATE_TIME.exec(value);
+  return local !== null && UTC_OFFSET.test(value.slice(local[0].length));
+}
 
 function readIsoDate(value: unknown): string | null {
-  const isIsoDate = typeof value === 'string' && ISO_DATE_TIME.test(value) && !Number.isNaN(Date.parse(value));
+  const isIsoDate = typeof value === 'string' && hasIsoDateTimeShape(value) && !Number.isNaN(Date.parse(value));
   return isIsoDate ? value : null;
 }
 
