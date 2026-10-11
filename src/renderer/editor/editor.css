@@ -92,6 +92,39 @@
 .ed-viewport.is-preview { cursor: default; }
 .ed-world { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
 
+/* ---------- Superpositions : sélection, survol, repères ---------- */
+.ed-overlay { position: absolute; inset: 0; z-index: var(--ui-z-canvas-overlay); pointer-events: none; }
+.ed-overlay.is-off .ed-sel, .ed-overlay.is-off .ed-guides { display: none; }
+.ed-sel { position: absolute; outline: 1px solid var(--ui-selection); }
+.ed-sel .ui-selection__handle[data-pos="t"] { top: -4px; left: calc(50% - 4px); }
+.ed-sel .ui-selection__handle[data-pos="b"] { bottom: -4px; left: calc(50% - 4px); }
+.ed-sel .ui-selection__handle[data-pos="l"] { left: -4px; top: calc(50% - 4px); }
+.ed-sel .ui-selection__handle[data-pos="r"] { right: -4px; top: calc(50% - 4px); }
+.ed-sel.is-small .ui-selection__handle[data-pos="t"],
+.ed-sel.is-small .ui-selection__handle[data-pos="b"],
+.ed-sel.is-small .ui-selection__handle[data-pos="l"],
+.ed-sel.is-small .ui-selection__handle[data-pos="r"] { display: none; }
+.ed-hover { position: absolute; outline: 1px solid var(--ui-selection); opacity: 0.6; }
+.ed-guide { position: absolute; background: var(--ui-accent); }
+.ed-guide--v { width: 1px; }
+.ed-guide--h { height: 1px; }
+.ed-guide::before, .ed-guide::after { content: ""; position: absolute; background: var(--ui-accent); }
+.ed-guide--v::before, .ed-guide--v::after { left: -3px; width: 7px; height: 1px; }
+.ed-guide--v::before { top: 0; }
+.ed-guide--v::after { bottom: 0; }
+.ed-guide--h::before, .ed-guide--h::after { top: -3px; width: 1px; height: 7px; }
+.ed-guide--h::before { left: 0; }
+.ed-guide--h::after { right: 0; }
+.ed-guide__label {
+  position: absolute; padding: 0 3px;
+  border-radius: var(--ui-radius-xs);
+  background: var(--ui-accent); color: var(--ui-text-on-accent);
+  font-family: var(--ui-font-mono); font-size: var(--ui-text-xs); line-height: 15px;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.ed-guide--v .ed-guide__label { top: 50%; left: 5px; translate: 0 -50%; }
+.ed-guide--h .ed-guide__label { left: 50%; top: 5px; translate: -50% 0; }
+
 .ed-canvas-empty { position: absolute; inset: 0; z-index: 2; display: flex; }
 
 .ed-frame { position: absolute; top: 0; left: 0; }

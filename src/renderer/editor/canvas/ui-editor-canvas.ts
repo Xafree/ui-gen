@@ -18,11 +18,23 @@ import {
   zoomPercent,
   type CanvasView,
 } from '../../../modules/editor/domain/viewport/zoom.js';
+import { nearestDrawnAncestor, neighboursOf } from '../../../modules/editor/domain/layers/layer-lookup.js';
+import type { LayerNode } from '../../../modules/editor/domain/layers/layer-tree.js';
+import {
+  selectionGuides,
+  sizeLabel,
+  toViewportBox,
+  type Box,
+  type Point,
+} from '../../../modules/editor/domain/selection/selection-overlay.js';
+import type { NodeRect } from '../../../modules/canvas/domain/harness-message.js';
 import type { OpenedComponent } from '../../../modules/sync/application/components/component-views.js';
 import { icon } from '../../icons/icon.js';
 import { editorStyles } from '../editor-styles.js';
 import { EMPTY_LIBRARY_TITLE, IMPORT_HINT, IMPORT_SCREEN } from '../library/ui-component-library.js';
-import type { CanvasRectsDetail } from './ui-canvas-frame.js';
+import '../selection/ui-selection-overlay.js';
+import type { UiSelectionOverlay } from '../selection/ui-selection-overlay.js';
+import type { CanvasRectsDetail, UiCanvasFrame } from './ui-canvas-frame.js';
 import './ui-canvas-frame.js';
 
 declare global {
@@ -32,6 +44,12 @@ declare global {
 }
 
 export type CanvasPhase = 'loading' | 'empty' | 'ready';
+
+export const CANVAS_SELECT = 'canvas-select';
+
+export interface CanvasSelectDetail {
+  readonly id: string | null;
+}
 
 type Tool = 'select' | 'frame' | 'text' | 'hand';
 
@@ -97,7 +115,13 @@ export class UiEditorCanvas extends LitElement {
   @property({ attribute: false }) component: OpenedComponent | null = null;
   @property({ attribute: false }) tag = '';
   @property({ attribute: false }) projectPath = '';
+  @property({ attribute: false }) layers: readonly LayerNode[] = [];
+  @property({ attribute: false }) selectedId: string | null = null;
+  @property({ attribute: false }) hoverId: string | null = null;
+  @property({ attribute: false }) hiddenLayers: ReadonlySet<string> = new Set();
+  @property({ attribute: false }) lockedLayers: ReadonlySet<string> = new Set();
 
+  @state() private rects: ReadonlyMap<string, NodeRect> = new Map();
   @state() private view: CanvasView = { x: 0, y: 0, zoom: 1 };
   @state() private screenSize: ScreenSizeId = DEFAULT_SCREEN_SIZE;
   @state() private darkPreview = false;
@@ -109,6 +133,8 @@ export class UiEditorCanvas extends LitElement {
   @state() private panning = false;
 
   @query('#viewport') private readonly viewport!: HTMLElement | null;
+  @query('ui-canvas-frame') private readonly frame!: UiCanvasFrame | null;
+  @query('ui-selection-overlay') private readonly overlay!: UiSelectionOverlay | null;
 
   private autoFit = true;
   private drag: PanDrag | null = null;
@@ -143,6 +169,7 @@ export class UiEditorCanvas extends LitElement {
 
   protected override updated(changed: PropertyValues): void {
     this.observeViewport();
+    this.drawOverlay();
     if (this.autoFit && (changed.has('screenSize') || changed.has('frameHeight'))) this.fit();
   }
 
@@ -167,11 +194,12 @@ export class UiEditorCanvas extends LitElement {
     return html`
       <div class="ed-ruler-corner" aria-hidden="true"></div>
       ${this.renderRuler('x', this.viewportWidth, this.view.x)}${this.renderRuler('y', this.viewportHeight, this.view.y)}
-      <div class="ed-viewport ${this.spaceDown ? 'is-space' : ''} ${this.panning ? 'is-panning' : ''}" id="viewport" tabindex="0" role="group" aria-roledescription="canvas" aria-label=${this.viewportLabel()} aria-describedby="viewport-help" data-tool=${this.tool} @wheel=${{ handleEvent: this.onWheel, passive: false }} @keydown=${this.onViewportKeydown} @pointerdown=${this.onPointerDown} @pointermove=${this.onPointerMove} @pointerup=${this.endDrag} @pointercancel=${this.endDrag}>
+      <div class="ed-viewport ${this.spaceDown ? 'is-space' : ''} ${this.panning ? 'is-panning' : ''}" id="viewport" tabindex="0" role="group" aria-roledescription="canvas" aria-label=${this.viewportLabel()} aria-describedby="viewport-help" data-tool=${this.tool} @wheel=${{ handleEvent: this.onWheel, passive: false }} @keydown=${this.onViewportKeydown} @pointerdown=${this.onPointerDown} @pointermove=${this.onPointerMove} @pointerup=${this.endDrag} @pointercancel=${this.endDrag} @click=${this.onViewportClick}>
         <p class="sr-only" id="viewport-help">Flèches : déplacer la vue. Plus et moins : zoomer. Sélectionnez les éléments au clavier dans le panneau Calques.</p>
         <div class="ed-world" id="world" style=${styleMap({ transform: `translate(${String(this.view.x)}px, ${String(this.view.y)}px) scale(${String(this.view.zoom)})`, '--z': String(this.view.zoom) })}>
           ${this.component === null ? nothing : this.renderFrame(this.component)}
         </div>
+        <ui-selection-overlay></ui-selection-overlay>
       </div>
       ${this.renderCanvasBar()}
       <span class="ui-tooltip ed-tool-hint" id="tool-hint" role="status" ?hidden=${hint === undefined}>${hint ?? ''}</span>
@@ -196,7 +224,7 @@ export class UiEditorCanvas extends LitElement {
       <div class="ui-frame ed-frame" id="frame">
         <div class="ui-frame__label"><span id="frame-name">${this.tag}</span><span class="ui-mono" id="frame-meta">${variantsLabel(variants)} · ${size.label}</span></div>
         <div class="ui-frame__body ed-frame__body" id="frame-body" data-screen=${size.id} aria-hidden="true" style=${styleMap({ width: `${String(size.width)}px`, height: `${String(this.frameHeight)}px` })}>
-          <ui-canvas-frame .component=${component} .projectPath=${this.projectPath} ?darkPreview=${this.darkPreview} @canvas-rects=${this.onRects}></ui-canvas-frame>
+          <ui-canvas-frame .component=${component} .projectPath=${this.projectPath} ?darkPreview=${this.darkPreview} .hiddenLayers=${this.hiddenLayers} .lockedLayers=${this.lockedLayers} @canvas-rects=${this.onRects}></ui-canvas-frame>
         </div>
       </div>
     `;
@@ -310,8 +338,59 @@ export class UiEditorCanvas extends LitElement {
 
   private readonly onRects = (event: CustomEvent<CanvasRectsDetail>): void => {
     const { rects } = event.detail;
+    this.rects = new Map(rects.map((rect) => [rect.id, rect]));
     const bottom = Math.max(0, ...rects.map((rect) => rect.y + rect.height));
     if (bottom > 0) this.frameHeight = Math.ceil(bottom) + FRAME_BOTTOM_MARGIN;
+  };
+
+  private frameOrigin(): Point | null {
+    const frame = this.frame;
+    const viewport = this.viewport;
+    if (frame === null || viewport === null) return null;
+    const frameBox = frame.getBoundingClientRect();
+    const viewportBox = viewport.getBoundingClientRect();
+    return { x: frameBox.left - viewportBox.left, y: frameBox.top - viewportBox.top };
+  }
+
+  private viewportBoxOf(id: string | null, origin: Point): Box | null {
+    const rect = id === null ? undefined : this.rects.get(id);
+    return rect === undefined ? null : toViewportBox(rect, origin, this.view.zoom);
+  }
+
+  private drawOverlay(): void {
+    const overlay = this.overlay;
+    if (overlay === null) return;
+    const origin = this.frameOrigin();
+    const selected = origin === null ? null : this.viewportBoxOf(this.selectedId, origin);
+    const rect = this.selectedId === null ? undefined : this.rects.get(this.selectedId);
+    if (origin === null || selected === null || rect === undefined || this.selectedId === null) {
+      overlay.selection = null;
+      overlay.guides = [];
+    } else {
+      overlay.selection = { box: selected, size: sizeLabel(rect) };
+      overlay.guides = this.guidesOf(this.selectedId, selected, origin);
+    }
+    overlay.hover = this.hoverId === this.selectedId || origin === null ? null : this.viewportBoxOf(this.hoverId, origin);
+  }
+
+  private guidesOf(id: string, selected: Box, origin: Point): ReturnType<typeof selectionGuides> {
+    const isDrawn = (layerId: string): boolean => this.rects.has(layerId);
+    const parentId = nearestDrawnAncestor(this.layers, id, isDrawn);
+    const { previousId } = neighboursOf(this.layers, id, isDrawn);
+    const parent = this.viewportBoxOf(parentId, origin);
+    const previous = parent === null ? null : this.viewportBoxOf(previousId, origin);
+    return selectionGuides(selected, parent, previous, this.view.zoom);
+  }
+
+  private readonly onViewportClick = (event: MouseEvent): void => {
+    const frame = this.frame;
+    if (frame === null || event.button !== 0 || this.tool !== 'select' || this.spaceDown || this.component === null) return;
+    const box = frame.getBoundingClientRect();
+    const x = (event.clientX - box.left) / this.view.zoom;
+    const y = (event.clientY - box.top) / this.view.zoom;
+    void frame.hitTest(x, y).then((id) => {
+      this.dispatchEvent(new CustomEvent<CanvasSelectDetail>(CANVAS_SELECT, { detail: { id }, bubbles: true, composed: true }));
+    });
   };
 
   private readonly onWheel = (event: WheelEvent): void => {

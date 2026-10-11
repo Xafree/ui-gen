@@ -1,3 +1,5 @@
+import { instanceNodeId } from '../modules/canvas/application/instance-node-id.js';
+import { readHarnessCommand, type HarnessCommand } from '../modules/canvas/domain/harness-command.js';
 import type { HarnessMessage, NodeRect } from '../modules/canvas/domain/harness-message.js';
 
 interface RenderRequest {
@@ -13,8 +15,17 @@ const DARK_THEME_ATTRIBUTE = 'data-hz-theme';
 const NODE_MARK_DATASET_KEY = 'nodeMark';
 
 let port: MessagePort | null = null;
+interface HiddenStyle {
+  readonly value: string;
+  readonly priority: string;
+}
+
 let instances: readonly HTMLElement[] = [];
+let instanceVariants: readonly (string | null)[] = [];
+let hiddenIds: ReadonlySet<string> = new Set();
+let lockedIds: ReadonlySet<string> = new Set();
 let rectsScheduled = false;
+const hiddenElements = new Map<Element, HiddenStyle>();
 
 function readRequest(): RenderRequest | null {
   const parameters = new URLSearchParams(location.search);
@@ -82,13 +93,14 @@ async function render(request: RenderRequest): Promise<void> {
   await import(moduleUrl(request));
   if (customElements.get(request.tag) === undefined) throw new Error('The component did not define its element');
   const variants = request.property === null || request.variants.length === 0 ? [null] : request.variants;
+  instanceVariants = variants;
   instances = variants.map((variant) => createInstance(request, variant));
   layOutCanvas();
   document.body.replaceChildren(...instances);
   await Promise.all(instances.map(settled));
 }
 
-function markedElementsIn(root: Document | ShadowRoot): Element[] {
+function markedElementsIn(root: Element | ShadowRoot): Element[] {
   const marked = [...root.querySelectorAll(`[${markAttribute()}]`)];
   const nested = [...root.querySelectorAll('*')].flatMap((element) =>
     element.shadowRoot === null ? [] : markedElementsIn(element.shadowRoot),
@@ -96,13 +108,24 @@ function markedElementsIn(root: Document | ShadowRoot): Element[] {
   return [...marked, ...nested];
 }
 
+function instanceRoot(instance: HTMLElement): Element | ShadowRoot {
+  return instance.shadowRoot ?? instance;
+}
+
+function layerIdOf(element: Element, variant: string | null): string | null {
+  const nodeId = element.getAttribute(markAttribute());
+  return nodeId === null ? null : instanceNodeId(variant, nodeId);
+}
+
 function measure(): NodeRect[] {
-  return markedElementsIn(document).flatMap((element) => {
-    const id = element.getAttribute(markAttribute());
-    if (id === null) return [];
-    const { x, y, width, height } = element.getBoundingClientRect();
-    return [{ id, x, y, width, height }];
-  });
+  return instances.flatMap((instance, index) =>
+    markedElementsIn(instanceRoot(instance)).flatMap((element) => {
+      const id = layerIdOf(element, instanceVariants[index] ?? null);
+      if (id === null) return [];
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return [{ id, x, y, width, height }];
+    }),
+  );
 }
 
 function postRects(): void {
@@ -128,32 +151,89 @@ function deepElementAt(x: number, y: number): Element | null {
   return found;
 }
 
-function markedAncestorId(start: Element | null): string | null {
+function parentOf(element: Element): Element | null {
+  const root = element.getRootNode();
+  return element.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
+}
+
+function instanceIndexOf(start: Element): number {
+  let current: Element | null = start;
+  while (current !== null) {
+    const index = instances.findIndex((instance) => instance === current);
+    if (index >= 0) return index;
+    current = parentOf(current);
+  }
+  return -1;
+}
+
+function selectableLayerId(start: Element | null): string | null {
   let current = start;
   while (current !== null) {
-    const id = current.getAttribute(markAttribute());
-    if (id !== null) return id;
-    const root = current.getRootNode();
-    current = current.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
+    const index = instanceIndexOf(current);
+    const id = index < 0 ? null : layerIdOf(current, instanceVariants[index] ?? null);
+    if (id !== null && !lockedIds.has(id)) return id;
+    current = parentOf(current);
   }
   return null;
 }
 
-function readCoordinate(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+function hide(element: Element): void {
+  if (!(element instanceof HTMLElement) || hiddenElements.has(element)) return;
+  hiddenElements.set(element, {
+    value: element.style.getPropertyValue('visibility'),
+    priority: element.style.getPropertyPriority('visibility'),
+  });
+  element.style.setProperty('visibility', 'hidden', 'important');
+}
+
+function reveal(element: Element, previous: HiddenStyle): void {
+  if (!(element instanceof HTMLElement)) return;
+  element.style.removeProperty('visibility');
+  if (previous.value !== '') element.style.setProperty('visibility', previous.value, previous.priority);
+}
+
+function hiddenTargets(): Element[] {
+  const branches = instances.filter((_instance, index) => hiddenIds.has(instanceVariants[index] ?? ''));
+  const layers = instances.flatMap((instance, index) =>
+    markedElementsIn(instanceRoot(instance)).filter((element) => {
+      const id = layerIdOf(element, instanceVariants[index] ?? null);
+      return id !== null && hiddenIds.has(id);
+    }),
+  );
+  return [...branches, ...layers];
+}
+
+function applyHidden(): void {
+  const targets = new Set(hiddenTargets());
+  for (const [element, previous] of hiddenElements) {
+    if (targets.has(element)) continue;
+    reveal(element, previous);
+    hiddenElements.delete(element);
+  }
+  for (const element of targets) hide(element);
+}
+
+function run(command: HarnessCommand): void {
+  switch (command.type) {
+    case 'hit-test':
+      post({ type: 'hit', id: selectableLayerId(deepElementAt(command.x, command.y)) });
+      break;
+    case 'dark-preview':
+      applyDarkPreview(command.enabled);
+      break;
+    case 'layer-state':
+      hiddenIds = new Set(command.hidden);
+      lockedIds = new Set(command.locked);
+      applyHidden();
+      scheduleRects();
+      break;
+  }
 }
 
 function handleCommand(data: unknown): void {
-  if (typeof data !== 'object' || data === null) return;
-  const type: unknown = Reflect.get(data, 'type');
-  if (type === 'hit-test') {
-    const x = readCoordinate(Reflect.get(data, 'x'));
-    const y = readCoordinate(Reflect.get(data, 'y'));
-    if (x !== null && y !== null) post({ type: 'hit', id: markedAncestorId(deepElementAt(x, y)) });
-  } else if (type === 'dark-preview') {
-    const enabled: unknown = Reflect.get(data, 'enabled');
-    if (typeof enabled === 'boolean') applyDarkPreview(enabled);
-  }
+  const command = readHarnessCommand(data);
+  if (command === null) console.warn('The studio sent an unreadable command');
+  else run(command);
 }
 
 function observeLayout(): void {

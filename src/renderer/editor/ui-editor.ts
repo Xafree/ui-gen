@@ -1,5 +1,7 @@
-import { css, html, LitElement, nothing, type TemplateResult } from 'lit';
+import { css, html, LitElement, nothing, type PropertyValues, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { findLayer, layerIds } from '../../modules/editor/domain/layers/layer-lookup.js';
+import { buildLayerTree, countLayers, type LayerNode } from '../../modules/editor/domain/layers/layer-tree.js';
 import { samePath } from '../../modules/sync/domain/library/component-summary.js';
 import type { ComponentSummary } from '../../modules/sync/domain/library/component-summary.js';
 import type { ComponentChange, OpenedComponent } from '../../modules/sync/application/components/component-views.js';
@@ -8,9 +10,11 @@ import type { UiGenApi } from '../../preload/ui-gen-api.js';
 import { icon } from '../icons/icon.js';
 import type { ToastRequest } from '../motion/toast.js';
 import { NOTICE_REQUESTED, type NoticeRequestedDetail } from '../studio-events.js';
-import type { CanvasPhase } from './canvas/ui-editor-canvas.js';
+import type { CanvasPhase, CanvasSelectDetail } from './canvas/ui-editor-canvas.js';
 import './canvas/ui-editor-canvas.js';
 import { editorStyles } from './editor-styles.js';
+import type { LayerHoverDetail, LayerIdDetail } from './layers/ui-layer-tree.js';
+import './layers/ui-layer-tree.js';
 import { EMPTY_LIBRARY_TITLE, IMPORT_HINT, IMPORT_SCREEN, type ComponentOpenDetail } from './library/ui-component-library.js';
 import './library/ui-component-library.js';
 
@@ -23,6 +27,46 @@ declare global {
 type LeftTab = 'layers' | 'components';
 
 const LEFT_TABS: readonly LeftTab[] = ['layers', 'components'];
+const NO_BREAK_SPACE = String.fromCodePoint(0xa0);
+const TYPING = 'input, textarea, select, [contenteditable="true"]';
+const TOGGLE_KEYS: Readonly<Record<string, LayerToggle>> = { h: 'hidden', l: 'locked' };
+
+type LayerToggle = 'hidden' | 'locked';
+
+interface ToggleNotice {
+  readonly verb: string;
+  readonly message: string;
+}
+
+const TOGGLE_NOTICES: Readonly<Record<LayerToggle, { readonly on: ToggleNotice; readonly off: ToggleNotice }>> = {
+  hidden: {
+    on: { verb: 'masqué', message: 'Masqué dans le canvas seulement : le code ne change pas.' },
+    off: { verb: 'affiché', message: 'Calque de nouveau visible.' },
+  },
+  locked: {
+    on: { verb: 'verrouillé', message: 'Un clic sur le canvas sélectionne désormais son parent.' },
+    off: { verb: 'déverrouillé', message: 'Le calque se sélectionne de nouveau sur le canvas.' },
+  },
+};
+
+function layerCountLabel(count: number): string {
+  return `${String(count)}${NO_BREAK_SPACE}${count > 1 ? 'calques' : 'calque'}`;
+}
+
+function toggled(ids: ReadonlySet<string>, id: string): Set<string> {
+  const next = new Set(ids);
+  if (!next.delete(id)) next.add(id);
+  return next;
+}
+
+function keptIn(ids: ReadonlySet<string>, kept: ReadonlySet<string>): Set<string> {
+  return new Set([...ids].filter((id) => kept.has(id)));
+}
+
+function isTyping(event: KeyboardEvent): boolean {
+  const origin = event.composedPath()[0];
+  return origin instanceof Element && origin.closest(TYPING) !== null;
+}
 
 function openFailure(path: string): ToastRequest {
   return {
@@ -64,19 +108,31 @@ export class UiEditor extends LitElement {
   @state() private opened: OpenedComponent | null = null;
   @state() private restarting = false;
   @state() private leftTab: LeftTab = 'layers';
+  @state() private layers: readonly LayerNode[] = [];
+  @state() private selectedId: string | null = null;
+  @state() private hoverId: string | null = null;
+  @state() private hiddenLayers: ReadonlySet<string> = new Set();
+  @state() private lockedLayers: ReadonlySet<string> = new Set();
 
+  private layersPath: string | null = null;
   private openRequest = 0;
   private stopFollowing: (() => void)[] = [];
 
   override connectedCallback(): void {
     super.connectedCallback();
+    document.addEventListener('keydown', this.onDocumentKeydown);
     if (this.hasUpdated) this.follow();
   }
 
   override disconnectedCallback(): void {
+    document.removeEventListener('keydown', this.onDocumentKeydown);
     this.stopFollowing.forEach((stop) => { stop(); });
     this.stopFollowing = [];
     super.disconnectedCallback();
+  }
+
+  protected override willUpdate(changed: PropertyValues): void {
+    if (changed.has('opened')) this.rebuildLayers();
   }
 
   protected override firstUpdated(): void {
@@ -119,8 +175,10 @@ export class UiEditor extends LitElement {
             <div class="ed-file-head" id="layers-head">
               ${icon('fichier-code')}
               <span class="ed-file-head__name" id="layers-file">${this.tag}.ts</span>
+              <span class="ed-file-head__meta" id="layer-count">${layerCountLabel(countLayers(this.layers))}</span>
             </div>`}
           <div class="ui-panel__body">
+            ${this.opened === null ? nothing : this.renderLayerTree()}
             ${this.phase === 'empty' ? this.renderLayersEmpty() : nothing}
           </div>
         </div>
@@ -129,6 +187,10 @@ export class UiEditor extends LitElement {
         </div>
       </aside>
     `;
+  }
+
+  private renderLayerTree(): TemplateResult {
+    return html`<ui-layer-tree .layers=${this.layers} .tag=${this.tag} .selectedId=${this.selectedId} .hiddenLayers=${this.hiddenLayers} .lockedLayers=${this.lockedLayers} @layer-select=${this.onLayerSelect} @layer-hover=${this.onLayerHover} @layer-hide=${this.onLayerHide} @layer-lock=${this.onLayerLock}></ui-layer-tree>`;
   }
 
   private renderLayersEmpty(): TemplateResult {
@@ -149,7 +211,7 @@ export class UiEditor extends LitElement {
     return html`
       <main class="ui-stage ed-stage" id="main" tabindex="-1">
         <h1 class="sr-only" id="page-title">${this.opened === null ? 'Éditeur' : `Éditeur du composant ${this.tag}`}</h1>
-        <ui-editor-canvas .phase=${this.phase} .component=${this.opened} .tag=${this.tag} .projectPath=${this.projectPath}></ui-editor-canvas>
+        <ui-editor-canvas .phase=${this.phase} .component=${this.opened} .tag=${this.tag} .projectPath=${this.projectPath} .layers=${this.layers} .selectedId=${this.selectedId} .hoverId=${this.hoverId} .hiddenLayers=${this.hiddenLayers} .lockedLayers=${this.lockedLayers} @canvas-select=${this.onCanvasSelect}></ui-editor-canvas>
         <section class="ed-code" id="code-panel" aria-label="Code Lit du composant">
           <div class="ed-code__head">
             <div class="ui-tabs ui-tabs--bare" role="tablist" aria-label="Panneau de code">
@@ -228,7 +290,66 @@ export class UiEditor extends LitElement {
     }
   }
 
-  private readonly onComponentOpen = (event: CustomEvent<ComponentOpenDetail>): void => {
+  private rebuildLayers(): void {
+    const opened = this.opened;
+    this.layers = opened === null ? [] : buildLayerTree(opened.model);
+    const sameComponent = opened !== null && this.layersPath !== null && samePath(this.layersPath, opened.path);
+    this.layersPath = opened?.path ?? null;
+    const kept = sameComponent ? layerIds(this.layers) : new Set<string>();
+    this.selectedId = this.selectedId !== null && kept.has(this.selectedId) ? this.selectedId : null;
+    this.hoverId = null;
+    this.hiddenLayers = keptIn(this.hiddenLayers, kept);
+    this.lockedLayers = keptIn(this.lockedLayers, kept);
+  }
+
+  private toggleLayer(id: string, toggle: LayerToggle): void {
+    const layer = findLayer(this.layers, id);
+    if (layer === undefined) return;
+    const next = toggled(toggle === 'hidden' ? this.hiddenLayers : this.lockedLayers, id);
+    if (toggle === 'hidden') this.hiddenLayers = next;
+    else this.lockedLayers = next;
+    const notice = TOGGLE_NOTICES[toggle][next.has(id) ? 'on' : 'off'];
+    this.dispatchEvent(
+      new CustomEvent<NoticeRequestedDetail>(NOTICE_REQUESTED, {
+        detail: { notice: { tone: 'info', title: `${layer.name} ${notice.verb}`, message: notice.message, duration: 3000 } },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  private readonly onLayerSelect = (event: CustomEvent<LayerIdDetail>): void => {
+    this.selectedId = event.detail.id;
+    this.hoverId = null;
+  };
+
+  private readonly onLayerHover = (event: CustomEvent<LayerHoverDetail>): void => {
+    this.hoverId = event.detail.id;
+  };
+
+  private readonly onLayerHide = (event: CustomEvent<LayerIdDetail>): void => {
+    this.toggleLayer(event.detail.id, 'hidden');
+  };
+
+  private readonly onLayerLock = (event: CustomEvent<LayerIdDetail>): void => {
+    this.toggleLayer(event.detail.id, 'locked');
+  };
+
+  private readonly onCanvasSelect = (event: CustomEvent<CanvasSelectDetail>): void => {
+    this.selectedId = event.detail.id;
+    this.hoverId = null;
+  };
+
+  private readonly onDocumentKeydown = (event: KeyboardEvent): void => {
+    const toggle = TOGGLE_KEYS[event.key.toLowerCase()];
+    const selected = this.selectedId;
+    const chord = (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey;
+    if (toggle === undefined || selected === null || !chord || isTyping(event) || !this.checkVisibility()) return;
+    event.preventDefault();
+    if (findLayer(this.layers, selected)?.kind !== 'set') this.toggleLayer(selected, toggle);
+  };
+
+  private readonly onComponentOpen =(event: CustomEvent<ComponentOpenDetail>): void => {
     const { path } = event.detail;
     if (this.opened === null || !samePath(this.opened.path, path)) void this.openComponent(path);
   };

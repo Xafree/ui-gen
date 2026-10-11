@@ -1,5 +1,6 @@
 import type { ComponentModel, NodeId, TemplateNode } from '../../sync/application/component-model.js';
 import { HARNESS_PAGE_URL } from '../domain/canvas-address.js';
+import { instanceNodeId, renderedVariants } from './instance-node-id.js';
 
 export interface HarnessRequest {
   readonly projectPath: string;
@@ -50,4 +51,9 @@ function idsOf(nodes: readonly TemplateNode[]): NodeId[] {
 
 export function collectNodeIds(model: ComponentModel): Set<NodeId> {
   return new Set(idsOf(model.template));
+}
+
+export function collectRenderedIds(model: ComponentModel): Set<string> {
+  const nodeIds = collectNodeIds(model);
+  return new Set(renderedVariants(model).flatMap((variant) => [...nodeIds].map((nodeId) => instanceNodeId(variant, nodeId))));
 }

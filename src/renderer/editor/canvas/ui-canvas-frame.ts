@@ -1,6 +1,7 @@
 import { css, html, LitElement, type PropertyValues, type TemplateResult } from 'lit';
 import { customElement, property, query } from 'lit/decorators.js';
-import { buildHarnessUrl, collectNodeIds } from '../../../modules/canvas/application/harness-url.js';
+import { buildHarnessUrl, collectRenderedIds } from '../../../modules/canvas/application/harness-url.js';
+import type { HarnessCommand } from '../../../modules/canvas/domain/harness-command.js';
 import type { HarnessMessage, NodeRect } from '../../../modules/canvas/domain/harness-message.js';
 import type { OpenedComponent } from '../../../modules/sync/application/components/component-views.js';
 import { CanvasView } from './canvas-view.js';
@@ -50,6 +51,8 @@ export class UiCanvasFrame extends LitElement {
   @property({ attribute: false }) component: OpenedComponent | null = null;
   @property({ attribute: false }) projectPath = '';
   @property({ type: Boolean }) darkPreview = false;
+  @property({ attribute: false }) hiddenLayers: ReadonlySet<string> = new Set();
+  @property({ attribute: false }) lockedLayers: ReadonlySet<string> = new Set();
 
   @query('#stage') private readonly stage!: HTMLElement;
 
@@ -81,6 +84,11 @@ export class UiCanvasFrame extends LitElement {
         view?.command({ type: 'dark-preview', enabled: this.darkPreview });
       }
     }
+    if (changed.has('hiddenLayers') || changed.has('lockedLayers')) this.#front?.command(this.#layerState());
+  }
+
+  #layerState(): HarnessCommand {
+    return { type: 'layer-state', hidden: [...this.hiddenLayers], locked: [...this.lockedLayers] };
   }
 
   hitTest(x: number, y: number): Promise<string | null> {
@@ -112,7 +120,7 @@ export class UiCanvasFrame extends LitElement {
     }
     if (this.#pending?.url === url) return;
     this.#discard(this.#pending);
-    const view = new CanvasView(url, collectNodeIds(component.model), this.#onMessage);
+    const view = new CanvasView(url, collectRenderedIds(component.model), this.#onMessage);
     if (this.#front !== null) view.iframe.setAttribute('data-pending', '');
     this.#pending = view;
     this.stage.append(view.iframe);
@@ -153,6 +161,7 @@ export class UiCanvasFrame extends LitElement {
     this.#pending = null;
     view.iframe.removeAttribute('data-pending');
     view.command({ type: 'dark-preview', enabled: this.darkPreview });
+    view.command(this.#layerState());
     this.#discard(previous);
     this.dispatchEvent(new CustomEvent(CANVAS_READY));
   }
