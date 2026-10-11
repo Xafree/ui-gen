@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createProject,
   type CreateProjectRequest,
 } from '../../../../../src/modules/project/application/create/create-project';
 import type { ProjectDependencies } from '../../../../../src/modules/project/application/open/project-outcomes';
+import { ProjectWriteError } from '../../../../../src/modules/project/ports/project-file-system';
 import { InMemoryProjectFileSystem } from '../doubles/in-memory-project-file-system';
 import { InMemoryRecentProjectsStore } from '../doubles/in-memory-recent-projects-store';
 
@@ -17,12 +18,11 @@ const kitHorizonRequest: CreateProjectRequest = {
   tagPrefix: 'kh-',
 };
 
-function dependenciesOn(fileSystem: InMemoryProjectFileSystem): ProjectDependencies {
-  return {
-    fileSystem,
-    recentProjects: new InMemoryRecentProjectsStore(),
-    clock: () => new Date('2026-10-11T09:30:00.000Z'),
-  };
+function dependenciesOn(
+  fileSystem: InMemoryProjectFileSystem,
+  recentProjects = new InMemoryRecentProjectsStore(),
+): ProjectDependencies {
+  return { fileSystem, recentProjects, clock: () => new Date('2026-10-11T09:30:00.000Z') };
 }
 
 describe('createProject edge cases', () => {
@@ -43,6 +43,34 @@ describe('createProject edge cases', () => {
     const outcome = await createProject(dependenciesOn(fileSystem), kitHorizonRequest);
 
     expect(outcome).toEqual({ kind: 'write-failed', path: PROJECT_PATH, code: 'EEXIST' });
+    expect(fileSystem.createFolderCalls).toEqual([]);
+  });
+});
+
+describe('createProject when the target folder cannot be probed', () => {
+  // covers: FCT-0013
+  it('reports the code of the write error raised by the probe and writes nothing', async () => {
+    const fileSystem = new InMemoryProjectFileSystem().addFolder(LOCATION);
+    vi.spyOn(fileSystem, 'readFolderState').mockRejectedValueOnce(new ProjectWriteError(PROJECT_PATH, 'EACCES'));
+    const recents = new InMemoryRecentProjectsStore();
+    const before = fileSystem.snapshot();
+
+    const outcome = await createProject(dependenciesOn(fileSystem, recents), kitHorizonRequest);
+
+    expect(outcome).toEqual({ kind: 'write-failed', path: PROJECT_PATH, code: 'EACCES' });
+    expect(fileSystem.snapshot()).toEqual(before);
+    expect(fileSystem.createFolderCalls).toEqual([]);
+    expect(recents.saves).toEqual([]);
+  });
+
+  // covers: FCT-0013
+  it('reports an unexpected probe error with the UNKNOWN code', async () => {
+    const fileSystem = new InMemoryProjectFileSystem().addFolder(LOCATION);
+    vi.spyOn(fileSystem, 'readFolderState').mockRejectedValueOnce(new TypeError('probe crashed'));
+
+    const outcome = await createProject(dependenciesOn(fileSystem), kitHorizonRequest);
+
+    expect(outcome).toEqual({ kind: 'write-failed', path: PROJECT_PATH, code: 'UNKNOWN' });
     expect(fileSystem.createFolderCalls).toEqual([]);
   });
 });

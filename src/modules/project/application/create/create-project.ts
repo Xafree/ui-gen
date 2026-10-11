@@ -45,15 +45,15 @@ export async function createProject(
   const errors = validateRequest(request);
   if (errors.length > 0) return { kind: 'invalid-request', errors };
   const path = deps.fileSystem.childPath(request.location, projectFolderName(request.packageName));
-  const state = await deps.fileSystem.readFolderState(path);
-  if (state.kind === 'not-empty') return { kind: 'folder-not-empty', path, entryCount: state.entryCount };
-  if (state.kind === 'not-a-folder') return { kind: 'write-failed', path, code: 'EEXIST' };
   const settings: UiGenSettings = {
     formatVersion: CURRENT_FORMAT_VERSION,
     tagPrefix: request.tagPrefix,
     componentsDir: DEFAULT_COMPONENTS_DIR,
   };
   try {
+    const state = await deps.fileSystem.readFolderState(path);
+    if (state.kind === 'not-empty') return { kind: 'folder-not-empty', path, entryCount: state.entryCount };
+    if (state.kind === 'not-a-folder') return { kind: 'write-failed', path, code: 'EEXIST' };
     await deps.fileSystem.createFolderAtomically(path, [
       { kind: 'file', relativePath: PACKAGE_MANIFEST_FILE, content: createLibraryManifest(request.packageName) },
       { kind: 'file', relativePath: UIGEN_SETTINGS_FILE, content: serializeUiGenSettings(settings) },
