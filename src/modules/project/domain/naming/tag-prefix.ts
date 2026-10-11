@@ -1,6 +1,6 @@
 import { toAsciiWords } from './slug.js';
 
-export const TAG_PREFIX_PATTERN = /^[a-z][a-z0-9-]*-$/;
+export const TAG_PREFIX_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-$/;
 
 export type TagPrefixError =
   | 'empty'
