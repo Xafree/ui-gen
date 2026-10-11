@@ -1,13 +1,13 @@
-import type { NodeId, TemplateNode } from '../model/template-node.js';
+import type { TemplateNode } from '../model/template-node.js';
 import type { ParsedTemplateNode, TemplateExpression } from '../model/template-syntax.js';
 import type { TextRange } from '../model/text-range.js';
 import { boundProperty } from './representability.js';
 
-function childId(parentId: NodeId | null, index: number): NodeId {
+function childId(parentId: string | null, index: number): string {
   return parentId === null ? String(index) : `${parentId}.${String(index)}`;
 }
 
-function expressionNode(expression: TemplateExpression, id: NodeId, declared: ReadonlySet<string>): TemplateNode {
+function expressionNode(expression: TemplateExpression, id: string, declared: ReadonlySet<string>): TemplateNode {
   const { range, source, shape } = expression;
   if (shape.kind === 'conditional') {
     return {
@@ -26,7 +26,7 @@ function expressionNode(expression: TemplateExpression, id: NodeId, declared: Re
 export function buildTemplateTree(
   nodes: readonly ParsedTemplateNode[],
   declared: ReadonlySet<string>,
-  parentId: NodeId | null = null,
+  parentId: string | null = null,
 ): TemplateNode[] {
   return nodes.map((node, index): TemplateNode => {
     const id = childId(parentId, index);

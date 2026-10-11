@@ -1,14 +1,13 @@
 import type {
   ComponentModel,
   ElementNode,
-  NodeId,
   TemplateNode,
 } from '../../sync/application/component-model.js';
 import { NODE_MARK_ATTRIBUTE } from '../domain/node-mark.js';
 
 interface NodeMark {
   readonly offset: number;
-  readonly id: NodeId;
+  readonly id: string;
 }
 
 const START_TAG_OPENING = /^<[^\t\n\f\r />]+/;

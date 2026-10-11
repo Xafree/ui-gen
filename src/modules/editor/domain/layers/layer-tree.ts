@@ -1,11 +1,11 @@
 import { instanceNodeId, renderedVariants } from '../../../canvas/application/instance-node-id.js';
-import type { ComponentModel, ElementNode, NodeId, TemplateNode } from '../../../sync/application/component-model.js';
+import type { ComponentModel, ElementNode, TemplateNode } from '../../../sync/application/component-model.js';
 
 export type LayerKind = 'set' | 'variant' | 'container' | 'instance' | 'text' | 'binding' | 'conditional' | 'opaque';
 
 export interface LayerNode {
   readonly id: string;
-  readonly nodeId: NodeId | null;
+  readonly nodeId: string | null;
   readonly name: string;
   readonly kind: LayerKind;
   readonly meta: string | null;

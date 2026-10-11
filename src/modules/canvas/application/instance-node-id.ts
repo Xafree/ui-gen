@@ -1,6 +1,6 @@
-import type { ComponentModel, NodeId } from '../../sync/application/component-model.js';
+import type { ComponentModel } from '../../sync/application/component-model.js';
 
-export function instanceNodeId(variant: string | null, nodeId: NodeId): string {
+export function instanceNodeId(variant: string | null, nodeId: string): string {
   return variant === null ? nodeId : `${variant}:${nodeId}`;
 }
 

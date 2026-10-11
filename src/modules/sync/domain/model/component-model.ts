@@ -1,5 +1,5 @@
 import type { Diagnostic } from './diagnostic.js';
-import type { NodeId, TemplateNode } from './template-node.js';
+import type { TemplateNode } from './template-node.js';
 import type { TextRange } from './text-range.js';
 
 export interface DeclaredProperty {
@@ -46,7 +46,7 @@ export interface StyleRule {
   readonly selector: string;
   readonly range: TextRange;
   readonly values: readonly VisualValue[];
-  readonly targets: readonly NodeId[];
+  readonly targets: readonly string[];
   readonly variant: StyleVariant | null;
   readonly state: StyleState | null;
 }

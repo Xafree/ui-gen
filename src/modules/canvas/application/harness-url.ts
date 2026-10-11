@@ -1,4 +1,4 @@
-import type { ComponentModel, NodeId, TemplateNode } from '../../sync/application/component-model.js';
+import type { ComponentModel, TemplateNode } from '../../sync/application/component-model.js';
 import { HARNESS_PAGE_URL } from '../domain/canvas-address.js';
 import { instanceNodeId, renderedVariants } from './instance-node-id.js';
 
@@ -40,7 +40,7 @@ export function buildHarnessUrl({ projectPath, componentPath, model, dark }: Har
   return `${HARNESS_PAGE_URL}?${parameters.toString()}`;
 }
 
-function idsOf(nodes: readonly TemplateNode[]): NodeId[] {
+function idsOf(nodes: readonly TemplateNode[]): string[] {
   return nodes.flatMap((node) => {
     switch (node.kind) {
       case 'element':
@@ -55,7 +55,7 @@ function idsOf(nodes: readonly TemplateNode[]): NodeId[] {
   });
 }
 
-export function collectNodeIds(model: ComponentModel): Set<NodeId> {
+export function collectNodeIds(model: ComponentModel): Set<string> {
   return new Set(idsOf(model.template));
 }
 

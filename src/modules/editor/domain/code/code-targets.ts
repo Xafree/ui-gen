@@ -1,5 +1,5 @@
 import { instanceNodeId, renderedVariants } from '../../../canvas/application/instance-node-id.js';
-import type { ComponentModel, NodeId, TemplateNode } from '../../../sync/application/component-model.js';
+import type { ComponentModel, TemplateNode } from '../../../sync/application/component-model.js';
 import type { LayerNode } from '../layers/layer-tree.js';
 
 export interface TextRange {
@@ -31,11 +31,11 @@ export function touchesLine(range: TextRange, line: TextRange): boolean {
   return range.start <= line.end && range.end > line.start;
 }
 
-export function nodeRange(template: readonly TemplateNode[], nodeId: NodeId): TextRange | null {
+export function nodeRange(template: readonly TemplateNode[], nodeId: string): TextRange | null {
   return placed(template).find(({ node }) => node.id === nodeId)?.node.range ?? null;
 }
 
-export function nodeIdAtLine(template: readonly TemplateNode[], line: TextRange): NodeId | null {
+export function nodeIdAtLine(template: readonly TemplateNode[], line: TextRange): string | null {
   const nodes = placed(template);
   const opening = nodes.find(({ node }) => node.range.start >= line.start && node.range.start <= line.end);
   if (opening !== undefined) return opening.node.id;
@@ -49,7 +49,7 @@ export function variantOf(layer: LayerNode): string | null {
   return layer.id.slice(0, layer.id.length - layer.nodeId.length - 1);
 }
 
-export function layerIdForNode(model: ComponentModel, selected: LayerNode | undefined, nodeId: NodeId): string {
+export function layerIdForNode(model: ComponentModel, selected: LayerNode | undefined, nodeId: string): string {
   const variant = selected === undefined ? null : variantOf(selected);
   return instanceNodeId(variant ?? renderedVariants(model)[0] ?? null, nodeId);
 }
