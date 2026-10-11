@@ -43,7 +43,7 @@ export function nodeIdAtLine(template: readonly TemplateNode[], line: TextRange)
   return containing.reduce<PlacedNode | null>((deepest, candidate) => (deepest === null || candidate.depth >= deepest.depth ? candidate : deepest), null)?.node.id ?? null;
 }
 
-function variantOf(layer: LayerNode): string | null {
+export function variantOf(layer: LayerNode): string | null {
   if (layer.kind === 'variant') return layer.id;
   if (layer.nodeId === null || layer.id === layer.nodeId) return null;
   return layer.id.slice(0, layer.id.length - layer.nodeId.length - 1);

@@ -18,6 +18,7 @@ import './canvas/ui-editor-canvas.js';
 import type { CodeCursorDetail, CodeLineSelectDetail } from './code/ui-code-view.js';
 import './code/ui-code-panel.js';
 import { editorStyles } from './editor-styles.js';
+import './inspector/ui-inspector.js';
 import type { LayerHoverDetail, LayerIdDetail } from './layers/ui-layer-tree.js';
 import './layers/ui-layer-tree.js';
 import { EMPTY_LIBRARY_TITLE, IMPORT_HINT, IMPORT_SCREEN, type ComponentOpenDetail } from './library/ui-component-library.js';
@@ -173,6 +174,10 @@ export class UiEditor extends LitElement {
     return this.opened === null || nodeId === null ? null : nodeRange(this.opened.model.template, nodeId);
   }
 
+  private get selectedLayer(): LayerNode | null {
+    return this.selectedId === null ? null : (findLayer(this.layers, this.selectedId) ?? null);
+  }
+
   private get tag(): string {
     return this.opened?.model.tag ?? '';
   }
@@ -238,12 +243,7 @@ export class UiEditor extends LitElement {
           <button class="ui-tab" type="button" role="tab" id="tab-props" aria-controls="tp-props" aria-selected="true">Propriétés</button>
         </div>
         <div class="ed-tabpanel" role="tabpanel" id="tp-props" aria-labelledby="tab-props">
-          <div class="ui-panel__body">
-            <div class="ui-empty" id="props-empty">
-              <span class="ui-empty__icon">${icon('curseur')}</span>
-              <p class="ui-empty__title">Aucun élément sélectionné</p>
-            </div>
-          </div>
+          <ui-inspector .model=${this.opened?.model ?? null} .layer=${this.selectedLayer}></ui-inspector>
         </div>
       </aside>
     `;
