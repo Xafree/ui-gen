@@ -17,6 +17,8 @@ npm install
 The Electron binary is downloaded on first launch; to download it right away:
 `npx install-electron --no`.
 
+The `browser` test project needs the Playwright Chromium: `npx playwright install chromium`.
+
 ## Run
 
 ```sh

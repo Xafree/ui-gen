@@ -37,6 +37,9 @@ export default defineConfig({
       {
         extends: true,
         esbuild: litDecorators,
+        optimizeDeps: {
+          include: ['lit', 'lit/decorators.js'],
+        },
         test: {
           name: 'browser',
           include: ['tests/renderer/**/*.test.ts'],
