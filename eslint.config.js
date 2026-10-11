@@ -5,7 +5,15 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
-  globalIgnores(['out/', 'coverage/', 'reports/', '.stryker-tmp/', 'test-results/', 'playwright-report/']),
+  globalIgnores([
+    'out/',
+    'coverage/',
+    'reports/',
+    '.stryker-tmp/',
+    'test-results/',
+    'playwright-report/',
+    'tests/fixtures/',
+  ]),
   eslint.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,
