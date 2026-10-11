@@ -31,6 +31,21 @@ import {
 const THEMES: readonly Theme[] = ['light', 'dark'];
 const FRAME_BODY = '#frame-body';
 const PRICING_TAG = 'hz-pricing-card';
+const DATA_DEPENDENT_REGIONS: readonly string[] = [
+  '#tree',
+  '#layer-count',
+  '#comp-list',
+  '#comp-count',
+  '#code-pre',
+  '#status-cursor',
+  '#status-sel',
+  '#insp-name',
+  '#insp-sub',
+  '#tp-props .ui-section > :not(.ui-section__header)',
+  '#frame-body',
+];
+const MASK_OVERLAY_ID = 'parity-data-masks';
+const MASK_OVERLAY_COLOR = '#FF00FF';
 
 const HORIZON_PACKAGE = `{
   "name": "@horizon/ui",
@@ -45,6 +60,20 @@ const HORIZON_PACKAGE = `{
 const LOCALE_LINE = "@property() locale = 'fr-FR';";
 const FORMAT_PRICE_IMPORT = "import { formatPrice } from '../utils/format-price.js';\n";
 const FORMAT_PRICE_CALL = /\$\{formatPrice\([^)]*\)\}/;
+
+interface Box {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+type MaskBoxes = Readonly<Record<string, readonly Box[]>>;
+
+interface MaskedCapture {
+  readonly image: Buffer;
+  readonly boxes: MaskBoxes;
+}
 
 interface MockupState {
   readonly name: string;
@@ -114,6 +143,128 @@ test.afterEach(async () => {
   await removeFolder(userData);
 });
 
+interface RectLike {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+interface NodeLike {
+  readonly parentNode: NodeLike | null;
+  readonly host?: NodeLike;
+  readonly nodeType: number;
+  getBoundingClientRect(): RectLike;
+}
+
+interface ClipScope {
+  readonly innerWidth: number;
+  readonly innerHeight: number;
+  getComputedStyle(node: NodeLike): { readonly display: string; readonly overflowX: string; readonly overflowY: string };
+}
+
+async function measureRegion(page: Page, selector: string): Promise<Box[]> {
+  return page.locator(selector).evaluateAll((elements: NodeLike[]) => {
+    const scope = globalThis as unknown as ClipScope;
+    const ELEMENT_NODE = 1;
+    const parentOf = (node: NodeLike): NodeLike | null => node.parentNode?.host ?? node.parentNode;
+    const boxes: { x: number; y: number; width: number; height: number }[] = [];
+    for (const element of elements) {
+      const own = element.getBoundingClientRect();
+      let left = Math.max(own.left, 0);
+      let top = Math.max(own.top, 0);
+      let right = Math.min(own.right, scope.innerWidth);
+      let bottom = Math.min(own.bottom, scope.innerHeight);
+      for (let node = parentOf(element); node?.nodeType === ELEMENT_NODE; node = parentOf(node)) {
+        const style = scope.getComputedStyle(node);
+        if (style.display === 'contents' || (style.overflowX === 'visible' && style.overflowY === 'visible')) continue;
+        const clip = node.getBoundingClientRect();
+        left = Math.max(left, clip.left);
+        top = Math.max(top, clip.top);
+        right = Math.min(right, clip.right);
+        bottom = Math.min(bottom, clip.bottom);
+      }
+      if (right <= left || bottom <= top) continue;
+      const x = Math.floor(left);
+      const y = Math.floor(top);
+      boxes.push({ x, y, width: Math.ceil(right) - x, height: Math.ceil(bottom) - y });
+    }
+    return boxes;
+  });
+}
+
+async function measureRegions(page: Page): Promise<Record<string, Box[]>> {
+  const measured: Record<string, Box[]> = {};
+  for (const selector of DATA_DEPENDENT_REGIONS) measured[selector] = await measureRegion(page, selector);
+  return measured;
+}
+
+async function settledRegions(page: Page): Promise<Record<string, Box[]>> {
+  let previous = '';
+  let latest: Record<string, Box[]> = {};
+  await expect
+    .poll(
+      async () => {
+        latest = await measureRegions(page);
+        const serialized = JSON.stringify(latest);
+        const stable = serialized === previous;
+        previous = serialized;
+        return stable;
+      },
+      { intervals: [250], timeout: 15_000 },
+    )
+    .toBe(true);
+  return latest;
+}
+
+function paintMasksExpression(boxes: readonly Box[]): string {
+  return `(() => {
+    const host = document.createElement('div');
+    host.id = ${JSON.stringify(MASK_OVERLAY_ID)};
+    host.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
+    for (const box of ${JSON.stringify(boxes)}) {
+      const cover = document.createElement('div');
+      cover.style.cssText = 'position:absolute;background:${MASK_OVERLAY_COLOR};left:' + box.x + 'px;top:' + box.y + 'px;width:' + box.width + 'px;height:' + box.height + 'px;';
+      host.append(cover);
+    }
+    document.documentElement.append(host);
+  })()`;
+}
+
+async function paintMasks(page: Page, boxes: readonly Box[]): Promise<void> {
+  await page.evaluate(paintMasksExpression(boxes));
+}
+
+async function removeMasks(page: Page): Promise<void> {
+  await page.evaluate(`document.getElementById(${JSON.stringify(MASK_OVERLAY_ID)})?.remove()`);
+}
+
+async function maskedCapture(page: Page): Promise<MaskedCapture> {
+  const boxes = await settledRegions(page);
+  await paintMasks(page, Object.values(boxes).flat());
+  try {
+    return { image: await settledCapture(page, page.locator(FRAME_BODY)), boxes };
+  } finally {
+    await removeMasks(page);
+  }
+}
+
+function describeBoxes(boxes: readonly Box[]): string {
+  if (boxes.length === 0) return 'none';
+  return boxes.map((box) => `${String(box.x)},${String(box.y)} ${String(box.width)}x${String(box.height)}`).join(' | ');
+}
+
+function maskBoxGaps(label: string, mockup: MaskBoxes, studio: MaskBoxes): string[] {
+  const gaps: string[] = [];
+  for (const selector of DATA_DEPENDENT_REGIONS) {
+    const expected = mockup[selector] ?? [];
+    const actual = studio[selector] ?? [];
+    if (JSON.stringify(expected) === JSON.stringify(actual)) continue;
+    gaps.push(`${label}: masked box ${selector} differs, mockup ${describeBoxes(expected)} vs studio ${describeBoxes(actual)}`);
+  }
+  return gaps;
+}
+
 async function chooseStudioTheme(window: Page, theme: Theme): Promise<void> {
   await window.evaluate((chosen) => {
     localStorage.setItem('uigen-theme', chosen);
@@ -153,7 +304,7 @@ async function loadMockupState(
   );
 }
 
-async function captureMockupEditor(app: ElectronApplication, state: MockupState, theme: Theme): Promise<Buffer> {
+async function captureMockupEditor(app: ElectronApplication, state: MockupState, theme: Theme): Promise<MaskedCapture> {
   const reference = await openReferenceWindow(app);
   try {
     await loadMockupState(app, reference.id, state.query);
@@ -165,7 +316,7 @@ async function captureMockupEditor(app: ElectronApplication, state: MockupState,
     await expect(reference.page.locator('#layer-count')).toHaveText(/\d/);
     await reference.page.mouse.move(1430, 890);
     await expectFontsLoaded(reference.page);
-    return await settledCapture(reference.page, reference.page.locator(FRAME_BODY));
+    return await maskedCapture(reference.page);
   } finally {
     await closeReferenceWindow(app, reference);
   }
@@ -188,20 +339,21 @@ async function expectEditorParity(state: MockupState, empty: boolean): Promise<v
       await state.ready(window);
       await window.mouse.move(1430, 890);
       await expectFontsLoaded(window);
-      const studio = await settledCapture(window, window.locator(FRAME_BODY));
+      const studio = await maskedCapture(window);
       const mockup = await captureMockupEditor(app, state, theme);
       const name = `editor-${state.name}-${theme}`;
       try {
-        await expectIdenticalCaptures(app, test.info(), name, mockup, studio);
+        await expectIdenticalCaptures(app, test.info(), name, mockup.image, studio.image);
       } catch (error) {
         failures.push(firstLine(error));
       }
+      failures.push(...maskBoxGaps(name, mockup.boxes, studio.boxes));
       const next = THEMES[index + 1];
       if (next !== undefined) await chooseStudioTheme(window, next);
     });
   }
 
-  expect(failures, 'every state and theme must match the mockup outside the canvas frame').toEqual([]);
+  expect(failures, 'every state and theme must match the mockup outside the canvas frame and the data-dependent regions').toEqual([]);
 }
 
 // covers: FCT-0030
