@@ -1,5 +1,6 @@
 import { css, html, LitElement, nothing, type PropertyValues, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { layerIdForNode, nodeRange, type TextRange } from '../../modules/editor/domain/code/code-targets.js';
 import { findLayer, layerIds } from '../../modules/editor/domain/layers/layer-lookup.js';
 import { buildLayerTree, countLayers, type LayerNode } from '../../modules/editor/domain/layers/layer-tree.js';
 import { samePath } from '../../modules/sync/domain/library/component-summary.js';
@@ -12,6 +13,8 @@ import type { ToastRequest } from '../motion/toast.js';
 import { NOTICE_REQUESTED, type NoticeRequestedDetail } from '../studio-events.js';
 import type { CanvasPhase, CanvasSelectDetail } from './canvas/ui-editor-canvas.js';
 import './canvas/ui-editor-canvas.js';
+import type { CodeCursorDetail, CodeLineSelectDetail } from './code/ui-code-view.js';
+import './code/ui-code-panel.js';
 import { editorStyles } from './editor-styles.js';
 import type { LayerHoverDetail, LayerIdDetail } from './layers/ui-layer-tree.js';
 import './layers/ui-layer-tree.js';
@@ -113,6 +116,7 @@ export class UiEditor extends LitElement {
   @state() private hoverId: string | null = null;
   @state() private hiddenLayers: ReadonlySet<string> = new Set();
   @state() private lockedLayers: ReadonlySet<string> = new Set();
+  @state() private cursor: CodeCursorDetail = { line: 1, column: 1 };
 
   private layersPath: string | null = null;
   private openRequest = 0;
@@ -156,6 +160,11 @@ export class UiEditor extends LitElement {
   private get phase(): CanvasPhase {
     if (this.library === null) return 'loading';
     return this.library.length === 0 ? 'empty' : 'ready';
+  }
+
+  private get targetRange(): TextRange | null {
+    const nodeId = this.selectedId === null ? null : (findLayer(this.layers, this.selectedId)?.nodeId ?? null);
+    return this.opened === null || nodeId === null ? null : nodeRange(this.opened.model.template, nodeId);
   }
 
   private get tag(): string {
@@ -207,22 +216,11 @@ export class UiEditor extends LitElement {
   }
 
   private renderStage(): TemplateResult {
-    const file = this.opened === null ? 'Code' : `${this.tag}.ts`;
     return html`
       <main class="ui-stage ed-stage" id="main" tabindex="-1">
         <h1 class="sr-only" id="page-title">${this.opened === null ? 'Éditeur' : `Éditeur du composant ${this.tag}`}</h1>
         <ui-editor-canvas .phase=${this.phase} .component=${this.opened} .tag=${this.tag} .projectPath=${this.projectPath} .layers=${this.layers} .selectedId=${this.selectedId} .hoverId=${this.hoverId} .hiddenLayers=${this.hiddenLayers} .lockedLayers=${this.lockedLayers} @canvas-select=${this.onCanvasSelect}></ui-editor-canvas>
-        <section class="ed-code" id="code-panel" aria-label="Code Lit du composant">
-          <div class="ed-code__head">
-            <div class="ui-tabs ui-tabs--bare" role="tablist" aria-label="Panneau de code">
-              <button class="ui-tab" type="button" role="tab" id="tab-code" aria-controls="tp-code" aria-selected="true">${icon('fichier-code')}${file}</button>
-            </div>
-            ${this.opened === null ? nothing : html`<span class="ed-code__path" id="code-path">${projectRelative(this.projectPath, this.opened.path)}</span>`}
-            <span class="ui-spacer"></span>
-            ${this.opened === null ? nothing : html`<span class="ed-sync" id="code-sync">${this.syncDot()}<span class="ed-sync__label">${this.restarting ? 'Analyse du code relancée…' : 'Synchronisé avec le canvas'}</span></span>`}
-          </div>
-          <div class="ed-code__body" id="code-body"><div class="ed-code__panel" role="tabpanel" id="tp-code" aria-labelledby="tab-code"></div></div>
-        </section>
+        <ui-code-panel .component=${this.opened} .displayPath=${this.opened === null ? '' : projectRelative(this.projectPath, this.opened.path)} .restarting=${this.restarting} .targetRange=${this.targetRange} @code-line-select=${this.onCodeLineSelect} @code-cursor=${this.onCodeCursor}></ui-code-panel>
       </main>
     `;
   }
@@ -251,6 +249,7 @@ export class UiEditor extends LitElement {
         <span class="ui-statusbar__item">${icon('code')}<span><span class="ed-status-long">Cible : </span>Lit<span class="ed-status-long"> + TypeScript</span></span></span>
         <span class="ui-statusbar__item" id="status-sync" role="status">${this.syncDot()}<span id="status-sync-label">${this.restarting ? "Relance de l'analyse…" : 'Synchronisé'}</span></span>
         <span class="ui-statusbar__spacer"></span>
+        ${this.opened === null ? nothing : html`<span class="ui-statusbar__item ed-status-num" id="status-cursor">Ligne ${String(this.cursor.line)}, col. ${String(this.cursor.column)}</span>`}
       </footer>
     `;
   }
@@ -338,6 +337,17 @@ export class UiEditor extends LitElement {
   private readonly onCanvasSelect = (event: CustomEvent<CanvasSelectDetail>): void => {
     this.selectedId = event.detail.id;
     this.hoverId = null;
+  };
+
+  private readonly onCodeLineSelect = (event: CustomEvent<CodeLineSelectDetail>): void => {
+    if (this.opened === null) return;
+    const selected = this.selectedId === null ? undefined : findLayer(this.layers, this.selectedId);
+    this.selectedId = layerIdForNode(this.opened.model, selected, event.detail.nodeId);
+    this.hoverId = null;
+  };
+
+  private readonly onCodeCursor = (event: CustomEvent<CodeCursorDetail>): void => {
+    this.cursor = event.detail;
   };
 
   private readonly onDocumentKeydown = (event: KeyboardEvent): void => {
