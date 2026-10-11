@@ -15,6 +15,10 @@ describe('validateProjectName', () => {
     expect(validateProjectName('')).toBe(expected);
   });
 
+  it.each(['   ', '\t', ' \t \n'])('refuses %j, made only of whitespace, as empty', (value) => {
+    expect(validateProjectName(value)).toBe('empty');
+  });
+
   it.each(['---', '!?', '. _ -'])('refuses %j, which has no letter nor digit', (value) => {
     expect(validateProjectName(value)).toBe('no-alphanumeric');
   });

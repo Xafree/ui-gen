@@ -34,6 +34,18 @@ describe('suggestTagPrefix', () => {
     expect(validateTagPrefix(suggestTagPrefix('Horizon'))).toBeNull();
   });
 
+  // covers: FCT-0002
+  it('takes the initial of each word without capping the word count', () => {
+    expect(suggestTagPrefix('My Very Large Design Kit')).toBe('mvldk-');
+  });
+
+  // covers: FCT-0002
+  it('proposes a valid non-empty prefix when one word starts with a letter', () => {
+    const suggestion = suggestTagPrefix('3d Kit');
+    expect(suggestion).not.toBe('');
+    expect(validateTagPrefix(suggestion)).toBeNull();
+  });
+
   it.each(['', '   ', '42', '2024 !'])(
     'proposes nothing for %j, which has no word starting with a letter',
     (name) => {
@@ -89,6 +101,32 @@ describe('TAG_PREFIX_PATTERN', () => {
   // covers: FCT-0005
   it.each(['', 'kh', 'KH-', '1kh-', '-kh-', 'k_h-', 'kh-button'])('rejects %j', (value) => {
     expect(TAG_PREFIX_PATTERN.test(value)).toBe(false);
+  });
+});
+
+describe('TAG_PREFIX_PATTERN and validateTagPrefix', () => {
+  // covers: FCT-0005
+  it.each(['kh--', 'k--h-'])('pattern rejects %j, which contains two dashes in a row', (value) => {
+    expect(TAG_PREFIX_PATTERN.test(value)).toBe(false);
+  });
+
+  // covers: FCT-0005
+  it.each([
+    'kh--',
+    'k--h-',
+    'kh-',
+    'a-',
+    'ui2-',
+    'my-kit-',
+    'kh',
+    'KH-',
+    '1kh-',
+    '-kh-',
+    'k_h-',
+    '',
+    'kh-button',
+  ])('agree on %j', (value) => {
+    expect(TAG_PREFIX_PATTERN.test(value)).toBe(validateTagPrefix(value) === null);
   });
 });
 
