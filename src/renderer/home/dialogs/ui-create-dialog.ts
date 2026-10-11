@@ -32,7 +32,8 @@ const EMPTY_INPUT: CreateFormInput = {
 };
 
 export function fieldError(id: string, message: string | null, role?: 'alert'): TemplateResult {
-  return html`<p class="ui-field__error" id=${id} role=${message === null || role === undefined ? nothing : role} ?hidden=${message === null}>${message === null ? nothing : html`${icon('erreur')}<span>${message}</span>`}</p>`;
+  const content = message === null ? nothing : html`${icon('erreur')}<span>${message}</span>`;
+  return html`<p class="ui-field__error" id=${id} role=${message === null || role === undefined ? nothing : role} ?hidden=${message === null}>${content}</p>`;
 }
 
 function existingFolderMessage(path: string, entryCount: number): string {
@@ -47,7 +48,7 @@ export function isOutside(dialog: HTMLDialogElement, event: MouseEvent): boolean
 
 @customElement('ui-create-dialog')
 export class UiCreateDialog extends LitElement {
-  static override styles = [studioStyles, homeStyles, hostContents];
+  static override readonly styles = [studioStyles, homeStyles, hostContents];
 
   @property({ attribute: false }) api!: UiGenApi;
 
@@ -55,13 +56,13 @@ export class UiCreateDialog extends LitElement {
   @state() private locationError: string | null = null;
   @state() private busy = false;
 
-  @query('dialog') private dialog!: HTMLDialogElement;
-  @query('#cr-name') private nameField!: HTMLInputElement;
-  @query('#cr-loc') private locationField!: HTMLInputElement;
-  @query('#cr-pkg') private packageField!: HTMLInputElement;
-  @query('#cr-prefix') private prefixField!: HTMLInputElement;
-  @query('#cr-browse') private browseButton!: HTMLButtonElement;
-  @query('#cr-submit') private submitButton!: HTMLButtonElement;
+  @query('dialog') private readonly dialog!: HTMLDialogElement;
+  @query('#cr-name') private readonly nameField!: HTMLInputElement;
+  @query('#cr-loc') private readonly locationField!: HTMLInputElement;
+  @query('#cr-pkg') private readonly packageField!: HTMLInputElement;
+  @query('#cr-prefix') private readonly prefixField!: HTMLInputElement;
+  @query('#cr-browse') private readonly browseButton!: HTMLButtonElement;
+  @query('#cr-submit') private readonly submitButton!: HTMLButtonElement;
 
   async open(trigger: Element | null): Promise<void> {
     let location: string;

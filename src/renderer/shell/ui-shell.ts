@@ -45,7 +45,7 @@ function isSpace(event: KeyboardEvent): boolean {
 
 @customElement('ui-shell')
 export class UiShell extends LitElement {
-  static override styles = [studioStyles, unsafeCSS(shellCss), hostContents];
+  static override readonly styles = [studioStyles, unsafeCSS(shellCss), hostContents];
 
   @property({ attribute: false }) api!: UiGenApi;
   @property({ attribute: false }) project!: OpenedProject;
@@ -55,9 +55,9 @@ export class UiShell extends LitElement {
   @state() private shown: ScreenId = 'editor';
   @state() private openMenu: MenuId | null = null;
 
-  @query('#main') private main!: HTMLElement;
-  @query('#av-empty') private emptyState!: HTMLElement;
-  @query('.ui-topbar__project-menu') private projectMenu!: HTMLElement;
+  @query('#main') private readonly main!: HTMLElement;
+  @query('#av-empty') private readonly emptyState!: HTMLElement;
+  @query('.ui-topbar__project-menu') private readonly projectMenu!: HTMLElement;
 
   private readonly theme = new ThemeController(this);
 
@@ -264,12 +264,12 @@ export class UiShell extends LitElement {
 
   private moveInMenu(menu: MenuId, event: KeyboardEvent): void {
     const popover = this.element(`#${menu}`);
-    const focused = this.shadowRoot?.activeElement ?? null;
-    if (focused === null || !popover.contains(focused)) return;
+    const focused = this.shadowRoot?.activeElement;
+    if (!(focused instanceof HTMLElement) || !popover.contains(focused)) return;
     const items = [...popover.querySelectorAll<HTMLElement>('.ui-menu-item')];
     if (items.length === 0) return;
     event.preventDefault();
-    const index = items.findIndex((item) => item === focused);
+    const index = items.indexOf(focused);
     const step = event.key === 'ArrowDown' ? 1 : -1;
     items[(index + step + items.length) % items.length]?.focus();
   }

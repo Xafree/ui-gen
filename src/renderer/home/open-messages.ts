@@ -35,7 +35,7 @@ export function settingsErrorMessage(error: SettingsError): string {
 function invalidSettingsMessage(errors: readonly SettingsError[]): string {
   const newer = errors.find((error) => error.code === 'newer-format-version');
   if (newer !== undefined) return `${settingsErrorMessage(newer)} ${NOTHING_CHANGED} ${UPDATE_STUDIO}`;
-  return `${errors.map(settingsErrorMessage).join(' ')} ${NOTHING_CHANGED} ${FIX_SETTINGS}`;
+  return `${errors.map((error) => settingsErrorMessage(error)).join(' ')} ${NOTHING_CHANGED} ${FIX_SETTINGS}`;
 }
 
 export function openFailureToast(outcome: OpenFailure): ToastRequest {

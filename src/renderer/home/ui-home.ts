@@ -20,9 +20,7 @@ import { REQUEST_REFUSED } from '../studio-notices.js';
 import { ThemeController } from '../theme/theme-controller.js';
 import { themeToggleView, toggleTheme } from '../theme/theme.js';
 import './dialogs/ui-adopt-dialog.js';
-import type { UiAdoptDialog } from './dialogs/ui-adopt-dialog.js';
 import './dialogs/ui-create-dialog.js';
-import type { UiCreateDialog } from './dialogs/ui-create-dialog.js';
 import { homeStyles } from './home-styles.js';
 import { openFailureToast } from './open-messages.js';
 import { formatOpenedAt, formatRelativeTime } from './recent-time.js';
@@ -56,7 +54,7 @@ function toRecentProject({ path, name, openedAt }: RecentProjectView): RecentPro
 
 @customElement('ui-home')
 export class UiHome extends LitElement {
-  static override styles = [studioStyles, homeStyles, hostContents];
+  static override readonly styles = [studioStyles, homeStyles, hostContents];
 
   @property({ attribute: false }) api!: UiGenApi;
   @property({ attribute: false }) notice: ToastRequest | null = null;
@@ -65,14 +63,14 @@ export class UiHome extends LitElement {
   @state() private loaded = false;
   @state() private opening: OpenTrigger | null = null;
 
-  @query('#recent-body') private recentBody!: HTMLElement;
-  @query('#recent-list') private recentList!: HTMLUListElement;
-  @query('#empty-create') private emptyCreateButton!: HTMLButtonElement;
-  @query('#btn-open') private openButton!: HTMLButtonElement;
-  @query('.ui-toast-region') private toastRegion!: HTMLOListElement;
-  @query('#main') private main!: HTMLElement;
-  @query('ui-create-dialog') private createDialog!: UiCreateDialog;
-  @query('ui-adopt-dialog') private adoptDialog!: UiAdoptDialog;
+  @query('#recent-body') private readonly recentBody!: HTMLElement;
+  @query('#recent-list') private readonly recentList!: HTMLUListElement;
+  @query('#empty-create') private readonly emptyCreateButton!: HTMLButtonElement;
+  @query('#btn-open') private readonly openButton!: HTMLButtonElement;
+  @query('.ui-toast-region') private readonly toastRegion!: HTMLOListElement;
+  @query('#main') private readonly main!: HTMLElement;
+  @query('ui-create-dialog') private readonly createDialog!: HTMLElementTagNameMap['ui-create-dialog'];
+  @query('ui-adopt-dialog') private readonly adoptDialog!: HTMLElementTagNameMap['ui-adopt-dialog'];
 
   private readonly theme = new ThemeController(this);
   private openPending = false;
@@ -247,7 +245,7 @@ export class UiHome extends LitElement {
   }
 
   private async clearRecents(event: MouseEvent): Promise<void> {
-    const cleared = this.recents.map(toRecentProject);
+    const cleared = this.recents.map((project) => toRecentProject(project));
     const remaining = await this.requestRecents(() => this.api.recents.clear(), triggerOf(event));
     if (remaining === null) return;
     await this.showRecents(remaining);

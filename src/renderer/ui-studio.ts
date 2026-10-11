@@ -27,13 +27,13 @@ const toastAboveStatusBar = css`
 
 @customElement('ui-studio')
 export class UiStudio extends LitElement {
-  static override styles = [studioStyles, hostContents, toastAboveStatusBar];
+  static override readonly styles = [studioStyles, hostContents, toastAboveStatusBar];
 
   @property({ attribute: false }) api: UiGenApi = window.uiGen;
 
   @state() private view: StudioView = { kind: 'home', notice: null };
 
-  @query('.ui-toast-region') private toastRegion!: HTMLOListElement;
+  @query('.ui-toast-region') private readonly toastRegion!: HTMLOListElement;
 
   override render(): TemplateResult {
     return html`${this.renderView()}<ol class="ui-toast-region" data-view=${this.view.kind} aria-live="polite" aria-label="Notifications"></ol>`;

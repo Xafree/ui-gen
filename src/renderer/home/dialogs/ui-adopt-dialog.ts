@@ -27,7 +27,7 @@ const COMPONENTS_DIR_ERROR = 'Indiquez un chemin relatif dans le dossier du proj
 
 @customElement('ui-adopt-dialog')
 export class UiAdoptDialog extends LitElement {
-  static override styles = [studioStyles, homeStyles, hostContents];
+  static override readonly styles = [studioStyles, homeStyles, hostContents];
 
   @property({ attribute: false }) api!: UiGenApi;
 
@@ -37,9 +37,9 @@ export class UiAdoptDialog extends LitElement {
   @state() private busy = false;
   @state() private failure: string | null = null;
 
-  @query('dialog') private dialog!: HTMLDialogElement;
-  @query('#ad-prefix') private prefixField!: HTMLInputElement;
-  @query('#ad-dir') private dirField!: HTMLInputElement;
+  @query('dialog') private readonly dialog!: HTMLDialogElement;
+  @query('#ad-prefix') private readonly prefixField!: HTMLInputElement;
+  @query('#ad-dir') private readonly dirField!: HTMLInputElement;
 
   private trigger: Element | null = null;
 
