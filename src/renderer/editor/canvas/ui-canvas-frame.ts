@@ -121,7 +121,7 @@ export class UiCanvasFrame extends LitElement {
     if (this.#pending?.url === url) return;
     this.#discard(this.#pending);
     const view = new CanvasView(url, collectRenderedIds(component.model), this.#onMessage);
-    if (this.#front !== null) view.iframe.setAttribute('data-pending', '');
+    if (this.#front !== null) view.iframe.dataset['pending'] = '';
     this.#pending = view;
     this.stage.append(view.iframe);
     this.#timeout = setTimeout(() => {
@@ -159,7 +159,7 @@ export class UiCanvasFrame extends LitElement {
     const previous = this.#front;
     this.#front = view;
     this.#pending = null;
-    view.iframe.removeAttribute('data-pending');
+    delete view.iframe.dataset['pending'];
     view.command({ type: 'dark-preview', enabled: this.darkPreview });
     view.command(this.#layerState());
     this.#discard(previous);

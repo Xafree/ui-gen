@@ -73,16 +73,16 @@ async function typeScriptFallback(root: string, segments: readonly string[]): Pr
   return resolveConfinedFile(root, [...segments.slice(0, -1), `${last.slice(0, -3)}.ts`]);
 }
 
-export function createCanvasHandler({ projectRoot, compute, studio }: CanvasHandlerDependencies) {
-  async function serveHarnessPage(root: string): Promise<Response> {
-    const tokens = await resolveConfinedFile(root, TOKENS_SEGMENTS);
-    const { html, contentSecurityPolicy } = buildHarnessPage(tokens !== null);
-    return respond(html, 200, {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Content-Security-Policy': contentSecurityPolicy,
-    });
-  }
+async function serveHarnessPage(root: string): Promise<Response> {
+  const tokens = await resolveConfinedFile(root, TOKENS_SEGMENTS);
+  const { html, contentSecurityPolicy } = buildHarnessPage(tokens !== null);
+  return respond(html, 200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Security-Policy': contentSecurityPolicy,
+  });
+}
 
+export function createCanvasHandler({ projectRoot, compute, studio }: CanvasHandlerDependencies) {
   async function serveStudioAsset(root: string, segments: readonly string[]): Promise<Response> {
     const [first = '', ...rest] = segments;
     if (segments.length === 1 && first === HARNESS_PAGE_FILE) return serveHarnessPage(root);

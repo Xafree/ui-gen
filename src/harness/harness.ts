@@ -13,6 +13,8 @@ interface RenderRequest {
 
 const DARK_THEME_ATTRIBUTE = 'data-hz-theme';
 const NODE_MARK_DATASET_KEY = 'nodeMark';
+const FILE_ORIGIN = 'file://';
+const OPAQUE_ORIGIN = 'null';
 
 let port: MessagePort | null = null;
 interface HiddenStyle {
@@ -51,9 +53,12 @@ function post(message: HarnessMessage): void {
   port?.postMessage(message);
 }
 
-function applyDarkPreview(enabled: boolean): void {
-  if (enabled) document.documentElement.setAttribute(DARK_THEME_ATTRIBUTE, 'dark');
-  else document.documentElement.removeAttribute(DARK_THEME_ATTRIBUTE);
+function enableDarkPreview(): void {
+  document.documentElement.setAttribute(DARK_THEME_ATTRIBUTE, 'dark');
+}
+
+function disableDarkPreview(): void {
+  document.documentElement.removeAttribute(DARK_THEME_ATTRIBUTE);
 }
 
 function moduleUrl({ component, version }: RenderRequest): string {
@@ -89,7 +94,7 @@ function layOutCanvas(): void {
 }
 
 async function render(request: RenderRequest): Promise<void> {
-  applyDarkPreview(request.dark);
+  if (request.dark) enableDarkPreview();
   await import(moduleUrl(request));
   if (customElements.get(request.tag) === undefined) throw new Error('The component did not define its element');
   const variants = request.property === null || request.variants.length === 0 ? [null] : request.variants;
@@ -157,9 +162,10 @@ function parentOf(element: Element): Element | null {
 }
 
 function instanceIndexOf(start: Element): number {
+  const elements: readonly Element[] = instances;
   let current: Element | null = start;
   while (current !== null) {
-    const index = instances.findIndex((instance) => instance === current);
+    const index = elements.indexOf(current);
     if (index >= 0) return index;
     current = parentOf(current);
   }
@@ -219,7 +225,8 @@ function run(command: HarnessCommand): void {
       post({ type: 'hit', id: selectableLayerId(deepElementAt(command.x, command.y)) });
       break;
     case 'dark-preview':
-      applyDarkPreview(command.enabled);
+      if (command.enabled) enableDarkPreview();
+      else disableDarkPreview();
       break;
     case 'layer-state':
       hiddenIds = new Set(command.hidden);
@@ -255,6 +262,11 @@ function connect(rendering: Promise<void>, received: MessagePort): void {
   rendering.then(announce, () => undefined);
 }
 
+function studioMessageOrigin(): string | undefined {
+  const origin = location.ancestorOrigins[0];
+  return origin === FILE_ORIGIN ? OPAQUE_ORIGIN : origin;
+}
+
 function start(): void {
   const request = readRequest();
   if (request === null) {
@@ -267,7 +279,8 @@ function start(): void {
   });
   window.addEventListener('message', (event: MessageEvent<unknown>) => {
     const [received] = event.ports;
-    if (port === null && event.source === window.parent && received !== undefined) connect(rendering, received);
+    const fromStudio = event.source === window.parent && event.origin === studioMessageOrigin();
+    if (port === null && fromStudio && received !== undefined) connect(rendering, received);
   });
 }
 

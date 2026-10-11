@@ -243,12 +243,11 @@ export class UiEditor extends LitElement {
   }
 
   private renderRightPanel(): TemplateResult {
-    const interactions = this.opened === null ? nothing : html`<button class="ui-tab" type="button" role="tab" id="tab-inter" aria-controls="tp-inter" aria-selected=${String(this.rightTab === 'interactions')} tabindex=${this.rightTab === 'interactions' ? '0' : '-1'} @click=${() => { this.rightTab = 'interactions'; }}>Interactions <span class="ui-count" id="rule-count">0</span></button>`;
     return html`
       <aside class="ui-panel ui-panel--right" id="panneau-droit" aria-label="Propriétés et interactions">
         <div class="ui-tabs" role="tablist" aria-label="Panneau de droite" @keydown=${this.onTabKeydown}>
           <button class="ui-tab" type="button" role="tab" id="tab-props" aria-controls="tp-props" aria-selected=${String(this.rightTab === 'properties')} tabindex=${this.rightTab === 'properties' ? '0' : '-1'} @click=${() => { this.rightTab = 'properties'; }}>Propriétés</button>
-          ${interactions}
+          ${this.renderInteractionsTab()}
         </div>
         ${this.renderInspectorHead()}
         <div class="ed-tabpanel" role="tabpanel" id="tp-props" aria-labelledby="tab-props" ?hidden=${this.rightTab !== 'properties'}>
@@ -257,6 +256,12 @@ export class UiEditor extends LitElement {
         ${this.opened === null ? nothing : this.renderInteractions()}
       </aside>
     `;
+  }
+
+  private renderInteractionsTab(): TemplateResult | typeof nothing {
+    if (this.opened === null) return nothing;
+    const active = this.rightTab === 'interactions';
+    return html`<button class="ui-tab" type="button" role="tab" id="tab-inter" aria-controls="tp-inter" aria-selected=${String(active)} tabindex=${active ? '0' : '-1'} @click=${() => { this.rightTab = 'interactions'; }}>Interactions <span class="ui-count" id="rule-count">0</span></button>`;
   }
 
   private renderInspectorHead(): TemplateResult | typeof nothing {
@@ -290,18 +295,31 @@ export class UiEditor extends LitElement {
 
   private renderStatusBar(): TemplateResult {
     const sync = syncStateOf(this.diagnostics, this.restarting);
-    const counter = problemCounter(this.diagnostics);
     return html`
       <footer class="ui-statusbar" aria-label="Barre d'état">
         <span class="ui-statusbar__item">${icon('code')}<span><span class="ed-status-long">Cible : </span>Lit<span class="ed-status-long"> + TypeScript</span></span></span>
         <span class="ui-statusbar__item" id="status-sync" role="status"><span class="ui-status-dot ui-status-dot--${sync.tone}" aria-hidden="true"></span><span id="status-sync-label">${sync.status}</span></span>
-        ${counter === null ? nothing : html`<button class="ed-status-btn ed-status-warn${counter.hasError ? ' is-error' : ''}" type="button" id="status-warn" aria-label=${counter.name} @click=${this.onProblemsClick}>${icon('alerte')}<span id="status-warn-label">${String(counter.count)}<span class="ed-status-long">${` ${counter.word}`}</span></span></button>`}
+        ${this.renderProblemsButton()}
         <span class="ui-statusbar__spacer"></span>
-        ${this.opened === null ? nothing : html`<span class="ui-statusbar__item ed-status-opt" id="status-sel">${this.selectedLayer === null ? this.tag : selectionLabel(this.selectedLayer)}</span><span class="ui-statusbar__item ed-status-num" id="status-cursor">Ligne ${String(this.cursor.line)}, col. ${String(this.cursor.column)}</span>`}
+        ${this.renderSelectionStatus()}
         <span class="ui-statusbar__item ed-status-opt">Espaces : 2</span>
         <span class="ui-statusbar__item ed-status-opt">UTF-8</span>
       </footer>
     `;
+  }
+
+  private renderProblemsButton(): TemplateResult | typeof nothing {
+    const counter = problemCounter(this.diagnostics);
+    if (counter === null) return nothing;
+    const errorClass = counter.hasError ? ' is-error' : '';
+    const word = ` ${counter.word}`;
+    return html`<button class="ed-status-btn ed-status-warn${errorClass}" type="button" id="status-warn" aria-label=${counter.name} @click=${this.onProblemsClick}>${icon('alerte')}<span id="status-warn-label">${String(counter.count)}<span class="ed-status-long">${word}</span></span></button>`;
+  }
+
+  private renderSelectionStatus(): TemplateResult | typeof nothing {
+    if (this.opened === null) return nothing;
+    const selection = this.selectedLayer === null ? this.tag : selectionLabel(this.selectedLayer);
+    return html`<span class="ui-statusbar__item ed-status-opt" id="status-sel">${selection}</span><span class="ui-statusbar__item ed-status-num" id="status-cursor">Ligne ${String(this.cursor.line)}, col. ${String(this.cursor.column)}</span>`;
   }
 
   private follow(): void {

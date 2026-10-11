@@ -92,7 +92,11 @@ export class UiComponentLibrary extends LitElement {
   private renderOption(component: ComponentSummary, shown: readonly ComponentSummary[]): TemplateResult {
     const chosen = this.isChosen(component);
     const anchor = shown.some((candidate) => this.isChosen(candidate)) ? chosen : component === shown[0];
-    return html`<li class="ed-comp" role="option" data-path=${component.path} aria-selected=${String(chosen)} tabindex=${anchor ? '0' : '-1'}>${icon('composants')}<span class="ed-comp__body"><span class="ed-comp__name">${componentLabel(component)}</span><span class="ed-comp__tag">&lt;${component.tag}&gt;</span></span>${this.isOpened(component) ? html`<span class="ed-comp__mark">Ouvert</span>` : nothing}</li>`;
+    return html`<li class="ed-comp" role="option" data-path=${component.path} aria-selected=${String(chosen)} tabindex=${anchor ? '0' : '-1'}>${icon('composants')}<span class="ed-comp__body"><span class="ed-comp__name">${componentLabel(component)}</span><span class="ed-comp__tag">&lt;${component.tag}&gt;</span></span>${this.renderOpenedMark(component)}</li>`;
+  }
+
+  private renderOpenedMark(component: ComponentSummary): TemplateResult | typeof nothing {
+    return this.isOpened(component) ? html`<span class="ed-comp__mark">Ouvert</span>` : nothing;
   }
 
   private renderEmpty(): TemplateResult {

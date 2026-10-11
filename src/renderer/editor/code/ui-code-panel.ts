@@ -71,11 +71,16 @@ export class UiCodePanel extends LitElement {
     super.disconnectedCallback();
   }
 
+  private renderProblemsTab(selected: boolean): TemplateResult {
+    const counter = problemCounter(this.diagnostics);
+    const count = counter === null ? nothing : html`<span class="ui-count" id="problem-count">${String(counter.count)}</span>`;
+    return html`<button class="ui-tab" type="button" role="tab" id="tab-problems" aria-controls="tp-problems" aria-selected=${String(selected)} @click=${this.onProblemsTab}>Problèmes ${count}</button>`;
+  }
+
   override render(): TemplateResult {
     const { component } = this;
     const file = component === null ? 'Code' : fileNameOf(component.path);
     const sync = syncStateOf(this.diagnostics, this.restarting);
-    const counter = problemCounter(this.diagnostics);
     const tab = component === null ? 'code' : this.tab;
     return html`
       <section class="ed-code" id="code-panel" aria-label="Code Lit du composant" data-collapsed=${String(this.isCollapsed)}>
@@ -83,7 +88,7 @@ export class UiCodePanel extends LitElement {
         <div class="ed-code__head">
           <div class="ui-tabs ui-tabs--bare" role="tablist" aria-label="Panneau de code" @click=${this.onTabsClick}>
             <button class="ui-tab" type="button" role="tab" id="tab-code" aria-controls="tp-code" aria-selected=${String(tab === 'code')} @click=${this.onCodeTab}>${icon('fichier-code')}${file}</button>
-            ${component === null ? nothing : html`<button class="ui-tab" type="button" role="tab" id="tab-problems" aria-controls="tp-problems" aria-selected=${String(tab === 'problems')} @click=${this.onProblemsTab}>Problèmes ${counter === null ? nothing : html`<span class="ui-count" id="problem-count">${String(counter.count)}</span>`}</button>`}
+            ${component === null ? nothing : this.renderProblemsTab(tab === 'problems')}
           </div>
           ${component === null ? nothing : html`<span class="ed-code__path" id="code-path">${this.displayPath}</span>`}
           <span class="ui-spacer"></span>

@@ -2,7 +2,7 @@ import { css, html, LitElement, nothing, type PropertyValues, type TemplateResul
 import { customElement, property, query, state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { fitView } from '../../../modules/editor/domain/viewport/fit.js';
-import { rulerFor, type Ruler } from '../../../modules/editor/domain/viewport/ruler.js';
+import { rulerFor, type Ruler, type RulerMark } from '../../../modules/editor/domain/viewport/ruler.js';
 import {
   DEFAULT_SCREEN_SIZE,
   SCREEN_SIZES,
@@ -217,11 +217,13 @@ export class UiEditorCanvas extends LitElement {
   private renderRuler(axis: 'x' | 'y', length: number, offset: number): TemplateResult {
     const ruler: Ruler = rulerFor(length, offset, this.view.zoom);
     const style = styleMap({ '--ed-minor': `${String(ruler.minor)}px`, '--ed-off': `${String(ruler.offset)}px` });
-    return html`<div class="ed-ruler ed-ruler--${axis}" id="ruler-${axis}" aria-hidden="true" style=${style}>${ruler.marks.map((mark) =>
-      axis === 'x'
-        ? html`<span class="ed-ruler__mark" style=${styleMap({ left: `${String(mark.position)}px` })}>${mark.label}</span>`
-        : html`<span class="ed-ruler__mark" style=${styleMap({ top: `${String(mark.position)}px` })}><span>${mark.label}</span></span>`,
-    )}</div>`;
+    return html`<div class="ed-ruler ed-ruler--${axis}" id="ruler-${axis}" aria-hidden="true" style=${style}>${ruler.marks.map((mark) => this.renderRulerMark(axis, mark))}</div>`;
+  }
+
+  private renderRulerMark(axis: 'x' | 'y', mark: RulerMark): TemplateResult {
+    const position = `${String(mark.position)}px`;
+    if (axis === 'x') return html`<span class="ed-ruler__mark" style=${styleMap({ left: position })}>${mark.label}</span>`;
+    return html`<span class="ed-ruler__mark" style=${styleMap({ top: position })}><span>${mark.label}</span></span>`;
   }
 
   private renderFrame(component: OpenedComponent): TemplateResult {
@@ -467,21 +469,27 @@ export class UiEditorCanvas extends LitElement {
 
   private readonly onDocumentKeydown = (event: KeyboardEvent): void => {
     if (!this.checkVisibility() || this.phase !== 'ready' || isTyping(event)) return;
-    const ctrl = event.ctrlKey || event.metaKey;
-    if (ctrl && !event.altKey) {
-      if (event.key === '+' || event.key === '=') this.shortcut(event, () => { this.zoomStep(1); });
-      else if (event.key === '-') this.shortcut(event, () => { this.zoomStep(-1); });
+    if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+      this.onZoomKey(event);
       return;
     }
     if (event.shiftKey && event.code === 'Digit0') this.shortcut(event, this.resetZoom);
     else if (event.shiftKey && event.code === 'Digit1') this.shortcut(event, this.fit);
     else if (event.key === 'Escape') this.tool = 'select';
     else if (event.key === ' ' && this.isViewportTarget(event)) this.shortcut(event, () => { this.spaceDown = true; });
-    else if (!event.altKey && !event.repeat && !hasOwnKeyboard(event)) {
-      const tool = TOOL_KEYS[event.key.toLowerCase()];
-      if (tool !== undefined) this.tool = tool;
-    }
+    else this.onToolKey(event);
   };
+
+  private onZoomKey(event: KeyboardEvent): void {
+    if (event.key === '+' || event.key === '=') this.shortcut(event, () => { this.zoomStep(1); });
+    else if (event.key === '-') this.shortcut(event, () => { this.zoomStep(-1); });
+  }
+
+  private onToolKey(event: KeyboardEvent): void {
+    if (event.altKey || event.repeat || hasOwnKeyboard(event)) return;
+    const tool = TOOL_KEYS[event.key.toLowerCase()];
+    if (tool !== undefined) this.tool = tool;
+  }
 
   private isViewportTarget(event: KeyboardEvent): boolean {
     const origin = event.composedPath()[0];

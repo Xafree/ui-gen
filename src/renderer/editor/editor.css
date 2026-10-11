@@ -185,9 +185,8 @@
 .ed-code__body { min-height: 0; display: grid; }
 .ed-code__panel { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .ed-code__panel > .ui-code { flex: 1; }
-.ed-code .ui-code__pre { position: relative; }
+.ed-code .ui-code__pre { position: relative; padding-bottom: var(--ui-space-4); }
 .ed-code .ui-code__line { cursor: text; }
-.ed-code .ui-code__pre { padding-bottom: var(--ui-space-4); }
 .ed-split {
   position: absolute; top: -5px; left: 0; right: 0; z-index: 6;
   height: 9px; cursor: row-resize; touch-action: none;
