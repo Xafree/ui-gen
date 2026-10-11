@@ -205,6 +205,18 @@
 .ed-split.is-dragging::after { background: var(--ui-accent); }
 .ed-code[data-collapsed="true"] .ed-split { display: none; }
 
+/* ---------- Problèmes ---------- */
+.ed-problem {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--ui-space-2);
+  width: 100%; padding: 6px var(--ui-space-3);
+  border: 0; border-radius: 0; background: none; color: var(--ui-text);
+  font-size: var(--ui-text-sm); line-height: 18px; text-align: left;
+}
+.ed-problem:hover { background: var(--ui-surface-hover); }
+.ed-problem:focus-visible { outline-offset: -2px; }
+.ed-problem .icon { margin-top: 1px; }
+.ed-problems-foot { padding: var(--ui-space-2) var(--ui-space-3); color: var(--ui-text-3); font-size: var(--ui-text-xs); }
+
 /* ---------- Barre d'état ---------- */
 .ed-status-btn {
   display: inline-flex; align-items: center; gap: var(--ui-space-1-5);

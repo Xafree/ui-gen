@@ -1,6 +1,8 @@
 import { css, html, LitElement, nothing, type PropertyValues, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { displayedDiagnostics, type Diagnostic } from '../../modules/editor/domain/code/code-diagnostics.js';
 import { layerIdForNode, nodeRange, type TextRange } from '../../modules/editor/domain/code/code-targets.js';
+import { problemCounter, syncStateOf } from '../../modules/editor/domain/code/problem-summary.js';
 import { findLayer, layerIds } from '../../modules/editor/domain/layers/layer-lookup.js';
 import { buildLayerTree, countLayers, type LayerNode } from '../../modules/editor/domain/layers/layer-tree.js';
 import { samePath } from '../../modules/sync/domain/library/component-summary.js';
@@ -117,6 +119,7 @@ export class UiEditor extends LitElement {
   @state() private hiddenLayers: ReadonlySet<string> = new Set();
   @state() private lockedLayers: ReadonlySet<string> = new Set();
   @state() private cursor: CodeCursorDetail = { line: 1, column: 1 };
+  @state() private diagnostics: readonly Diagnostic[] = [];
 
   private layersPath: string | null = null;
   private openRequest = 0;
@@ -136,7 +139,10 @@ export class UiEditor extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues): void {
-    if (changed.has('opened')) this.rebuildLayers();
+    if (changed.has('opened')) {
+      this.rebuildLayers();
+      this.diagnostics = displayedDiagnostics(this.opened);
+    }
   }
 
   protected override firstUpdated(): void {
@@ -220,7 +226,7 @@ export class UiEditor extends LitElement {
       <main class="ui-stage ed-stage" id="main" tabindex="-1">
         <h1 class="sr-only" id="page-title">${this.opened === null ? 'Éditeur' : `Éditeur du composant ${this.tag}`}</h1>
         <ui-editor-canvas .phase=${this.phase} .component=${this.opened} .tag=${this.tag} .projectPath=${this.projectPath} .layers=${this.layers} .selectedId=${this.selectedId} .hoverId=${this.hoverId} .hiddenLayers=${this.hiddenLayers} .lockedLayers=${this.lockedLayers} @canvas-select=${this.onCanvasSelect}></ui-editor-canvas>
-        <ui-code-panel .component=${this.opened} .displayPath=${this.opened === null ? '' : projectRelative(this.projectPath, this.opened.path)} .restarting=${this.restarting} .targetRange=${this.targetRange} @code-line-select=${this.onCodeLineSelect} @code-cursor=${this.onCodeCursor}></ui-code-panel>
+        <ui-code-panel .component=${this.opened} .displayPath=${this.opened === null ? '' : projectRelative(this.projectPath, this.opened.path)} .restarting=${this.restarting} .diagnostics=${this.diagnostics} .targetRange=${this.targetRange} @code-line-select=${this.onCodeLineSelect} @code-cursor=${this.onCodeCursor}></ui-code-panel>
       </main>
     `;
   }
@@ -244,18 +250,17 @@ export class UiEditor extends LitElement {
   }
 
   private renderStatusBar(): TemplateResult {
+    const sync = syncStateOf(this.diagnostics, this.restarting);
+    const counter = problemCounter(this.diagnostics);
     return html`
       <footer class="ui-statusbar" aria-label="Barre d'état">
         <span class="ui-statusbar__item">${icon('code')}<span><span class="ed-status-long">Cible : </span>Lit<span class="ed-status-long"> + TypeScript</span></span></span>
-        <span class="ui-statusbar__item" id="status-sync" role="status">${this.syncDot()}<span id="status-sync-label">${this.restarting ? "Relance de l'analyse…" : 'Synchronisé'}</span></span>
+        <span class="ui-statusbar__item" id="status-sync" role="status"><span class="ui-status-dot ui-status-dot--${sync.tone}" aria-hidden="true"></span><span id="status-sync-label">${sync.status}</span></span>
+        ${counter === null ? nothing : html`<button class="ed-status-btn ed-status-warn${counter.hasError ? ' is-error' : ''}" type="button" id="status-warn" aria-label=${counter.name} @click=${this.onProblemsClick}>${icon('alerte')}<span id="status-warn-label">${String(counter.count)}<span class="ed-status-long"> ${counter.word}</span></span></button>`}
         <span class="ui-statusbar__spacer"></span>
         ${this.opened === null ? nothing : html`<span class="ui-statusbar__item ed-status-num" id="status-cursor">Ligne ${String(this.cursor.line)}, col. ${String(this.cursor.column)}</span>`}
       </footer>
     `;
-  }
-
-  private syncDot(): TemplateResult {
-    return html`<span class="ui-status-dot ${this.restarting ? 'ui-status-dot--accent' : 'ui-status-dot--success'}" aria-hidden="true"></span>`;
   }
 
   private follow(): void {
@@ -346,7 +351,11 @@ export class UiEditor extends LitElement {
     this.hoverId = null;
   };
 
-  private readonly onCodeCursor = (event: CustomEvent<CodeCursorDetail>): void => {
+  private readonly onProblemsClick = (): void => {
+    this.renderRoot.querySelector('ui-code-panel')?.showProblems();
+  };
+
+  private readonly onCodeCursor =(event: CustomEvent<CodeCursorDetail>): void => {
     this.cursor = event.detail;
   };
 
