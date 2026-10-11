@@ -9,6 +9,7 @@ import {
   expectEditorOn,
   openedMark,
   rememberRecentProject,
+  writeKitHorizonSupport,
   writeTsconfig,
 } from './editor-screen';
 
@@ -31,6 +32,7 @@ test.afterEach(async () => {
 test('arrives on the component last opened in the project', async () => {
   await writeKitHorizon(project);
   await writeTsconfig(project);
+  await writeKitHorizonSupport(project);
   await rememberOpenedComponent(userData, project, 'hz-pricing-card');
 
   await withStudio(userData, async ({ window }) => {
@@ -49,6 +51,7 @@ test('arrives on the component last opened in the project', async () => {
 test('arrives on the first component by tag order when none was opened in the project', async () => {
   await writeKitHorizon(project);
   await writeTsconfig(project);
+  await writeKitHorizonSupport(project);
   await rememberRecentProject(userData, project);
 
   await withStudio(userData, async ({ window }) => {

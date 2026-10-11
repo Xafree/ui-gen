@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import { makeTempFolder, removeFolder } from '../../project/studio-app';
 import { canvasContent, openRecentProject, rememberOpenedComponent } from '../canvas/canvas-project';
 import { FEATURE_LIST_FILE, PLAN_BADGE_FILE, endsWithFile, lastOpened, withStudio, writeKitHorizon } from '../editor-project';
-import { componentOption, componentsTab, expectEditorOn, openedMark, writeTsconfig } from './editor-screen';
+import { componentOption, componentsTab, expectEditorOn, openedMark, writeKitHorizonSupport, writeTsconfig } from './editor-screen';
 
 let root: string;
 let userData: string;
@@ -15,6 +15,7 @@ test.beforeEach(async () => {
   project = join(root, 'kit-horizon');
   await writeKitHorizon(project);
   await writeTsconfig(project);
+  await writeKitHorizonSupport(project);
   await rememberOpenedComponent(userData, project, 'hz-pricing-card');
 });
 
