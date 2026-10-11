@@ -49,6 +49,11 @@ function emptyState(): Element | undefined {
   return deepQueryAll('#av-empty')[0];
 }
 
+function isCovered(): boolean {
+  const state = emptyState();
+  return state?.hasAttribute('inert') === true && state.getAttribute('aria-hidden') === 'true';
+}
+
 beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
@@ -59,14 +64,14 @@ afterEach(() => {
 });
 
 describe('the editor screen canvas', () => {
-  it('shows the last opened component in the canvas instead of the pending empty state', async () => {
+  it('shows the last opened component in the canvas, over the pending empty state', async () => {
     const open = vi.fn((path: string) => Promise.resolve(openedComponent('v1', path)));
 
     await mountShell(apiWith({ lastOpened: () => Promise.resolve(COMPONENT_PATH), open }));
 
     await expect.poll(() => canvasFrame()).toBeDefined();
     expect(open).toHaveBeenCalledWith(COMPONENT_PATH);
-    expect(emptyState()?.hasAttribute('hidden')).toBe(true);
+    expect(isCovered()).toBe(true);
     expect(canvasFrame()?.hasAttribute('hidden')).toBe(false);
     expect(Reflect.get(canvasFrame() ?? {}, 'projectPath')).toBe('E:\\projets\\kit-horizon');
   });
@@ -84,7 +89,8 @@ describe('the editor screen canvas', () => {
   it('keeps the pending empty state when the library has no component', async () => {
     await mountShell(apiWith({ lastOpened: () => Promise.resolve(null), list: () => Promise.resolve([]) }));
 
-    await expect.poll(() => emptyState()?.hasAttribute('hidden')).toBe(false);
+    await expect.poll(() => emptyState()).toBeDefined();
+    expect(isCovered()).toBe(false);
     expect(canvasFrame()).toBeUndefined();
   });
 
@@ -96,7 +102,7 @@ describe('the editor screen canvas', () => {
       expect.any(Error),
     );
     expect(canvasFrame()).toBeUndefined();
-    expect(emptyState()?.hasAttribute('hidden')).toBe(false);
+    expect(isCovered()).toBe(false);
   });
 
   it('hides the canvas on the other screens and brings it back on the editor', async () => {
@@ -108,10 +114,10 @@ describe('the editor screen canvas', () => {
     await navLink('Playground').click();
 
     await expect.poll(() => canvasFrame()?.hasAttribute('hidden')).toBe(true);
-    await expect.poll(() => emptyState()?.hasAttribute('hidden')).toBe(false);
+    await expect.poll(() => isCovered()).toBe(false);
     await navLink('Éditeur').click();
     await expect.poll(() => canvasFrame()?.hasAttribute('hidden')).toBe(false);
-    await expect.poll(() => emptyState()?.hasAttribute('hidden')).toBe(true);
+    await expect.poll(() => isCovered()).toBe(true);
     await expect.element(page.getByRole('heading', { level: 1, name: 'Éditeur', exact: true })).toBeInTheDocument();
   });
 

@@ -39,8 +39,14 @@ const canvasStage = css`
     grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   }
 
-  .ui-empty[hidden] {
-    display: none;
+  .av-stage > .ui-empty,
+  .av-stage > ui-canvas-frame {
+    grid-area: 1 / 1;
+  }
+
+  ui-canvas-frame {
+    z-index: 1;
+    background: var(--ui-surface-canvas);
   }
 `;
 
@@ -100,7 +106,7 @@ export class UiShell extends LitElement {
         </header>
         <main class="ui-stage av-stage" id="main" tabindex="-1">
           <h1 class="sr-only" id="av-heading">${shown.label}</h1>
-          <div class="ui-empty" id="av-empty" ?hidden=${this.editorComponent !== null && this.shown === 'editor'}>
+          <div class="ui-empty" id="av-empty" ?inert=${this.coversEmptyState} aria-hidden=${this.coversEmptyState ? 'true' : nothing}>
             <span class="ui-empty__icon">${icon(shown.icon)}</span>
             <p class="ui-empty__title">Disponible dans un prochain lot</p>
             <p class="ui-empty__text" id="av-text">L'écran ${shown.label} arrive avec le lot ${String(shown.lot)}.</p>
@@ -121,6 +127,10 @@ export class UiShell extends LitElement {
     void openStartingComponent(this.api.components).then((component) => {
       this.editorComponent = component;
     });
+  }
+
+  private get coversEmptyState(): boolean {
+    return this.editorComponent !== null && this.shown === 'editor';
   }
 
   private renderCanvas(): TemplateResult | typeof nothing {

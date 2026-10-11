@@ -63,8 +63,9 @@ npm run sonar:down    # stops the container; data stays in the Docker volumes
 
 | Path | Content |
 |---|---|
-| `src/main/` | Electron main process |
-| `src/utility/` | utility process entry (`compute-host`): reads and highlights component text sent by the main process, no disk access |
+| `src/main/` | Electron main process; `src/main/canvas/` serves the `uigen-canvas` protocol (opened project files, lit packages, harness page) |
+| `src/utility/` | utility process entry (`compute-host`): reads, highlights and transpiles component text sent by the main process, no disk access |
+| `src/harness/` | script of the canvas iframe, built as `out/main/canvas-harness.js` and served by the `uigen-canvas` protocol |
 | `src/preload/` | preload: API exposed to the renderer through `contextBridge` |
 | `src/renderer/` | studio UI in Lit |
 | `src/modules/<module>/` | business code in hexagonal architecture: `domain/`, `application/`, `ports/`, `adapters/` |
