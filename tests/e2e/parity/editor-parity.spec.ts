@@ -43,6 +43,8 @@ const DATA_DEPENDENT_REGIONS: readonly string[] = [
   '#insp-sub',
   '#rule-count',
   '#tp-props .ui-section > :not(.ui-section__header)',
+  '#sec-variant ~ .ed-note',
+  '.ui-panel__body:has(#tree)',
   '#viewport',
   '#ruler-x',
   '#ruler-y',
@@ -65,6 +67,7 @@ const HORIZON_PACKAGE = `{
 `;
 
 const LOCALE_LINE = "@property() locale = 'fr-FR';";
+const BROKEN_LOCALE_LINE = '@property() locale = ;';
 const FORMAT_PRICE_IMPORT = "import { formatPrice } from '../utils/format-price.js';\n";
 const FORMAT_PRICE_CALL = /\$\{formatPrice\([^)]*\)\}/;
 
@@ -138,16 +141,18 @@ const EMPTY_LIBRARY_STATE: MockupState = {
   },
 };
 
+async function breakPricingCardWhileOpen(window: Page): Promise<void> {
+  await writeFiles(project, { [PRICING_CARD_FILE]: await fixtureText(PRICING_CARD_FILE) });
+  await expectProCtaSelected(window);
+  await rewritePricingCard(project, (source) => source.replace(LOCALE_LINE, BROKEN_LOCALE_LINE));
+  await expect(window.locator('ui-editor').getByText('Erreur de syntaxe').first()).toBeVisible();
+  await expect(window.locator('#problem-count')).toBeVisible();
+}
+
 const SYNTAX_ERROR_STATE: MockupState = {
   name: 'syntax-error',
   query: { etat: 'syntaxe' },
-  customize: (project) =>
-    rewritePricingCard(project, (source) => source.replace(LOCALE_LINE, LOCALE_LINE.slice(0, -1))),
-  ready: async (window) => {
-    await expect(window.locator('ui-editor')).toBeVisible();
-    await expect(window.locator('#problem-count')).toBeVisible();
-    await selectProCta(window);
-  },
+  ready: breakPricingCardWhileOpen,
 };
 
 let root: string;
