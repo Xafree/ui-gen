@@ -17,3 +17,4 @@
 
     /* ---------- Scène : l'état vide se centre dans les deux axes ---------- */
     .av-stage { display: grid; overflow: auto; }
+    .av-stage[hidden] { display: none; }

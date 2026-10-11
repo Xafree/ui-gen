@@ -38,7 +38,7 @@ export default defineConfig({
         extends: true,
         esbuild: litDecorators,
         optimizeDeps: {
-          include: ['lit', 'lit/decorators.js', 'lit/directives/repeat.js', 'lit/directives/unsafe-svg.js', 'gsap'],
+          include: ['lit', 'lit/decorators.js', 'lit/directives/repeat.js', 'lit/directives/style-map.js', 'lit/directives/unsafe-svg.js', 'gsap'],
         },
         test: {
           name: 'browser',

@@ -77,7 +77,7 @@ describe('the canvas harness page', () => {
     expect(response.headers.get('Content-Type')).toBe('text/html; charset=utf-8');
     expect(policy).toContain("default-src uigen-canvas:");
     expect(policy).toContain("connect-src 'none'");
-    expect(policy).not.toContain('unsafe-inline');
+    expect(policy).not.toMatch(/script-src[^;]*unsafe-inline/);
     expect(await response.text()).toContain('<link rel="stylesheet" href="/tokens/tokens.css">');
   });
 

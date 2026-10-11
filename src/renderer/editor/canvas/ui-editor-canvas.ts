@@ -1,0 +1,412 @@
+import { css, html, LitElement, nothing, type PropertyValues, type TemplateResult } from 'lit';
+import { customElement, property, query, state } from 'lit/decorators.js';
+import { styleMap } from 'lit/directives/style-map.js';
+import { fitView } from '../../../modules/editor/domain/viewport/fit.js';
+import { rulerFor, type Ruler } from '../../../modules/editor/domain/viewport/ruler.js';
+import {
+  DEFAULT_SCREEN_SIZE,
+  SCREEN_SIZES,
+  formatPixels,
+  screenSizeById,
+  type ScreenSizeId,
+} from '../../../modules/editor/domain/viewport/screen-size.js';
+import {
+  nextZoomStep,
+  panBy,
+  zoomAfterWheel,
+  zoomAround,
+  zoomPercent,
+  type CanvasView,
+} from '../../../modules/editor/domain/viewport/zoom.js';
+import type { OpenedComponent } from '../../../modules/sync/application/components/component-views.js';
+import { icon } from '../../icons/icon.js';
+import { editorStyles } from '../editor-styles.js';
+import { EMPTY_LIBRARY_TITLE, IMPORT_HINT, IMPORT_SCREEN } from '../library/ui-component-library.js';
+import type { CanvasRectsDetail } from './ui-canvas-frame.js';
+import './ui-canvas-frame.js';
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'ui-editor-canvas': UiEditorCanvas;
+  }
+}
+
+export type CanvasPhase = 'loading' | 'empty' | 'ready';
+
+type Tool = 'select' | 'frame' | 'text' | 'hand';
+
+const NO_BREAK_SPACE = String.fromCodePoint(0xa0);
+const DEFAULT_FRAME_HEIGHT = 320;
+const FRAME_BOTTOM_MARGIN = 16;
+const ARROW_STEP = 24;
+const ARROW_STEP_FAST = 80;
+const LINE_HEIGHT_PX = 16;
+const TOOL_KEYS: Readonly<Record<string, Tool>> = { v: 'select', f: 'frame', t: 'text', h: 'hand' };
+const TOOL_HINTS: Readonly<Partial<Record<Tool, string>>> = {
+  frame: "Glissez pour dessiner un cadre. Il reste hors du code jusqu'à son intégration.",
+  text: 'Cliquez pour placer un texte, puis saisissez-le.',
+  hand: 'Glissez pour déplacer la vue. Astuce : maintenez Espace avec un autre outil.',
+};
+const TYPING = 'input, textarea, select, [contenteditable="true"]';
+const OWN_KEYBOARD = '[role="tree"], [role="listbox"], [role="radiogroup"], [role="tablist"], #code-panel';
+
+interface PanDrag {
+  readonly pointerId: number;
+  readonly startX: number;
+  readonly startY: number;
+  readonly from: CanvasView;
+}
+
+function isTyping(event: KeyboardEvent): boolean {
+  const origin = event.composedPath()[0];
+  return origin instanceof Element && origin.closest(TYPING) !== null;
+}
+
+function hasOwnKeyboard(event: KeyboardEvent): boolean {
+  return event.composedPath().some((target) => target instanceof Element && target.matches(OWN_KEYBOARD));
+}
+
+function variantsLabel(count: number): string {
+  return `${String(count)} ${count > 1 ? 'variantes' : 'variante'}`;
+}
+
+@customElement('ui-editor-canvas')
+export class UiEditorCanvas extends LitElement {
+  static override readonly styles = [
+    ...editorStyles,
+    css`
+      :host {
+        display: block;
+        min-width: 0;
+        min-height: 0;
+      }
+
+      #canvas-area {
+        height: 100%;
+      }
+
+      ui-canvas-frame {
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+    `,
+  ];
+
+  @property({ attribute: false }) phase: CanvasPhase = 'loading';
+  @property({ attribute: false }) component: OpenedComponent | null = null;
+  @property({ attribute: false }) tag = '';
+  @property({ attribute: false }) projectPath = '';
+
+  @state() private view: CanvasView = { x: 0, y: 0, zoom: 1 };
+  @state() private screenSize: ScreenSizeId = DEFAULT_SCREEN_SIZE;
+  @state() private darkPreview = false;
+  @state() private tool: Tool = 'select';
+  @state() private frameHeight = DEFAULT_FRAME_HEIGHT;
+  @state() private viewportWidth = 0;
+  @state() private viewportHeight = 0;
+  @state() private spaceDown = false;
+  @state() private panning = false;
+
+  @query('#viewport') private readonly viewport!: HTMLElement | null;
+
+  private autoFit = true;
+  private drag: PanDrag | null = null;
+  private observed: Element | null = null;
+  private readonly resizeObserver = new ResizeObserver(() => {
+    this.measureViewport();
+  });
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    document.addEventListener('keydown', this.onDocumentKeydown);
+    document.addEventListener('keyup', this.onDocumentKeyup);
+    window.addEventListener('blur', this.onWindowBlur);
+  }
+
+  override disconnectedCallback(): void {
+    document.removeEventListener('keydown', this.onDocumentKeydown);
+    document.removeEventListener('keyup', this.onDocumentKeyup);
+    window.removeEventListener('blur', this.onWindowBlur);
+    this.resizeObserver.disconnect();
+    this.observed = null;
+    super.disconnectedCallback();
+  }
+
+  override render(): TemplateResult {
+    return html`<div class="ui-canvas ed-canvas" id="canvas-area">${this.phase === 'ready' ? this.renderReady() : this.renderPhase()}</div>`;
+  }
+
+  protected override willUpdate(changed: PropertyValues): void {
+    if (changed.has('component')) this.frameHeight = DEFAULT_FRAME_HEIGHT;
+  }
+
+  protected override updated(changed: PropertyValues): void {
+    this.observeViewport();
+    if (this.autoFit && (changed.has('screenSize') || changed.has('frameHeight'))) this.fit();
+  }
+
+  private renderPhase(): TemplateResult | typeof nothing {
+    if (this.phase === 'loading') return nothing;
+    return html`
+      <div class="ed-canvas-empty" id="canvas-empty">
+        <div class="ui-empty">
+          <span class="ui-empty__icon">${icon('composants')}</span>
+          <p class="ui-empty__title">${EMPTY_LIBRARY_TITLE}</p>
+          <p class="ui-empty__text">${IMPORT_HINT}</p>
+          <div class="ui-empty__actions">
+            <a class="ui-btn ui-btn--secondary ui-btn--sm" href=${IMPORT_SCREEN}>Importer un composant</a>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderReady(): TemplateResult {
+    const hint = TOOL_HINTS[this.tool];
+    return html`
+      <div class="ed-ruler-corner" aria-hidden="true"></div>
+      ${this.renderRuler('x', this.viewportWidth, this.view.x)}${this.renderRuler('y', this.viewportHeight, this.view.y)}
+      <div class="ed-viewport ${this.spaceDown ? 'is-space' : ''} ${this.panning ? 'is-panning' : ''}" id="viewport" tabindex="0" role="group" aria-roledescription="canvas" aria-label=${this.viewportLabel()} aria-describedby="viewport-help" data-tool=${this.tool} @wheel=${{ handleEvent: this.onWheel, passive: false }} @keydown=${this.onViewportKeydown} @pointerdown=${this.onPointerDown} @pointermove=${this.onPointerMove} @pointerup=${this.endDrag} @pointercancel=${this.endDrag}>
+        <p class="sr-only" id="viewport-help">Flèches : déplacer la vue. Plus et moins : zoomer. Sélectionnez les éléments au clavier dans le panneau Calques.</p>
+        <div class="ed-world" id="world" style=${styleMap({ transform: `translate(${String(this.view.x)}px, ${String(this.view.y)}px) scale(${String(this.view.zoom)})`, '--z': String(this.view.zoom) })}>
+          ${this.component === null ? nothing : this.renderFrame(this.component)}
+        </div>
+      </div>
+      ${this.renderCanvasBar()}
+      <span class="ui-tooltip ed-tool-hint" id="tool-hint" role="status" ?hidden=${hint === undefined}>${hint ?? ''}</span>
+      ${this.renderToolbar()}
+    `;
+  }
+
+  private renderRuler(axis: 'x' | 'y', length: number, offset: number): TemplateResult {
+    const ruler: Ruler = rulerFor(length, offset, this.view.zoom);
+    const style = styleMap({ '--ed-minor': `${String(ruler.minor)}px`, '--ed-off': `${String(ruler.offset)}px` });
+    return html`<div class="ed-ruler ed-ruler--${axis}" id="ruler-${axis}" aria-hidden="true" style=${style}>${ruler.marks.map((mark) =>
+      axis === 'x'
+        ? html`<span class="ed-ruler__mark" style=${styleMap({ left: `${String(mark.position)}px` })}>${mark.label}</span>`
+        : html`<span class="ed-ruler__mark" style=${styleMap({ top: `${String(mark.position)}px` })}><span>${mark.label}</span></span>`,
+    )}</div>`;
+  }
+
+  private renderFrame(component: OpenedComponent): TemplateResult {
+    const size = screenSizeById(this.screenSize);
+    const variants = Math.max(component.model.variants.length, 1);
+    return html`
+      <div class="ui-frame ed-frame" id="frame">
+        <div class="ui-frame__label"><span id="frame-name">${this.tag}</span><span class="ui-mono" id="frame-meta">${variantsLabel(variants)} · ${size.label}</span></div>
+        <div class="ui-frame__body ed-frame__body" id="frame-body" data-screen=${size.id} aria-hidden="true" style=${styleMap({ width: `${String(size.width)}px`, height: `${String(this.frameHeight)}px` })}>
+          <ui-canvas-frame .component=${component} .projectPath=${this.projectPath} ?darkPreview=${this.darkPreview} @canvas-rects=${this.onRects}></ui-canvas-frame>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderCanvasBar(): TemplateResult {
+    const size = screenSizeById(this.screenSize);
+    return html`
+      <div class="ed-canvas-bar">
+        <div class="ui-segmented" role="radiogroup" aria-label="Taille d'écran du cadre" id="screen-seg">
+          ${SCREEN_SIZES.map((option) => html`<label><input type="radio" name="ecran" value=${option.id} .checked=${option.id === this.screenSize} @change=${this.onScreenSize}><span>${icon(option.id, 'icon--sm')}<span class="ed-seg-label">${option.label}</span></span></label>`)}
+        </div>
+        <span class="ed-frame-chip" id="frame-chip">${formatPixels(size.width)}</span>
+        <span class="ui-spacer"></span>
+        <button class="ui-btn ui-btn--secondary ui-btn--sm" type="button" id="hz-dark" aria-pressed=${String(this.darkPreview)} @click=${this.toggleDarkPreview}>${icon('lune', 'icon--sm')}<span class="ed-btn-label">Aperçu sombre</span></button>
+      </div>
+    `;
+  }
+
+  private renderToolbar(): TemplateResult {
+    const percent = zoomPercent(this.view.zoom);
+    return html`
+      <div class="ui-toolbar ed-toolbar" role="toolbar" aria-label="Outils du canvas" id="toolbar">
+        ${this.renderToolButton('select', 'curseur', 'Sélection (V)', 'Sélection (V)')}${this.renderToolButton('frame', 'cadre', 'Cadre (F)', 'Cadre (F)')}${this.renderToolButton('text', 'texte', 'Texte (T)', 'Texte (T)')}${this.renderToolButton('hand', 'main', 'Main : déplacer la vue (H)', 'Déplacer la vue (H)')}
+        <span class="ui-toolbar__sep" aria-hidden="true"></span>
+        <button class="ui-icon-btn" type="button" id="zoom-out" aria-label="Zoom arrière" data-tip="Zoom arrière (Ctrl −)" data-tip-pos="top" @click=${this.zoomOut}>${icon('dezoom')}</button>
+        <button class="ui-toolbar__value" type="button" id="zoom-value" aria-label=${`Zoom : ${String(percent)} %. Revenir à 100 %`} data-tip="Revenir à 100 % (Maj 0)" data-tip-pos="top" @click=${this.resetZoom}>${String(percent)}${NO_BREAK_SPACE}%</button>
+        <button class="ui-icon-btn" type="button" id="zoom-in" aria-label="Zoom avant" data-tip="Zoom avant (Ctrl +)" data-tip-pos="top" @click=${this.zoomIn}>${icon('zoom')}</button>
+        <button class="ui-icon-btn ed-tool-extra" type="button" id="zoom-fit" aria-label="Ajuster le cadre à la vue" data-tip="Ajuster (Maj 1)" data-tip-pos="top" @click=${this.fit}>${icon('agrandir')}</button>
+      </div>
+    `;
+  }
+
+  private renderToolButton(tool: Tool, iconName: 'curseur' | 'cadre' | 'texte' | 'main', label: string, tip: string): TemplateResult {
+    return html`<button class="ui-icon-btn" type="button" data-tool-btn=${tool} aria-pressed=${String(this.tool === tool)} aria-label=${label} data-tip=${tip} data-tip-pos="top" @click=${() => { this.tool = tool; }}>${icon(iconName)}</button>`;
+  }
+
+  private viewportLabel(): string {
+    const variants = Math.max(this.component?.model.variants.length ?? 1, 1);
+    return `Canvas de ${this.tag}, ${variantsLabel(variants)}`;
+  }
+
+  private observeViewport(): void {
+    const viewport = this.viewport;
+    if (viewport === this.observed) return;
+    this.resizeObserver.disconnect();
+    this.observed = viewport;
+    if (viewport !== null) this.resizeObserver.observe(viewport);
+  }
+
+  private measureViewport(): void {
+    const viewport = this.viewport;
+    if (viewport === null) return;
+    this.viewportWidth = viewport.clientWidth;
+    this.viewportHeight = viewport.clientHeight;
+    if (this.autoFit) this.fit();
+  }
+
+  private readonly fit = (): void => {
+    const viewport = this.viewport;
+    if (viewport === null) return;
+    const fitted = fitView({
+      viewportWidth: viewport.clientWidth,
+      viewportHeight: viewport.clientHeight,
+      frameWidth: screenSizeById(this.screenSize).width,
+      frameHeight: this.frameHeight,
+    });
+    if (fitted === null) return;
+    this.view = fitted;
+    this.autoFit = true;
+  };
+
+  private moveView(view: CanvasView): void {
+    this.view = view;
+    this.autoFit = false;
+  }
+
+  private zoomTo(zoom: number): void {
+    const viewport = this.viewport;
+    if (viewport === null) return;
+    this.moveView(zoomAround(this.view, zoom, viewport.clientWidth / 2, viewport.clientHeight / 2));
+  }
+
+  private zoomStep(direction: 1 | -1): void {
+    this.zoomTo(nextZoomStep(this.view.zoom, direction));
+  }
+
+  private readonly zoomIn = (): void => {
+    this.zoomStep(1);
+  };
+
+  private readonly zoomOut = (): void => {
+    this.zoomStep(-1);
+  };
+
+  private readonly resetZoom = (): void => {
+    this.zoomTo(1);
+  };
+
+  private readonly toggleDarkPreview = (): void => {
+    this.darkPreview = !this.darkPreview;
+  };
+
+  private readonly onScreenSize = (event: Event): void => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const chosen = SCREEN_SIZES.find((option) => option.id === target.value);
+    if (chosen === undefined) return;
+    this.screenSize = chosen.id;
+  };
+
+  private readonly onRects = (event: CustomEvent<CanvasRectsDetail>): void => {
+    const { rects } = event.detail;
+    const bottom = Math.max(0, ...rects.map((rect) => rect.y + rect.height));
+    if (bottom > 0) this.frameHeight = Math.ceil(bottom) + FRAME_BOTTOM_MARGIN;
+  };
+
+  private readonly onWheel = (event: WheelEvent): void => {
+    event.preventDefault();
+    const viewport = this.viewport;
+    if (viewport === null) return;
+    if (event.ctrlKey || event.metaKey) {
+      const box = viewport.getBoundingClientRect();
+      this.moveView(zoomAround(this.view, zoomAfterWheel(this.view.zoom, event.deltaY, event.deltaMode), event.clientX - box.left, event.clientY - box.top));
+      return;
+    }
+    const unit = event.deltaMode === 1 ? LINE_HEIGHT_PX : 1;
+    const horizontal = event.shiftKey ? event.deltaY : event.deltaX;
+    const vertical = event.shiftKey ? 0 : event.deltaY;
+    this.moveView(panBy(this.view, -horizontal * unit, -vertical * unit));
+  };
+
+  private readonly onViewportKeydown = (event: KeyboardEvent): void => {
+    if (event.target !== this.viewport || event.ctrlKey || event.metaKey) return;
+    const step = event.shiftKey ? ARROW_STEP_FAST : ARROW_STEP;
+    const moves: Readonly<Record<string, readonly [number, number]>> = {
+      ArrowLeft: [step, 0],
+      ArrowRight: [-step, 0],
+      ArrowUp: [0, step],
+      ArrowDown: [0, -step],
+    };
+    const move = moves[event.key];
+    if (move !== undefined) {
+      event.preventDefault();
+      this.moveView(panBy(this.view, move[0], move[1]));
+    } else if (event.key === '+' || event.key === '=') {
+      event.preventDefault();
+      this.zoomStep(1);
+    } else if (event.key === '-') {
+      event.preventDefault();
+      this.zoomStep(-1);
+    }
+  };
+
+  private readonly onPointerDown = (event: PointerEvent): void => {
+    const viewport = this.viewport;
+    const panWithPrimary = this.tool === 'hand' || this.spaceDown;
+    if (viewport === null || !(event.button === 1 || (event.button === 0 && panWithPrimary))) return;
+    event.preventDefault();
+    viewport.setPointerCapture(event.pointerId);
+    this.drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, from: this.view };
+    this.panning = true;
+  };
+
+  private readonly onPointerMove = (event: PointerEvent): void => {
+    const drag = this.drag;
+    if (drag?.pointerId !== event.pointerId) return;
+    this.moveView({ ...drag.from, x: drag.from.x + event.clientX - drag.startX, y: drag.from.y + event.clientY - drag.startY });
+  };
+
+  private readonly endDrag = (event: PointerEvent): void => {
+    if (this.drag?.pointerId !== event.pointerId) return;
+    this.drag = null;
+    this.panning = false;
+    this.viewport?.releasePointerCapture(event.pointerId);
+  };
+
+  private readonly onDocumentKeydown = (event: KeyboardEvent): void => {
+    if (!this.checkVisibility() || this.phase !== 'ready' || isTyping(event)) return;
+    const ctrl = event.ctrlKey || event.metaKey;
+    if (ctrl && !event.altKey) {
+      if (event.key === '+' || event.key === '=') this.shortcut(event, () => { this.zoomStep(1); });
+      else if (event.key === '-') this.shortcut(event, () => { this.zoomStep(-1); });
+      return;
+    }
+    if (event.shiftKey && event.code === 'Digit0') this.shortcut(event, this.resetZoom);
+    else if (event.shiftKey && event.code === 'Digit1') this.shortcut(event, this.fit);
+    else if (event.key === 'Escape') this.tool = 'select';
+    else if (event.key === ' ' && this.isViewportTarget(event)) this.shortcut(event, () => { this.spaceDown = true; });
+    else if (!event.altKey && !event.repeat && !hasOwnKeyboard(event)) {
+      const tool = TOOL_KEYS[event.key.toLowerCase()];
+      if (tool !== undefined) this.tool = tool;
+    }
+  };
+
+  private isViewportTarget(event: KeyboardEvent): boolean {
+    const origin = event.composedPath()[0];
+    return origin === this.viewport || origin === document.body;
+  }
+
+  private shortcut(event: KeyboardEvent, run: () => void): void {
+    event.preventDefault();
+    run();
+  }
+
+  private readonly onDocumentKeyup = (event: KeyboardEvent): void => {
+    if (event.key === ' ') this.spaceDown = false;
+  };
+
+  private readonly onWindowBlur = (): void => {
+    this.spaceDown = false;
+  };
+}
