@@ -130,7 +130,7 @@ describe('restoreRecentProjects', () => {
 
   // covers: FCT-0022
   it('keeps the 10 most recent projects only', async () => {
-    const current = ['20', '19', '18', '17', '16', '15', '14', '13', '12'].map(datedProject);
+    const current = ['20', '19', '18', '17', '16', '15', '14', '13', '12'].map((date) => datedProject(date));
     const recentProjects = new InMemoryRecentProjectsStore(current);
 
     const restored = await restoreRecentProjects({ fileSystem: new InMemoryProjectFileSystem(), recentProjects }, [

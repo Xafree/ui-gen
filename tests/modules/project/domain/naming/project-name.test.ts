@@ -44,4 +44,18 @@ describe('deriveProjectName', () => {
   it('capitalises a single word', () => {
     expect(deriveProjectName('lit')).toBe('Lit');
   });
+
+  // covers: FCT-0007
+  it.each([
+    ['_kit-horizon_', 'Kit Horizon'],
+    ['-lit', 'Lit'],
+    ['@.atlas-/ui', 'Atlas'],
+  ])('ignores the separators that open or close %j', (packageName, expected) => {
+    expect(deriveProjectName(packageName)).toBe(expected);
+  });
+
+  // covers: FCT-0007
+  it('reads a scope only at the start of the package name', () => {
+    expect(deriveProjectName('kit@atlas/ui')).toBe('Kit@atlas/ui');
+  });
 });

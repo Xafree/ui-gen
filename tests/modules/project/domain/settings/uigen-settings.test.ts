@@ -157,6 +157,7 @@ describe('parseUiGenSettings', () => {
     ['a prefix with an underscore', 'k_h-'],
     ['a prefix with a space', 'k h-'],
     ['a number', 12],
+    ['an array holding a valid prefix', ['kh-']],
     ['null', null],
   ])('rejects %s as tag prefix', (_label, tagPrefix) => {
     expect(

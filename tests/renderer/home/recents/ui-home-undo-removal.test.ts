@@ -89,7 +89,7 @@ describe('<ui-home> undoing a removal', () => {
 
     await expect.poll(() => recentLinks().elements()).toHaveLength(2);
     await expect.poll(() => visibleText(deepActiveElement())).toContain('Atelier Nova');
-    expect(deepActiveElement() === recentLinks().elements()[1]).toBe(true);
+    expect(deepActiveElement()).toBe(recentLinks().elements()[1]);
   });
 
   // covers: FCT-0023
