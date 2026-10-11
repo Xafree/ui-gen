@@ -169,7 +169,7 @@ afterEach(() => {
 });
 
 describe('registerProjectHandlers', () => {
-  it('registers exactly the nine project channels', () => {
+  it('registers exactly the project and recent list channels', () => {
     const { registry } = setUpHandlers();
 
     expect(registry.channels.toSorted()).toEqual([
@@ -179,9 +179,11 @@ describe('registerProjectHandlers', () => {
       'project:create',
       'project:default-location',
       'project:open-folder',
+      'recents:clear',
       'recents:list',
       'recents:open',
       'recents:remove',
+      'recents:restore',
     ]);
     expect(registry.channels.toSorted()).toEqual(Object.values(IPC_CHANNELS).toSorted());
   });

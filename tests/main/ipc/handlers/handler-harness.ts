@@ -5,6 +5,8 @@ import {
   type IpcInvokeEventLike,
   type IpcRegistry,
 } from '../../../../src/main/ipc/project-handlers';
+import { registerRecentListHandlers } from '../../../../src/main/ipc/recent-list-handlers';
+import { ForgottenRecents } from '../../../../src/main/session/forgotten-recents';
 import { ProjectSession } from '../../../../src/main/session/project-session';
 import type { RecentProject } from '../../../../src/modules/project/domain/recents/recent-projects';
 import type { FolderPicker, FolderPurpose } from '../../../../src/modules/project/ports/folder-picker';
@@ -133,22 +135,20 @@ export function setUpHandlers(options: HarnessOptions = {}): HandlerHarness {
   const checkedSenders: string[] = [];
   const clockReads = { count: 0 };
   const trust = options.isTrustedSender ?? ((senderUrl: string) => senderUrl === TRUSTED_URL);
-  registerProjectHandlers(registry, {
-    project: {
-      fileSystem,
-      recentProjects: recents,
-      clock: () => {
-        clockReads.count += 1;
-        return new Date(NOW);
-      },
+  const project = {
+    fileSystem,
+    recentProjects: recents,
+    clock: () => {
+      clockReads.count += 1;
+      return new Date(NOW);
     },
-    folderPicker: picker,
-    session,
-    isTrustedSender: (senderUrl: string) => {
-      checkedSenders.push(senderUrl);
-      return trust(senderUrl);
-    },
-  });
+  };
+  const isTrustedSender = (senderUrl: string): boolean => {
+    checkedSenders.push(senderUrl);
+    return trust(senderUrl);
+  };
+  registerProjectHandlers(registry, { project, folderPicker: picker, session, isTrustedSender });
+  registerRecentListHandlers(registry, { project, forgotten: new ForgottenRecents(), isTrustedSender });
   return { registry, fileSystem, recents, picker, session, checkedSenders, clockReads };
 }
 

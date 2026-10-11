@@ -22,6 +22,8 @@ export function makeUiGenApi(recents: Partial<RecentsApi>): UiGenApi {
       list: recents.list ?? notExpected('recents.list'),
       remove: recents.remove ?? notExpected('recents.remove'),
       open: recents.open ?? notExpected('recents.open'),
+      clear: recents.clear ?? notExpected('recents.clear'),
+      restore: recents.restore ?? notExpected('recents.restore'),
     },
     project: {
       defaultLocation: notExpected('project.defaultLocation'),

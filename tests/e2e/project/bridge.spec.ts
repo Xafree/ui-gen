@@ -94,7 +94,7 @@ test('exposes only the project API, opens a 1440 x 900 window and keeps the syst
       }),
     ).toEqual({
       top: ['platform', 'project', 'recents'],
-      recents: ['list', 'open', 'remove'],
+      recents: ['clear', 'list', 'open', 'remove', 'restore'],
       project: ['adopt', 'chooseLocation', 'close', 'create', 'defaultLocation', 'openFolder'],
       ipcRenderer: false,
       require: 'undefined',
