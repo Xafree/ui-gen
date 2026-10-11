@@ -9,6 +9,7 @@ import { enter, swap } from '../motion/motion.js';
 import { showToast, type ToastRequest } from '../motion/toast.js';
 import { hostContents, studioStyles } from '../styles/studio-styles.js';
 import { PROJECT_OPENED, type ProjectOpenedDetail } from '../studio-events.js';
+import { REQUEST_REFUSED } from '../studio-notices.js';
 import { ThemeController } from '../theme/theme-controller.js';
 import { themeToggleView, toggleTheme } from '../theme/theme.js';
 import { homeStyles } from './home-styles.js';
@@ -26,6 +27,10 @@ const RECENTS_UNREADABLE: ToastRequest = {
   message: "La liste n'a pas pu être lue. Aucun dossier n'a été modifié.",
 };
 
+function triggerOf(event: Event): HTMLElement | null {
+  return event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+}
+
 @customElement('ui-home')
 export class UiHome extends LitElement {
   static override styles = [studioStyles, homeStyles, hostContents];
@@ -41,6 +46,7 @@ export class UiHome extends LitElement {
   @query('#main') private main!: HTMLElement;
 
   private readonly theme = new ThemeController(this);
+  private openPending = false;
 
   override render(): TemplateResult {
     const toggle = themeToggleView(this.theme.theme);
@@ -127,7 +133,7 @@ export class UiHome extends LitElement {
   private renderRecent(project: RecentProjectView): TemplateResult {
     const body = html`<span class="ui-list-item__body"><span class="ui-list-item__title">${project.name}</span><span class="ui-list-item__meta">${project.path}</span></span>`;
     if (!project.available) {
-      return html`<li class="ui-list-item ac-row is-missing"><span class="ac-row__icon">${icon('alerte')}</span>${body}<span class="ac-row__state"><span class="ui-badge ui-badge--warning" title="Dossier déplacé ou supprimé">Introuvable</span><button class="ui-btn ui-btn--ghost ui-btn--sm" type="button" @click=${() => void this.removeRecent(project)}>Retirer de la liste<span class="sr-only"> : ${project.name}</span></button></span></li>`;
+      return html`<li class="ui-list-item ac-row is-missing"><span class="ac-row__icon">${icon('alerte')}</span>${body}<span class="ac-row__state"><span class="ui-badge ui-badge--warning" title="Dossier déplacé ou supprimé">Introuvable</span><button class="ui-btn ui-btn--ghost ui-btn--sm" type="button" @click=${(event: MouseEvent) => void this.removeRecent(event, project)}>Retirer de la liste<span class="sr-only"> : ${project.name}</span></button></span></li>`;
     }
     const openedAt = new Date(project.openedAt);
     return html`<li><a class="ui-list-item ac-row" href="#main" @click=${(event: MouseEvent) => void this.openRecent(event, project)}><span class="ac-row__icon">${icon('dossier')}</span>${body}<time class="ac-row__when" datetime=${openedAt.toISOString()} title=${formatOpenedAt(openedAt)}>${formatRelativeTime(openedAt, new Date())}</time>${icon('fleche-droite', 'ac-row__go')}</a></li>`;
@@ -135,12 +141,17 @@ export class UiHome extends LitElement {
 
   private async openRecent(event: MouseEvent, project: RecentProjectView): Promise<void> {
     event.preventDefault();
-    const link = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    if (this.openPending) return;
+    const link = triggerOf(event);
+    this.openPending = true;
     link?.setAttribute('aria-busy', 'true');
     try {
       await this.handleOpenOutcome(await this.api.recents.open(project.path));
+    } catch (error) {
+      this.refuse(error, link);
     } finally {
       link?.removeAttribute('aria-busy');
+      this.openPending = false;
     }
   }
 
@@ -152,8 +163,15 @@ export class UiHome extends LitElement {
     if (outcome.kind === 'missing') await this.reloadRecents();
   }
 
-  private async removeRecent(project: RecentProjectView): Promise<void> {
-    const remaining = await this.api.recents.remove(project.path);
+  private async removeRecent(event: MouseEvent, project: RecentProjectView): Promise<void> {
+    const button = triggerOf(event);
+    let remaining: RecentProjectView[];
+    try {
+      remaining = await this.api.recents.remove(project.path);
+    } catch (error) {
+      this.refuse(error, button);
+      return;
+    }
     await swap(this.recentBody, () => {
       this.recents = remaining;
     });
@@ -178,6 +196,12 @@ export class UiHome extends LitElement {
 
   private projectOpened(project: OpenedProject, notice: ToastRequest | null): void {
     this.dispatchEvent(new CustomEvent<ProjectOpenedDetail>(PROJECT_OPENED, { detail: { project, notice } }));
+  }
+
+  private refuse(error: unknown, trigger: HTMLElement | null): void {
+    console.warn('Request refused', error);
+    this.toast(REQUEST_REFUSED);
+    trigger?.focus();
   }
 
   private toast(request: ToastRequest): void {
