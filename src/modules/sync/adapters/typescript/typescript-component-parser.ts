@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import ts from 'typescript';
 import type { ComponentParser, ParsedComponent, ParsedDeclaration } from '../../ports/component-parser.js';
-import { installFrenchDiagnosticMessages, readSyntaxDiagnostics } from './compiler-internals.js';
+import { installFrenchDiagnosticMessages, readSyntaxDiagnostics } from './compiler/compiler-internals.js';
 import { findComponentClasses } from './component-declarations.js';
 import { readDeclaredProperties } from './declared-properties.js';
 import { readRenderTemplate } from './render-template.js';

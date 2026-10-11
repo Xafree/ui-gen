@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
-import type { DiagnosticDraft } from '../../domain/model/diagnostic.js';
+import type { DiagnosticDraft } from '../../../domain/model/diagnostic.js';
 
 const FRENCH_CATALOGUE = 'typescript/lib/fr/diagnosticMessages.generated.json';
 
