@@ -23,11 +23,6 @@ export interface HtmlTemplateSource {
   readonly expressions: readonly TemplateExpression[];
 }
 
-export interface HtmlTemplate {
-  readonly nodes: readonly ParsedTemplateNode[];
-  readonly looseExpressions: readonly TemplateExpression[];
-}
-
 function isTemplateElement(parent: Parse5Parent): parent is DefaultTreeAdapterTypes.Template {
   return parent.nodeName === 'template';
 }
@@ -123,26 +118,11 @@ function readChildren(parent: Parse5Parent, template: MaskedTemplate): ParsedTem
   return childrenOf(parent).flatMap((child) => readChild(child, template));
 }
 
-function placedExpressions(nodes: readonly ParsedTemplateNode[]): TemplateExpression[] {
-  return nodes.flatMap((node) => {
-    switch (node.kind) {
-      case 'expression':
-        return [node.expression];
-      case 'element':
-        return placedExpressions(node.children);
-      case 'text':
-        return [];
-    }
-  });
-}
-
-export function readHtmlTemplate({ text, offset, expressions }: HtmlTemplateSource): HtmlTemplate {
+export function readHtmlTemplate({ text, offset, expressions }: HtmlTemplateSource): ParsedTemplateNode[] {
   const probe = maskTemplate(text, offset, expressions, () => 'filler');
   const tags = startTagRanges(parseFragment(probe.masked, PARSER_OPTIONS), probe);
   const template = maskTemplate(text, offset, expressions, ({ range }) =>
     tags.some((tag) => overlaps(tag, range)) ? 'filler' : 'comment',
   );
-  const nodes = readChildren(parseFragment(template.masked, PARSER_OPTIONS), template);
-  const placed = new Set(placedExpressions(nodes));
-  return { nodes, looseExpressions: expressions.filter((expression) => !placed.has(expression)) };
+  return readChildren(parseFragment(template.masked, PARSER_OPTIONS), template);
 }

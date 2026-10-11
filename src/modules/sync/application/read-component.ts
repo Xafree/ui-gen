@@ -40,9 +40,6 @@ export function readComponent(text: string, parser: ComponentParser): ComponentM
     variantProperty: null,
     variants: [],
     styles: [],
-    diagnostics:
-      syntaxErrors.length > 0
-        ? syntaxErrors
-        : notRepresentableDiagnostics(text, template, declaration.looseExpressions, declared),
+    diagnostics: syntaxErrors.length > 0 ? syntaxErrors : notRepresentableDiagnostics(text, template),
   };
 }

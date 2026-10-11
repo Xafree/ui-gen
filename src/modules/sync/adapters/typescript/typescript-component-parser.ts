@@ -20,14 +20,12 @@ function readDeclaration(sourceFile: ts.SourceFile): ParsedDeclaration {
   if (others.length > 0) {
     return { kind: 'ambiguous' };
   }
-  const { nodes, looseExpressions } = readRenderTemplate(component.node, sourceFile);
   return {
     kind: 'single',
     tag: component.tag,
     className: component.className,
     properties: readDeclaredProperties(component.node, sourceFile),
-    template: nodes,
-    looseExpressions,
+    template: readRenderTemplate(component.node, sourceFile),
   };
 }
 

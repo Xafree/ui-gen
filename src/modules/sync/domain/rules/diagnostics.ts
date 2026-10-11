@@ -1,7 +1,6 @@
 import type { Diagnostic, DiagnosticDraft, DiagnosticSeverity } from '../model/diagnostic.js';
 import type { TemplateNode } from '../model/template-node.js';
-import type { TemplateExpression } from '../model/template-syntax.js';
-import { NOT_REPRESENTABLE_CODE, NOT_REPRESENTABLE_MESSAGE, boundProperty } from './representability.js';
+import { NOT_REPRESENTABLE_CODE, NOT_REPRESENTABLE_MESSAGE } from './representability.js';
 import { opaqueRanges } from './template-tree.js';
 import { createPositionLocator } from './text-position.js';
 
@@ -33,16 +32,8 @@ export function declarationDiagnostics(text: string, problem: MissingDeclaration
   return diagnosticsAt(text, [issue], 'error');
 }
 
-export function notRepresentableDiagnostics(
-  text: string,
-  template: readonly TemplateNode[],
-  looseExpressions: readonly TemplateExpression[],
-  declared: ReadonlySet<string>,
-): Diagnostic[] {
-  const unplaced = looseExpressions
-    .filter((expression) => boundProperty(expression, declared) === null)
-    .map(({ range }) => range);
-  const issues = [...opaqueRanges(template), ...unplaced].map((range) => ({
+export function notRepresentableDiagnostics(text: string, template: readonly TemplateNode[]): Diagnostic[] {
+  const issues = opaqueRanges(template).map((range) => ({
     range,
     code: NOT_REPRESENTABLE_CODE,
     message: NOT_REPRESENTABLE_MESSAGE,

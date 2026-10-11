@@ -3,6 +3,12 @@ import type { TextRange } from './text-range.js';
 
 export type ExpressionShape =
   | { readonly kind: 'this-property'; readonly name: string }
+  | {
+      readonly kind: 'conditional';
+      readonly condition: string;
+      readonly whenTrue: readonly ParsedTemplateNode[];
+      readonly whenFalse: readonly ParsedTemplateNode[];
+    }
   | { readonly kind: 'other' };
 
 export interface TemplateExpression {

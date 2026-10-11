@@ -32,6 +32,15 @@ export interface BindingNode {
   readonly property: string;
 }
 
+export interface ConditionalNode {
+  readonly kind: 'conditional';
+  readonly id: NodeId;
+  readonly range: TextRange;
+  readonly condition: string;
+  readonly whenTrue: readonly TemplateNode[];
+  readonly whenFalse: readonly TemplateNode[];
+}
+
 export interface OpaqueNode {
   readonly kind: 'opaque';
   readonly id: NodeId;
@@ -39,4 +48,4 @@ export interface OpaqueNode {
   readonly source: string;
 }
 
-export type TemplateNode = ElementNode | TextNode | BindingNode | OpaqueNode;
+export type TemplateNode = ElementNode | TextNode | BindingNode | ConditionalNode | OpaqueNode;

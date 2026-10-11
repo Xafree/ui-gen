@@ -1,10 +1,26 @@
 import type { NodeId, TemplateNode } from '../model/template-node.js';
-import type { ParsedTemplateNode } from '../model/template-syntax.js';
+import type { ParsedTemplateNode, TemplateExpression } from '../model/template-syntax.js';
 import type { TextRange } from '../model/text-range.js';
 import { boundProperty } from './representability.js';
 
 function childId(parentId: NodeId | null, index: number): NodeId {
   return parentId === null ? String(index) : `${parentId}.${String(index)}`;
+}
+
+function expressionNode(expression: TemplateExpression, id: NodeId, declared: ReadonlySet<string>): TemplateNode {
+  const { range, source, shape } = expression;
+  if (shape.kind === 'conditional') {
+    return {
+      kind: 'conditional',
+      id,
+      range,
+      condition: shape.condition,
+      whenTrue: buildTemplateTree(shape.whenTrue, declared, `${id}.t`),
+      whenFalse: buildTemplateTree(shape.whenFalse, declared, `${id}.f`),
+    };
+  }
+  const property = boundProperty(expression, declared);
+  return property === null ? { kind: 'opaque', id, range, source } : { kind: 'binding', id, range, property };
 }
 
 export function buildTemplateTree(
@@ -27,13 +43,8 @@ export function buildTemplateTree(
         };
       case 'text':
         return { kind: 'text', id, range: node.range, text: node.text };
-      case 'expression': {
-        const { range, source } = node.expression;
-        const property = boundProperty(node.expression, declared);
-        return property === null
-          ? { kind: 'opaque', id, range, source }
-          : { kind: 'binding', id, range, property };
-      }
+      case 'expression':
+        return expressionNode(node.expression, id, declared);
     }
   });
 }
@@ -45,6 +56,8 @@ export function opaqueRanges(nodes: readonly TemplateNode[]): TextRange[] {
         return [node.range];
       case 'element':
         return opaqueRanges(node.children);
+      case 'conditional':
+        return opaqueRanges([...node.whenTrue, ...node.whenFalse]);
       case 'text':
       case 'binding':
         return [];
