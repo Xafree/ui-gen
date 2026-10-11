@@ -71,19 +71,29 @@ describe('diagnostics of a component read with the TypeScript parser', () => {
   });
 
   // covers: FCT-0039
-  it('warns exactly on the content expressions of the mockup pricing card, not on its attribute and listener expressions', () => {
+  it('warns only on the price call of the mockup pricing card, not on its conditions, attributes and listeners', () => {
     const { text, model } = readFixtureModel(PRICING_CARD);
 
-    expect(located(model, text)).toEqual([
-      warning(148, 9, '${this.badge ? html`<hz-badge tone="accent">${this.badge}</hz-badge>` : nothing}'),
-      warning(152, 11, '${formatPrice(this.price, this.locale)}'),
-      warning(
-        168,
-        9,
-        '${this.variant === \'pro\' ? html`<svg slot="end" aria-hidden="true"><use href="#arrow-right"></use></svg>` : nothing}',
-      ),
-      warning(170, 7, '${this.hint ? html`<hz-tooltip class="hint">${this.hint}</hz-tooltip>` : nothing}'),
-    ]);
+    expect(located(model, text)).toEqual([warning(152, 11, '${formatPrice(this.price, this.locale)}')]);
+  });
+
+  // covers: FCT-0039
+  it('keeps a condition with a branch that is not a template opaque and warns on it', () => {
+    const expressions = [
+      "${this.open ? 'ouvert' : 'fermé'}",
+      "${this.open ? html`<em>ouvert</em>` : 'fermé'}",
+      '${this.open ? this.items.map((item) => html`<i>${item}</i>`) : nothing}',
+    ];
+    for (const expression of expressions) {
+      const text = replaceOnce(readFixture(PLAN_BADGE), '<strong>${this.label}</strong>', expression);
+      const model = read(text);
+
+      expect(located(model, text)).toEqual([warning(22, 4, expression)]);
+      expect(allNodes(model.template).filter((node) => node.kind === 'conditional')).toEqual([]);
+      expect(allNodes(model.template).filter((node) => node.kind === 'opaque').map((node) => node.source)).toEqual([
+        expression,
+      ]);
+    }
   });
 
   // covers: FCT-0040

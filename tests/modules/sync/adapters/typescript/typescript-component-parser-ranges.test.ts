@@ -3,6 +3,7 @@ import {
   ALL_FIXTURES,
   FEATURE_LIST,
   PRICING_CARD,
+  findConditional,
   findElement,
   findProperty,
   positionOf,
@@ -56,6 +57,12 @@ function expectNodeRanges(text: string, nodes: readonly TemplateNodeShape[], par
       case 'binding':
         expect(source).toBe(`\${this.${node.property}}`);
         break;
+      case 'conditional':
+        expect(source.startsWith('${')).toBe(true);
+        expect(source.endsWith('}')).toBe(true);
+        expect(source).toContain(node.condition);
+        expectNodeRanges(text, [...node.whenTrue, ...node.whenFalse], node.range);
+        break;
       case 'opaque':
         expect(source).toBe(node.source);
         expect(source.startsWith('${')).toBe(true);
@@ -107,6 +114,24 @@ describe('source ranges of the component model', () => {
         '          (feature, index) => html`<li>${index + 1}. ${feature}</li>`,',
         '        )}',
       ].join('\n'),
+    );
+  });
+
+  it('gives a condition the range of its whole interpolation and its condition source text', () => {
+    const { text, model } = readFixtureModel(PRICING_CARD);
+
+    const badge = findConditional(model.template, 'this.badge');
+    expect(sliceOf(text, badge.range)).toBe(
+      '${this.badge ? html`<hz-badge tone="accent">${this.badge}</hz-badge>` : nothing}',
+    );
+    expect(badge.whenTrue.map((node) => sliceOf(text, node.range))).toEqual([
+      '<hz-badge tone="accent">${this.badge}</hz-badge>',
+    ]);
+    expect(positionOf(text, badge.range.start)).toEqual({ line: 148, column: 9 });
+
+    const icon = findConditional(model.template, "this.variant === 'pro'");
+    expect(sliceOf(text, icon.range)).toBe(
+      '${this.variant === \'pro\' ? html`<svg slot="end" aria-hidden="true"><use href="#arrow-right"></use></svg>` : nothing}',
     );
   });
 

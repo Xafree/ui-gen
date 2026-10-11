@@ -5,9 +5,13 @@ import {
   PLAN_BADGE,
   PRICING_CARD,
   allNodes,
+  findConditional,
   findElement,
   outline,
+  read,
+  readFixture,
   readFixtureModel,
+  replaceOnce,
   sliceOf,
   type TemplateNodeShape,
 } from '../../sync-fixtures';
@@ -19,7 +23,15 @@ function expectIdsArePaths(nodes: readonly TemplateNodeShape[], parentId: string
     if (node.kind === 'element') {
       expectIdsArePaths(node.children, node.id);
     }
+    if (node.kind === 'conditional') {
+      expectIdsArePaths(node.whenTrue, `${node.id}.t`);
+      expectIdsArePaths(node.whenFalse, `${node.id}.f`);
+    }
   });
+}
+
+function withPlanBadgeLabel(replacement: string): string {
+  return replaceOnce(readFixture(PLAN_BADGE), '<strong>${this.label}</strong>', replacement);
 }
 
 describe('template tree of a component read with the TypeScript parser', () => {
@@ -31,16 +43,61 @@ describe('template tree of a component read with the TypeScript parser', () => {
       [
         'header',
         [
-          'opaque',
+          ['?this.badge', [['then', [['hz-badge', ['binding:badge']]]], ['else', []]]],
           ['h3.plan', ['binding:plan']],
           ['p.description', ['binding:description']],
           ['p.price', ['opaque', ['span.period', ['binding:period']]]],
         ],
       ],
       ['ul.features', [['slot', []]]],
-      ['hz-button.cta', ['binding:cta', 'opaque']],
-      'opaque',
+      [
+        'hz-button.cta',
+        ['binding:cta', ["?this.variant === 'pro'", [['then', [['svg', [['use', []]]]]], ['else', []]]]],
+      ],
+      ['?this.hint', [['then', [['hz-tooltip.hint', ['binding:hint']]]], ['else', []]]],
     ]);
+  });
+
+  // covers: FCT-0035
+  it('represents a condition whose branches are templates, nested conditions included, with branch ids', () => {
+    const text = withPlanBadgeLabel(
+      '${this.open ? html`<strong>${this.label}</strong>` : html`<em>Fermé ${this.count > 0 ? html`<b>${this.count}</b>` : \'\'}</em>`}',
+    );
+    const model = read(text);
+
+    const condition = findConditional(model.template, 'this.open');
+    expect(outline([condition])).toEqual([
+      [
+        '?this.open',
+        [
+          ['then', [['strong', ['binding:label']]]],
+          ['else', [['em', ['text:Fermé', ['?this.count > 0', [['then', [['b', ['binding:count']]]], ['else', []]]]]]]],
+        ],
+      ],
+    ]);
+    expect(condition.whenTrue[0]?.id).toBe(`${condition.id}.t.0`);
+    expect(condition.whenFalse[0]?.id).toBe(`${condition.id}.f.0`);
+    expect(findConditional(model.template, 'this.count > 0').id).toBe(`${condition.id}.f.0.1`);
+    expect(findElement(model.template, 'b').id).toBe(`${condition.id}.f.0.1.t.0`);
+    expect(model.diagnostics).toEqual([]);
+  });
+
+  // covers: FCT-0035
+  it('represents null, undefined, empty string and nothing branches as empty', () => {
+    const cases = [
+      '${this.open ? null : html`<i>fermé</i>`}',
+      '${this.open ? undefined : html`<i>fermé</i>`}',
+      "${this.open ? '' : html`<i>fermé</i>`}",
+      '${this.open ? nothing : html`<i>fermé</i>`}',
+    ];
+    for (const replacement of cases) {
+      const model = read(withPlanBadgeLabel(replacement));
+
+      expect(outline([findConditional(model.template, 'this.open')])).toEqual([
+        ['?this.open', [['then', []], ['else', [['i', ['text:fermé']]]]]],
+      ]);
+      expect(model.diagnostics).toEqual([]);
+    }
   });
 
   // covers: FCT-0035
@@ -136,6 +193,6 @@ describe('template tree of a component read with the TypeScript parser', () => {
     const { model } = readFixtureModel(PRICING_CARD);
 
     const bindings = allNodes(model.template).flatMap((node) => (node.kind === 'binding' ? [node.property] : []));
-    expect(bindings).toEqual(['plan', 'description', 'period', 'cta']);
+    expect(bindings).toEqual(['badge', 'plan', 'description', 'period', 'cta', 'hint']);
   });
 });

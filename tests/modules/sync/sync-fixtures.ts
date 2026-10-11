@@ -61,13 +61,26 @@ function shapeOf(node: TemplateNodeShape): Shape {
       return `text:${node.text.trim()}`;
     case 'binding':
       return `binding:${node.property}`;
+    case 'conditional':
+      return [`?${node.condition}`, [['then', outline(node.whenTrue)], ['else', outline(node.whenFalse)]]];
     case 'opaque':
       return 'opaque';
   }
 }
 
 export function allNodes(nodes: readonly TemplateNodeShape[]): TemplateNodeShape[] {
-  return nodes.flatMap((node) => (node.kind === 'element' ? [node, ...allNodes(node.children)] : [node]));
+  return nodes.flatMap((node) => [node, ...allNodes(childNodesOf(node))]);
+}
+
+export function childNodesOf(node: TemplateNodeShape): readonly TemplateNodeShape[] {
+  switch (node.kind) {
+    case 'element':
+      return node.children;
+    case 'conditional':
+      return [...node.whenTrue, ...node.whenFalse];
+    default:
+      return [];
+  }
 }
 
 export function findElement(
@@ -80,6 +93,18 @@ export function findElement(
     }
   }
   throw new Error(`no <${tag}> in the template`);
+}
+
+export function findConditional(
+  nodes: readonly TemplateNodeShape[],
+  condition: string,
+): Extract<TemplateNodeShape, { kind: 'conditional' }> {
+  for (const node of allNodes(nodes)) {
+    if (node.kind === 'conditional' && node.condition === condition) {
+      return node;
+    }
+  }
+  throw new Error(`no conditional on ${condition} in the template`);
 }
 
 export function findProperty(model: Model, name: string): Model['properties'][number] {
