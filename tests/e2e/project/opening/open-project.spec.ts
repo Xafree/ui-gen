@@ -16,7 +16,7 @@ type FolderContent = Readonly<Record<string, string>>;
 
 const KIT_HORIZON_FILES: FolderContent = {
   'package.json': `{
-  "name": "@horizon/ui",
+  "name": "@kit-horizon/ui",
   "version": "0.4.0",
   "type": "module",
   "dependencies": {
