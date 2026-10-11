@@ -11,11 +11,9 @@ import { deepActiveElement, deepQueryAll, removeShownToasts, shownToasts, visibl
 type ProjectApi = UiGenApi['project'];
 
 const LOCATION = 'E:\\projets';
-const REFUSED = {
-  tone: 'danger',
-  title: 'Action impossible',
-  message: "La demande a été refusée. Rien n'a été modifié.",
-};
+const REFUSED_MESSAGE = "La demande a été refusée. Rien n'a été modifié.";
+const REFUSED_NOTICE = { tone: 'danger', title: 'Action impossible', message: REFUSED_MESSAGE };
+const EXISTING_FOLDER = 'E:\\projets\\kit-horizon';
 
 const mounted: HTMLElement[] = [];
 
@@ -26,6 +24,10 @@ function apiWith(project: Partial<ProjectApi>): UiGenApi {
 
 function proposing(path: string): ProjectApi['defaultLocation'] {
   return vi.fn<ProjectApi['defaultLocation']>(() => Promise.resolve(path));
+}
+
+function creationResolving(outcome: CreateProjectOutcome): ProjectApi['create'] {
+  return vi.fn<ProjectApi['create']>(() => Promise.resolve(outcome));
 }
 
 function closedChannel(): Promise<never> {
@@ -64,8 +66,29 @@ function button(label: string) {
   return createDialog().getByRole('button', { name: label, exact: true });
 }
 
+function alertTexts(): string[] {
+  return createDialog()
+    .getByRole('alert')
+    .elements()
+    .map((element) => visibleText(element));
+}
+
 function locationErrorText(): string {
   return visibleText(deepQueryAll('#cr-loc-err')[0] ?? null);
+}
+
+async function openFilled(api: UiGenApi): Promise<UiCreateDialog> {
+  const dialog = await mountDialog(api);
+  await dialog.open(null);
+  await field('Nom du projet').fill('Kit Horizon');
+  return dialog;
+}
+
+async function failToCreateOver(entryCount: number): Promise<void> {
+  const create = creationResolving({ kind: 'folder-not-empty', path: EXISTING_FOLDER, entryCount });
+  await openFilled(apiWith({ defaultLocation: proposing(LOCATION), create }));
+  await button('Créer le projet').click();
+  await expect.poll(locationErrorText).not.toBe('');
 }
 
 beforeEach(() => {
@@ -90,51 +113,50 @@ describe('<ui-create-dialog> refused requests', () => {
 
     await dialog.open(trigger);
 
-    expect(notices).toEqual([{ notice: REFUSED }]);
+    expect(notices).toEqual([{ notice: REFUSED_NOTICE }]);
     await expect.element(createDialog()).not.toBeInTheDocument();
     expect(deepActiveElement()).toBe(trigger);
   });
 
-  it('keeps the form and gives the focus back to « Parcourir… » when the folder choice is refused', async () => {
+  it('says the request was refused under the location, keeps the form and gives the focus back to « Parcourir… » when the folder choice is refused', async () => {
     const choosing = Promise.withResolvers<ChooseLocationOutcome>();
     const chooseLocation = vi.fn<ProjectApi['chooseLocation']>(() => choosing.promise);
-    const dialog = await mountDialog(apiWith({ defaultLocation: proposing(LOCATION), chooseLocation }));
+    const dialog = await openFilled(apiWith({ defaultLocation: proposing(LOCATION), chooseLocation }));
     const notices = recordEvents(dialog, NOTICE_REQUESTED);
-    await dialog.open(null);
-    await field('Nom du projet').fill('Kit Horizon');
     await button('Parcourir…').click();
     await field('Nom du projet').click();
 
     choosing.reject(new Error('IPC channel closed'));
 
-    await expect.poll(() => notices).toEqual([{ notice: REFUSED }]);
+    await expect.poll(locationErrorText).toBe(REFUSED_MESSAGE);
+    await expect.poll(alertTexts).toEqual([REFUSED_MESSAGE]);
     await expect.element(createDialog()).toBeVisible();
     await expect.element(field('Emplacement')).toHaveValue(LOCATION);
     await expect.element(field('Nom du projet')).toHaveValue('Kit Horizon');
     await expect.poll(() => deepActiveElement()).toBe(button('Parcourir…').element());
+    expect(notices).toEqual([]);
   });
 
-  it('keeps the dialog open and the form filled, and gives the focus back to « Créer le projet » when the creation is refused', async () => {
+  it('says the request was refused under the location, keeps the dialog open and the form filled, and gives the focus back to « Créer le projet » when the creation is refused', async () => {
     const creating = Promise.withResolvers<CreateProjectOutcome>();
     const create = vi.fn<ProjectApi['create']>(() => creating.promise);
-    const dialog = await mountDialog(apiWith({ defaultLocation: proposing(LOCATION), create }));
+    const dialog = await openFilled(apiWith({ defaultLocation: proposing(LOCATION), create }));
     const notices = recordEvents(dialog, NOTICE_REQUESTED);
     const created = recordEvents(dialog, PROJECT_CREATED);
-    await dialog.open(null);
-    await field('Nom du projet').fill('Kit Horizon');
     await button('Créer le projet').click();
     await field('Nom du projet').click();
 
     creating.reject(new Error('IPC channel closed'));
 
-    await expect.poll(() => notices).toEqual([{ notice: REFUSED }]);
+    await expect.poll(locationErrorText).toBe(REFUSED_MESSAGE);
+    await expect.poll(alertTexts).toEqual([REFUSED_MESSAGE]);
     await expect.element(createDialog()).toBeVisible();
     await expect.element(button('Créer le projet')).toBeEnabled();
     await expect.element(button('Créer le projet')).not.toHaveAttribute('aria-busy', 'true');
     await expect.element(button('Annuler')).toBeEnabled();
     await expect.element(field('Nom du projet')).toHaveValue('Kit Horizon');
-    expect(locationErrorText()).toBe('');
     await expect.poll(() => deepActiveElement()).toBe(button('Créer le projet').element());
+    expect(notices).toEqual([]);
     expect(created).toEqual([]);
   });
 
@@ -143,11 +165,8 @@ describe('<ui-create-dialog> refused requests', () => {
       kind: 'invalid-request',
       errors: [{ field: 'location', code: 'not-granted' }],
     };
-    const create = vi.fn<ProjectApi['create']>(() => Promise.resolve(refused));
-    const dialog = await mountDialog(apiWith({ defaultLocation: proposing(LOCATION), create }));
+    const dialog = await openFilled(apiWith({ defaultLocation: proposing(LOCATION), create: creationResolving(refused) }));
     const created = recordEvents(dialog, PROJECT_CREATED);
-    await dialog.open(null);
-    await field('Nom du projet').fill('Kit Horizon');
 
     await button('Créer le projet').click();
 
@@ -160,11 +179,83 @@ describe('<ui-create-dialog> refused requests', () => {
   });
 });
 
+describe('<ui-create-dialog> announced errors', () => {
+  it('announces the error under the location as an alert, and keeps the field errors silent', async () => {
+    const create = creationResolving({ kind: 'folder-not-empty', path: EXISTING_FOLDER, entryCount: 214 });
+    await openFilled(apiWith({ defaultLocation: proposing(LOCATION), create }));
+    expect(alertTexts()).toEqual([]);
+
+    await field('Préfixe des balises').fill('kh');
+    await expect.element(createDialog().getByText('Ajoutez un tiret à la fin : kh-.', { exact: true })).toBeVisible();
+    expect(alertTexts()).toEqual([]);
+
+    await field('Préfixe des balises').fill('kh-');
+    await button('Créer le projet').click();
+
+    await expect
+      .poll(alertTexts)
+      .toEqual([
+        "Le dossier E:\\projets\\kit-horizon existe déjà et contient 214 fichiers. Rien n'a été créé. Changez le nom du projet ou l'emplacement.",
+      ]);
+  });
+
+  it('announces the failed write under the location too', async () => {
+    const create = creationResolving({ kind: 'write-failed', path: 'C:\\Program Files\\kit-horizon', code: 'EPERM' });
+    await openFilled(apiWith({ defaultLocation: proposing('C:\\Program Files'), create }));
+
+    await button('Créer le projet').click();
+
+    await expect
+      .poll(alertTexts)
+      .toEqual([
+        "Le projet n'a pas pu être créé dans C:\\Program Files\\kit-horizon (EPERM). Aucun dossier ni fichier n'a été laissé sur le disque. Choisissez un autre emplacement.",
+      ]);
+  });
+});
+
+describe('<ui-create-dialog> existing folder error', () => {
+  const counts: readonly (readonly [number, string])[] = [
+    [1, '1 fichier'],
+    [2, '2 fichiers'],
+  ];
+
+  // covers: FCT-0004
+  it.each(counts)('counts %i entry in the existing folder message as « %s »', async (entryCount, counted) => {
+    await failToCreateOver(entryCount);
+
+    expect(locationErrorText()).toBe(
+      `Le dossier E:\\projets\\kit-horizon existe déjà et contient ${counted}. Rien n'a été créé. Changez le nom du projet ou l'emplacement.`,
+    );
+  });
+
+  // covers: FCT-0004
+  it('clears the error as soon as the package name changes', async () => {
+    await failToCreateOver(214);
+
+    await field('Nom du package npm').fill('@horizon/ui');
+
+    await expect.poll(locationErrorText).toBe('');
+    await expect.element(createDialog().getByText('E:\\projets\\horizon', { exact: true })).toBeVisible();
+  });
+
+  // covers: FCT-0004
+  it('clears the error when the package proposal is taken back', async () => {
+    const create = creationResolving({ kind: 'folder-not-empty', path: 'E:\\projets\\horizon', entryCount: 3 });
+    await openFilled(apiWith({ defaultLocation: proposing(LOCATION), create }));
+    await field('Nom du package npm').fill('@horizon/ui');
+    await button('Créer le projet').click();
+    await expect.poll(locationErrorText).not.toBe('');
+
+    await button('Reprendre la proposition').click();
+
+    await expect.poll(locationErrorText).toBe('');
+    await expect.element(field('Nom du package npm')).toHaveValue('@kit-horizon/ui');
+  });
+});
+
 describe('<ui-create-dialog> successful creation', () => {
   it('keeps « Création… » on the button until the dialog is closed', async () => {
-    const create = vi.fn<ProjectApi['create']>(() =>
-      Promise.resolve({ kind: 'created', project: kitHorizonProject() }),
-    );
+    const create = creationResolving({ kind: 'created', project: kitHorizonProject() });
     const dialog = await mountDialog(apiWith({ defaultLocation: proposing(LOCATION), create }));
     const labelsWhenCreated: unknown[] = [];
     dialog.addEventListener(PROJECT_CREATED, () => {
@@ -181,22 +272,40 @@ describe('<ui-create-dialog> successful creation', () => {
   });
 });
 
-describe('<ui-home> refused create dialog', () => {
-  it('shows the refusal notice on the home screen and gives the focus back to the button that was clicked', async () => {
-    const proposal = Promise.withResolvers<string>();
+describe('<ui-home> create dialog refusals', () => {
+  async function mountHome(api: UiGenApi): Promise<void> {
     const home = new UiHome();
-    home.api = apiWith({ defaultLocation: () => proposal.promise });
+    home.api = api;
     document.body.append(home);
     mounted.push(home);
     await home.updateComplete;
+  }
+
+  it('shows the refusal notice on the home screen and gives the focus back to the button that was clicked when the location cannot be proposed', async () => {
+    const proposal = Promise.withResolvers<string>();
+    await mountHome(apiWith({ defaultLocation: () => proposal.promise }));
     const createButton = page.getByRole('button', { name: 'Créer un projet', exact: true }).first();
     await createButton.click();
     await page.getByRole('button', { name: 'Ouvrir un projet', exact: true }).first().click();
 
     proposal.reject(new Error('IPC channel closed'));
 
-    await expect.poll(() => shownToasts()).toEqual([REFUSED]);
+    await expect.poll(() => shownToasts()).toEqual([REFUSED_NOTICE]);
     await expect.poll(() => deepActiveElement()).toBe(createButton.element());
     await expect.element(createDialog()).not.toBeInTheDocument();
+  });
+
+  it('shows no notice on the home screen when a request is refused while the dialog is open, the message stays under the location', async () => {
+    const creating = Promise.withResolvers<CreateProjectOutcome>();
+    await mountHome(apiWith({ defaultLocation: proposing(LOCATION), create: () => creating.promise }));
+    await page.getByRole('button', { name: 'Créer un projet', exact: true }).first().click();
+    await field('Nom du projet').fill('Kit Horizon');
+    await button('Créer le projet').click();
+
+    creating.reject(new Error('IPC channel closed'));
+
+    await expect.poll(locationErrorText).toBe(REFUSED_MESSAGE);
+    expect(shownToasts()).toEqual([]);
+    await expect.element(createDialog()).toBeVisible();
   });
 });

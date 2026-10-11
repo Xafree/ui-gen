@@ -31,8 +31,13 @@ const EMPTY_INPUT: CreateFormInput = {
   nameTouched: false,
 };
 
-export function fieldError(id: string, message: string | null): TemplateResult {
-  return html`<p class="ui-field__error" id=${id} ?hidden=${message === null}>${message === null ? nothing : html`${icon('erreur')}<span>${message}</span>`}</p>`;
+export function fieldError(id: string, message: string | null, role?: 'alert'): TemplateResult {
+  return html`<p class="ui-field__error" id=${id} role=${message === null || role === undefined ? nothing : role} ?hidden=${message === null}>${message === null ? nothing : html`${icon('erreur')}<span>${message}</span>`}</p>`;
+}
+
+function existingFolderMessage(path: string, entryCount: number): string {
+  const entries = entryCount === 1 ? '1 fichier' : `${String(entryCount)} fichiers`;
+  return `Le dossier ${path} existe déjà et contient ${entries}. Rien n'a été créé. Changez le nom du projet ou l'emplacement.`;
 }
 
 function isOutside(dialog: HTMLDialogElement, event: MouseEvent): boolean {
@@ -63,7 +68,7 @@ export class UiCreateDialog extends LitElement {
     try {
       location = await this.api.project.defaultLocation();
     } catch (error) {
-      this.refuse(error, trigger instanceof HTMLElement ? trigger : null);
+      this.refuseOpening(error, trigger instanceof HTMLElement ? trigger : null);
       return;
     }
     this.busy = false;
@@ -98,7 +103,7 @@ export class UiCreateDialog extends LitElement {
               <button class="ui-btn ui-btn--secondary" type="button" id="cr-browse" @click=${() => void this.browse()}>${icon('dossier')}Parcourir…</button>
             </div>
             <p class="ui-help" id="cr-loc-help">Dossier parent. Le projet est créé dans un nouveau dossier à cet endroit.</p>
-            ${fieldError('cr-loc-err', this.locationError)}
+            ${fieldError('cr-loc-err', this.locationError, 'alert')}
           </div>
 
           <fieldset>
@@ -144,7 +149,7 @@ export class UiCreateDialog extends LitElement {
     try {
       outcome = await this.api.project.chooseLocation();
     } catch (error) {
-      this.refuse(error, this.browseButton);
+      this.refuseInDialog(error, this.browseButton);
       return;
     }
     if (outcome.canceled) return;
@@ -171,7 +176,7 @@ export class UiCreateDialog extends LitElement {
       });
     } catch (error) {
       this.busy = false;
-      this.refuse(error, this.submitButton);
+      this.refuseInDialog(error, this.submitButton);
       return;
     }
     await this.applyOutcome(outcome);
@@ -186,7 +191,7 @@ export class UiCreateDialog extends LitElement {
     this.busy = false;
     switch (outcome.kind) {
       case 'folder-not-empty':
-        this.locationError = `Le dossier ${outcome.path} existe déjà et contient ${String(outcome.entryCount)} fichiers. Rien n'a été créé. Changez le nom du projet ou l'emplacement.`;
+        this.locationError = existingFolderMessage(outcome.path, outcome.entryCount);
         this.nameField.focus();
         return;
       case 'write-failed':
@@ -199,10 +204,16 @@ export class UiCreateDialog extends LitElement {
     }
   }
 
-  private refuse(error: unknown, trigger: HTMLElement | null): void {
+  private refuseOpening(error: unknown, trigger: HTMLElement | null): void {
     console.warn('Request refused', error);
     this.dispatchEvent(new CustomEvent<NoticeRequestedDetail>(NOTICE_REQUESTED, { detail: { notice: REQUEST_REFUSED } }));
     trigger?.focus();
+  }
+
+  private refuseInDialog(error: unknown, trigger: HTMLElement): void {
+    console.warn('Request refused', error);
+    this.locationError = REQUEST_REFUSED.message;
+    trigger.focus();
   }
 
   private readonly onNameInput = (): void => {
@@ -215,6 +226,7 @@ export class UiCreateDialog extends LitElement {
   };
 
   private readonly onPackageInput = (): void => {
+    this.locationError = null;
     this.input = { ...this.input, packageName: this.packageField.value, packageEdited: true };
   };
 
@@ -223,6 +235,7 @@ export class UiCreateDialog extends LitElement {
   };
 
   private readonly onPackageReset = (): void => {
+    this.locationError = null;
     this.input = { ...this.input, packageEdited: false };
     void this.updateComplete.then(() => {
       this.packageField.focus();
