@@ -8,7 +8,17 @@ import { CARD_TEXT, cardComponent, codeLines, mountCard, warning } from './code-
 const mounted: Element[] = [];
 
 function lineTexts(): string[] {
-  return codeLines().map((line) => line.textContent);
+  return codeLines().map((line) => {
+    const copy = line.cloneNode(true) as HTMLElement;
+    copy.querySelector('.ui-code__lens')?.remove();
+    return copy.textContent;
+  });
+}
+
+function lineAt(index: number): HTMLElement {
+  const line = codeLines()[index];
+  if (!line) throw new Error(`no code line at index ${String(index)}`);
+  return line;
 }
 
 function targetLines(): number[] {
@@ -35,7 +45,7 @@ describe('the code of the opened component', () => {
 
     expect(lineTexts().join('\n')).toBe(CARD_TEXT.slice(0, -1));
     expect(codeLines()).toHaveLength(CARD_TEXT.split('\n').length - 1);
-    expect(getComputedStyle(codeLines()[0] as HTMLElement, '::before').content).toBe('counter(ln)');
+    expect(getComputedStyle(lineAt(0), '::before').content).toBe('counter(ln)');
     expect(textOf('#code-path')).toMatch(/hz-pricing-card\.ts$/);
     expect(textOf('#tab-code')).toBe('hz-pricing-card.ts');
   });
@@ -159,7 +169,7 @@ describe('selecting from the code', () => {
   it('selects the element of a code line on click', async () => {
     await mountCard(mounted);
 
-    await userEvent.click(codeLines()[10] as HTMLElement);
+    await userEvent.click(lineAt(10));
 
     await expect.poll(() => selectedLayerIds()).toEqual(['0.0']);
     await expect.poll(() => targetLines()).toEqual([11]);
