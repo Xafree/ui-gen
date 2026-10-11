@@ -40,7 +40,7 @@ function existingFolderMessage(path: string, entryCount: number): string {
   return `Le dossier ${path} existe déjà et contient ${entries}. Rien n'a été créé. Changez le nom du projet ou l'emplacement.`;
 }
 
-function isOutside(dialog: HTMLDialogElement, event: MouseEvent): boolean {
+export function isOutside(dialog: HTMLDialogElement, event: MouseEvent): boolean {
   const rect = dialog.getBoundingClientRect();
   return event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
 }

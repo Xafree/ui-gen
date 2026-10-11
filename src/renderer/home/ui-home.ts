@@ -1,4 +1,4 @@
-import { html, LitElement, type TemplateResult } from 'lit';
+import { html, LitElement, nothing, type TemplateResult } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import type { OpenedProject, OpenProjectOutcome } from '../../modules/project/application/open/project-outcomes.js';
@@ -11,15 +11,19 @@ import { hostContents, studioStyles } from '../styles/studio-styles.js';
 import {
   PROJECT_OPENED,
   type NoticeRequestedDetail,
+  type ProjectAdoptedDetail,
   type ProjectCreatedDetail,
   type ProjectOpenedDetail,
 } from '../studio-events.js';
 import { REQUEST_REFUSED } from '../studio-notices.js';
 import { ThemeController } from '../theme/theme-controller.js';
 import { themeToggleView, toggleTheme } from '../theme/theme.js';
+import './dialogs/ui-adopt-dialog.js';
+import type { UiAdoptDialog } from './dialogs/ui-adopt-dialog.js';
 import './dialogs/ui-create-dialog.js';
 import type { UiCreateDialog } from './dialogs/ui-create-dialog.js';
 import { homeStyles } from './home-styles.js';
+import { openFailureToast } from './open-messages.js';
 import { formatOpenedAt, formatRelativeTime } from './recent-time.js';
 
 declare global {
@@ -34,6 +38,11 @@ const RECENTS_UNREADABLE: ToastRequest = {
   message: "La liste n'a pas pu être lue. Aucun dossier n'a été modifié.",
 };
 
+type OpenTrigger = 'btn-open' | 'empty-open';
+
+const READING_FOLDER = 'Lecture du dossier…';
+const OPEN_PROJECT = 'Ouvrir un projet';
+
 function triggerOf(event: Event): HTMLElement | null {
   return event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
 }
@@ -47,11 +56,13 @@ export class UiHome extends LitElement {
 
   @state() private recents: readonly RecentProjectView[] = [];
   @state() private loaded = false;
+  @state() private opening: OpenTrigger | null = null;
 
   @query('#recent-body') private recentBody!: HTMLElement;
   @query('.ui-toast-region') private toastRegion!: HTMLOListElement;
   @query('#main') private main!: HTMLElement;
   @query('ui-create-dialog') private createDialog!: UiCreateDialog;
+  @query('ui-adopt-dialog') private adoptDialog!: UiAdoptDialog;
 
   private readonly theme = new ThemeController(this);
   private openPending = false;
@@ -84,7 +95,7 @@ export class UiHome extends LitElement {
               </div>
               <div class="ac-actions" data-enter>
                 <button class="ui-btn ui-btn--primary ui-btn--lg" type="button" id="btn-create" @click=${this.onCreateClick}>${icon('plus')}Créer un projet</button>
-                <button class="ui-btn ui-btn--secondary ui-btn--lg" type="button" id="btn-open">${icon('dossier')}Ouvrir un projet</button>
+                <button class="ui-btn ui-btn--secondary ui-btn--lg" type="button" id="btn-open" aria-busy=${this.opening === 'btn-open' ? 'true' : nothing} @click=${this.onOpenClick}>${icon('dossier')}${this.opening === 'btn-open' ? READING_FOLDER : OPEN_PROJECT}</button>
               </div>
               <p class="ac-note" data-enter>${icon('info')}<span>Un projet est le dossier d'une bibliothèque Lit. UI-GEN y range ses réglages dans un fichier <code>uigen.json</code>.</span></p>
             </section>
@@ -106,7 +117,7 @@ export class UiHome extends LitElement {
                   <p class="ui-empty__text">Les projets que vous créez ou ouvrez s'affichent ici, du plus récent au plus ancien.</p>
                   <div class="ui-empty__actions">
                     <button class="ui-btn ui-btn--secondary ui-btn--sm" type="button" id="empty-create" @click=${this.onCreateClick}>Créer un projet</button>
-                    <button class="ui-btn ui-btn--ghost ui-btn--sm" type="button" id="empty-open">Ouvrir un projet</button>
+                    <button class="ui-btn ui-btn--ghost ui-btn--sm" type="button" id="empty-open" aria-busy=${this.opening === 'empty-open' ? 'true' : nothing} @click=${this.onOpenClick}>${this.opening === 'empty-open' ? READING_FOLDER : OPEN_PROJECT}</button>
                   </div>
                 </div>
               </div>
@@ -115,6 +126,7 @@ export class UiHome extends LitElement {
           </div>
         </main>
         <ui-create-dialog .api=${this.api} @project-created=${this.onProjectCreated} @notice-requested=${this.onNoticeRequested}></ui-create-dialog>
+        <ui-adopt-dialog .api=${this.api} @project-adopted=${this.onProjectAdopted}></ui-adopt-dialog>
         <ol class="ui-toast-region" aria-live="polite" aria-label="Notifications"></ol>
       </div>
     `;
@@ -155,7 +167,7 @@ export class UiHome extends LitElement {
     this.openPending = true;
     link?.setAttribute('aria-busy', 'true');
     try {
-      await this.handleOpenOutcome(await this.api.recents.open(project.path));
+      await this.handleOpenOutcome(await this.api.recents.open(project.path), link);
     } catch (error) {
       this.refuse(error, link);
     } finally {
@@ -164,12 +176,51 @@ export class UiHome extends LitElement {
     }
   }
 
-  private async handleOpenOutcome(outcome: OpenProjectOutcome): Promise<void> {
-    if (outcome.kind === 'opened') {
-      this.projectOpened(outcome.project, null);
-      return;
+  private async createProject(trigger: Element | null): Promise<void> {
+    if (this.openPending) return;
+    this.openPending = true;
+    try {
+      await this.createDialog.open(trigger);
+    } finally {
+      this.openPending = false;
     }
-    if (outcome.kind === 'missing') await this.reloadRecents();
+  }
+
+  private async openFolder(event: MouseEvent): Promise<void> {
+    const button = triggerOf(event);
+    if (this.openPending || button === null) return;
+    this.openPending = true;
+    this.opening = button.id === 'empty-open' ? 'empty-open' : 'btn-open';
+    try {
+      const outcome = await this.api.project.openFolder();
+      this.opening = null;
+      if (outcome.kind !== 'canceled') await this.handleOpenOutcome(outcome, button);
+    } catch (error) {
+      this.refuse(error, button);
+    } finally {
+      this.opening = null;
+      this.openPending = false;
+    }
+  }
+
+  private async handleOpenOutcome(outcome: OpenProjectOutcome, trigger: HTMLElement | null): Promise<void> {
+    switch (outcome.kind) {
+      case 'opened':
+        this.projectOpened(outcome.project, null);
+        return;
+      case 'needs-adoption':
+        this.adoptDialog.open(outcome.proposal, trigger).catch((error: unknown) => {
+          this.refuse(error, trigger);
+        });
+        return;
+      case 'missing':
+        await this.reloadRecents();
+        this.toast(openFailureToast(outcome));
+        return;
+      default:
+        this.toast(openFailureToast(outcome));
+        trigger?.focus();
+    }
   }
 
   private async removeRecent(event: MouseEvent, project: RecentProjectView): Promise<void> {
@@ -223,12 +274,25 @@ export class UiHome extends LitElement {
   };
 
   private readonly onCreateClick = (event: MouseEvent): void => {
-    void this.createDialog.open(event.currentTarget instanceof Element ? event.currentTarget : null);
+    void this.createProject(event.currentTarget instanceof Element ? event.currentTarget : null);
+  };
+
+  private readonly onOpenClick = (event: MouseEvent): void => {
+    void this.openFolder(event);
   };
 
   private readonly onProjectCreated = (event: CustomEvent<ProjectCreatedDetail>): void => {
     const { project } = event.detail;
     this.projectOpened(project, { tone: 'success', title: 'Projet créé', message: `${project.name} est prêt dans ${project.path}.` });
+  };
+
+  private readonly onProjectAdopted = (event: CustomEvent<ProjectAdoptedDetail>): void => {
+    const { project } = event.detail;
+    this.projectOpened(project, {
+      tone: 'success',
+      title: `${project.name} ouvert avec UI-GEN`,
+      message: `uigen.json ajouté à ${project.path} avec le préfixe ${project.settings.tagPrefix}.`,
+    });
   };
 
   private readonly onNoticeRequested = (event: CustomEvent<NoticeRequestedDetail>): void => {
