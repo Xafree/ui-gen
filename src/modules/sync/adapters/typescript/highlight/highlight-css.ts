@@ -97,25 +97,31 @@ function highlightBlockComment(context: HighlightContext, index: number, end: nu
   return next;
 }
 
+function highlightTrivia(context: HighlightContext, index: number, end: number): number | null {
+  const { text } = context;
+  const whitespace = matchAt(WHITESPACE, text, index, end);
+  if (whitespace !== null) {
+    return index + whitespace.length;
+  }
+  if (text[index] === '$' && text[index + 1] === '{') {
+    return highlightInterpolation(context, index, end);
+  }
+  return text[index] === '/' && text[index + 1] === '*' ? highlightBlockComment(context, index, end) : null;
+}
+
+function isBoundary(char: string | undefined): boolean {
+  return char === '{' || char === '}' || char === ';';
+}
+
 export function highlightCss(context: HighlightContext, start: number, end: number): void {
-  const { text, sink } = context;
   let mode: Mode = 'start';
   let index = start;
-  while (index < end) {
-    const char = text[index];
-    const whitespace = matchAt(WHITESPACE, text, index, end);
-    if (whitespace !== null) {
-      index += whitespace.length;
-    } else if (char === '$' && text[index + 1] === '{') {
-      const next = highlightInterpolation(context, index, end);
-      if (next < 0) {
-        return;
-      }
-      index = next;
-    } else if (char === '/' && text[index + 1] === '*') {
-      index = highlightBlockComment(context, index, end);
-    } else if (char === '{' || char === '}' || char === ';') {
-      sink.add(index, index + 1, 'tk-punc');
+  while (index >= 0 && index < end) {
+    const trivia = highlightTrivia(context, index, end);
+    if (trivia !== null) {
+      index = trivia;
+    } else if (isBoundary(context.text[index])) {
+      context.sink.add(index, index + 1, 'tk-punc');
       index += 1;
       mode = 'start';
     } else if (mode === 'start') {

@@ -118,13 +118,76 @@ function highlightTemplate(context: HighlightContext, start: number, end: number
   return close;
 }
 
-export function highlightTypeScript(context: HighlightContext, start: number, end: number): void {
+function isComment(token: ts.SyntaxKind): boolean {
+  return token === ts.SyntaxKind.SingleLineCommentTrivia || token === ts.SyntaxKind.MultiLineCommentTrivia;
+}
+
+function isNumber(token: ts.SyntaxKind): boolean {
+  return token === ts.SyntaxKind.NumericLiteral || token === ts.SyntaxKind.BigIntLiteral;
+}
+
+function isTrivia(token: ts.SyntaxKind): boolean {
+  return token >= ts.SyntaxKind.FirstTriviaToken && token <= ts.SyntaxKind.LastTriviaToken;
+}
+
+function highlightToken(
+  context: HighlightContext,
+  token: ts.SyntaxKind,
+  tokenStart: number,
+  tokenEnd: number,
+  limit: number,
+  state: WalkState,
+): void {
   const { text, sink } = context;
+  if (isComment(token)) {
+    sink.add(tokenStart, tokenEnd, 'tk-com');
+  } else if (token === ts.SyntaxKind.StringLiteral) {
+    sink.add(tokenStart, tokenEnd, 'tk-str');
+    state.previousSignificant = 's';
+    state.previousWord = '';
+  } else if (isNumber(token)) {
+    sink.add(tokenStart, tokenEnd, 'tk-num');
+    state.previousSignificant = 'n';
+  } else if (isWord(token)) {
+    const word = text.slice(tokenStart, tokenEnd);
+    const className = classifyWord(context, word, tokenEnd, limit, state);
+    if (className !== null) {
+      sink.add(tokenStart, tokenEnd, className);
+    }
+    state.previousWord = word;
+    state.previousSignificant = 'w';
+  } else if (!isTrivia(token)) {
+    for (let offset = tokenStart; offset < tokenEnd; offset += 1) {
+      sink.add(offset, offset + 1, 'tk-punc');
+    }
+    state.previousSignificant = text.charAt(tokenEnd - 1);
+    state.previousWord = '';
+  }
+}
+
+function highlightLiteralAt(context: HighlightContext, index: number, end: number, state: WalkState): number | null {
+  if (context.text[index] === '`') {
+    const next = highlightTemplate(context, index, end, state.previousWord);
+    if (next > index + 1) {
+      state.previousWord = '';
+      state.previousSignificant = 's';
+    }
+    return next;
+  }
+  const decorator = matchAt(DECORATOR, context.text, index, end);
+  if (decorator === null) {
+    return null;
+  }
+  context.sink.add(index, index + decorator.length, 'tk-dec');
+  return index + decorator.length;
+}
+
+export function highlightTypeScript(context: HighlightContext, start: number, end: number): void {
   const scanner = ts.createScanner(
     ts.ScriptTarget.Latest,
     false,
     ts.LanguageVariant.Standard,
-    text,
+    context.text,
     undefined,
     start,
     end - start,
@@ -132,20 +195,9 @@ export function highlightTypeScript(context: HighlightContext, start: number, en
   const state: WalkState = { previousWord: '', previousSignificant: '' };
   let index = start;
   while (index < end) {
-    if (text[index] === '`') {
-      const next = highlightTemplate(context, index, end, state.previousWord);
-      if (next > index + 1) {
-        state.previousWord = '';
-        state.previousSignificant = 's';
-      }
-      index = next;
-      scanner.resetTokenState(index);
-      continue;
-    }
-    const decorator = matchAt(DECORATOR, text, index, end);
-    if (decorator !== null) {
-      sink.add(index, index + decorator.length, 'tk-dec');
-      index += decorator.length;
+    const literalEnd = highlightLiteralAt(context, index, end, state);
+    if (literalEnd !== null) {
+      index = literalEnd;
       scanner.resetTokenState(index);
       continue;
     }
@@ -153,32 +205,7 @@ export function highlightTypeScript(context: HighlightContext, start: number, en
     if (token === ts.SyntaxKind.EndOfFileToken) {
       break;
     }
-    const tokenStart = scanner.getTokenStart();
-    const tokenEnd = scanner.getTokenEnd();
-    index = tokenEnd;
-    if (token === ts.SyntaxKind.SingleLineCommentTrivia || token === ts.SyntaxKind.MultiLineCommentTrivia) {
-      sink.add(tokenStart, tokenEnd, 'tk-com');
-    } else if (token === ts.SyntaxKind.StringLiteral) {
-      sink.add(tokenStart, tokenEnd, 'tk-str');
-      state.previousSignificant = 's';
-      state.previousWord = '';
-    } else if (token === ts.SyntaxKind.NumericLiteral || token === ts.SyntaxKind.BigIntLiteral) {
-      sink.add(tokenStart, tokenEnd, 'tk-num');
-      state.previousSignificant = 'n';
-    } else if (isWord(token)) {
-      const word = text.slice(tokenStart, tokenEnd);
-      const className = classifyWord(context, word, tokenEnd, end, state);
-      if (className !== null) {
-        sink.add(tokenStart, tokenEnd, className);
-      }
-      state.previousWord = word;
-      state.previousSignificant = 'w';
-    } else if (token < ts.SyntaxKind.FirstTriviaToken || token > ts.SyntaxKind.LastTriviaToken) {
-      for (let offset = tokenStart; offset < tokenEnd; offset += 1) {
-        sink.add(offset, offset + 1, 'tk-punc');
-      }
-      state.previousSignificant = text.charAt(tokenEnd - 1);
-      state.previousWord = '';
-    }
+    index = scanner.getTokenEnd();
+    highlightToken(context, token, scanner.getTokenStart(), index, end, state);
   }
 }

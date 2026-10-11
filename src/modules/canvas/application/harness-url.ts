@@ -13,8 +13,14 @@ function normalized(path: string): string {
   return path.replaceAll('\\', '/');
 }
 
+function withoutTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 0 && path.charAt(end - 1) === '/') end -= 1;
+  return path.slice(0, end);
+}
+
 export function projectRelativePath(projectPath: string, componentPath: string): string | null {
-  const root = normalized(projectPath).replace(/\/+$/, '');
+  const root = withoutTrailingSlashes(normalized(projectPath));
   const file = normalized(componentPath);
   const prefix = `${root}/`;
   if (!file.toLowerCase().startsWith(prefix.toLowerCase())) return null;

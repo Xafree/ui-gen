@@ -39,5 +39,6 @@ export function layerSubtitle(layer: LayerNode, tag: string, variantCount: numbe
   if (layer.kind === 'set') return `Composant, ${String(variantCount)}${NO_BREAK_SPACE}variantes · ${tag}.ts`;
   if (layer.kind === 'variant') return `Variante ${layer.id} de ${tag}`;
   const variant = variantOf(layer);
-  return `${variant === null ? '' : `Carte ${capitalized(variant)} · `}${kindLabel(layer)}`;
+  const prefix = variant === null ? '' : `Carte ${capitalized(variant)} · `;
+  return `${prefix}${kindLabel(layer)}`;
 }

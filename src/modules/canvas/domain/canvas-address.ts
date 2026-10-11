@@ -12,7 +12,7 @@ export const SERVED_PACKAGES: readonly string[] = ['lit', 'lit-html', 'lit-eleme
 
 function hasForbiddenCharacter(segment: string): boolean {
   for (const character of segment) {
-    if ('\\/:'.includes(character) || character.charCodeAt(0) < 32) return true;
+    if (String.raw`\/:`.includes(character) || (character.codePointAt(0) ?? 0) < 32) return true;
   }
   return false;
 }

@@ -53,7 +53,7 @@ function renderedExpression(classNode: ts.ClassDeclaration): ts.Expression | nul
     (member): member is ts.MethodDeclaration =>
       ts.isMethodDeclaration(member) && ts.isIdentifier(member.name) && member.name.text === 'render',
   );
-  const returned = render?.body?.statements.filter(ts.isReturnStatement).at(-1)?.expression;
+  const returned = render?.body?.statements.findLast(ts.isReturnStatement)?.expression;
   return returned === undefined ? null : unwrapParentheses(returned);
 }
 
