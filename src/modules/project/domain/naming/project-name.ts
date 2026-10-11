@@ -1,6 +1,6 @@
 import { toAsciiWords } from './slug.js';
 
-const SCOPED_PACKAGE = /^@([^/]+)\/.+$/;
+const SCOPED_PACKAGE = /^@([^/]+)\/./;
 const NAME_SEPARATORS = /[-_.]+/;
 
 export type ProjectNameError = 'empty' | 'no-alphanumeric';
