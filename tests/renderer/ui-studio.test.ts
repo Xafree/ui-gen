@@ -2,10 +2,15 @@ import { page } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { UiGenApi } from '../../src/preload/ui-gen-api.js';
 import type { ToastRequest } from '../../src/renderer/motion/toast.js';
-import { PROJECT_OPENED, type ProjectOpenedDetail } from '../../src/renderer/studio-events.js';
+import {
+  PROJECT_CLOSED,
+  PROJECT_OPENED,
+  type ProjectClosedDetail,
+  type ProjectOpenedDetail,
+} from '../../src/renderer/studio-events.js';
 import { UiStudio } from '../../src/renderer/ui-studio.js';
 import { kitHorizon, kitHorizonProject, listing, lumenUi, makeUiGenApi, type RecentsApi } from './home/home-fixtures.js';
-import { deepQueryAll, removeShownToasts } from './home/shadow-dom.js';
+import { deepQueryAll, removeShownToasts, shownToasts } from './home/shadow-dom.js';
 
 const mounted: UiStudio[] = [];
 
@@ -96,5 +101,66 @@ describe('<ui-studio>', () => {
     expect(Reflect.get(shell ?? {}, 'project')).toEqual(kitHorizonProject());
     expect(Reflect.get(shell ?? {}, 'notice')).toEqual(notice);
     expect(shownHome()).toBeUndefined();
+  });
+});
+
+type ProjectApi = UiGenApi['project'];
+
+function withClose(api: UiGenApi, close: ProjectApi['close']): UiGenApi {
+  return { ...api, project: { ...api.project, close } };
+}
+
+async function openKitHorizon(): Promise<void> {
+  await expect.poll(() => shownHome()).toBeDefined();
+  const detail: ProjectOpenedDetail = { project: kitHorizonProject(), notice: null };
+  shownHome()?.dispatchEvent(
+    new CustomEvent<ProjectOpenedDetail>(PROJECT_OPENED, { detail, bubbles: true, composed: true }),
+  );
+  await expect.poll(() => shownShell()).toBeDefined();
+}
+
+function closeFromShell(reason: ProjectClosedDetail['reason']): void {
+  const detail: ProjectClosedDetail = { project: kitHorizonProject(), reason };
+  shownShell()?.dispatchEvent(
+    new CustomEvent<ProjectClosedDetail>(PROJECT_CLOSED, { detail, bubbles: true, composed: true }),
+  );
+}
+
+describe('<ui-studio> leaving a project', () => {
+  // covers: FCT-0012
+  it('closes the project through the api, goes back home and says the project stays in the recent list', async () => {
+    const list = listOfTwo();
+    const close = vi.fn<ProjectApi['close']>(() => Promise.resolve());
+    await mountStudio(withClose(makeUiGenApi({ list }), close));
+    await openKitHorizon();
+
+    closeFromShell('close');
+
+    await expect.poll(() => shownHome()).toBeDefined();
+    expect(shownShell()).toBeUndefined();
+    expect(close).toHaveBeenCalledTimes(1);
+    await expect.poll(() => shownToasts()).toContainEqual({
+      tone: 'info',
+      title: 'Kit Horizon fermé',
+      message: 'Il reste dans les projets récents.',
+    });
+    await expect.element(page.getByRole('heading', { level: 2, name: 'Projets récents' })).toBeVisible();
+  });
+
+  // covers: FCT-0012
+  it('goes back home without any notice when the user switches project', async () => {
+    const list = listOfTwo();
+    const close = vi.fn<ProjectApi['close']>(() => Promise.resolve());
+    await mountStudio(withClose(makeUiGenApi({ list }), close));
+    await openKitHorizon();
+
+    closeFromShell('switch');
+
+    await expect.poll(() => shownHome()).toBeDefined();
+    expect(shownShell()).toBeUndefined();
+    await expect.poll(() => list).toHaveBeenCalledTimes(2);
+    await expect.element(page.getByRole('heading', { level: 2, name: 'Projets récents' })).toBeVisible();
+    await expect.element(page.getByRole('heading', { level: 1, name: 'UI-GEN' })).toBeVisible();
+    expect(shownToasts()).toEqual([]);
   });
 });
