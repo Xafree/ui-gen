@@ -1,0 +1,18 @@
+name: ui-gen
+
+services:
+  sonarqube:
+    image: sonarqube:26.8.0.126808-community
+    ports:
+      - "127.0.0.1:9100:9000"
+    environment:
+      SONAR_TELEMETRY_ENABLE: "false"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:

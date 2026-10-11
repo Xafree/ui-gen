@@ -1,0 +1,46 @@
+{
+  "name": "ui-gen",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/index.js",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "lint": "eslint .",
+    "test": "vitest run --coverage",
+    "test:e2e": "electron-vite build && playwright test",
+    "test:mutation": "stryker run",
+    "sonar": "sonar-scanner-npm",
+    "sonar:up": "docker compose -f docker/compose.yaml up -d sonarqube",
+    "sonar:down": "docker compose -f docker/compose.yaml down",
+    "verifier-fct": "node ../scripts/verifier-fct.mjs",
+    "adr-lint": "node ../scripts/adr-lint.mjs",
+    "verifier-structure": "node ../scripts/verifier-structure.mjs"
+  },
+  "dependencies": {
+    "lit": "3.3.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@playwright/test": "1.63.0",
+    "@sonar/scan": "5.0.1",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
+    "@types/node": "24.19.0",
+    "@vitest/coverage-v8": "5.0.2",
+    "electron": "44.4.5",
+    "electron-vite": "5.0.0",
+    "eslint": "9.39.5",
+    "eslint-plugin-lit": "2.3.1",
+    "globals": "17.12.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.1",
+    "vite": "7.3.6",
+    "vitest": "5.0.2"
+  }
+}
