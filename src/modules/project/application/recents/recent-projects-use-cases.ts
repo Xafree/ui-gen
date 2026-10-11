@@ -17,12 +17,18 @@ export interface RecentProjectsListing {
 
 type RecentDependencies = Pick<ProjectDependencies, 'fileSystem' | 'recentProjects'>;
 
+async function isAvailable(deps: RecentDependencies, path: string): Promise<boolean> {
+  try {
+    const state = await deps.fileSystem.readFolderState(path);
+    return state.kind === 'empty' || state.kind === 'not-empty';
+  } catch {
+    return false;
+  }
+}
+
 function withAvailability(deps: RecentDependencies, projects: readonly RecentProject[]): Promise<RecentProjectView[]> {
   return Promise.all(
-    projects.map(async (project) => {
-      const state = await deps.fileSystem.readFolderState(project.path);
-      return { ...project, available: state.kind === 'empty' || state.kind === 'not-empty' };
-    }),
+    projects.map(async (project) => ({ ...project, available: await isAvailable(deps, project.path) })),
   );
 }
 
@@ -33,8 +39,9 @@ export async function listRecentProjects(deps: RecentDependencies): Promise<Rece
 
 export async function removeRecentProjectEntry(deps: RecentDependencies, path: string): Promise<RecentProjectView[]> {
   const { projects } = await deps.recentProjects.load();
-  const remaining = keepMostRecent(removeRecentProject(projects, path));
-  await deps.recentProjects.save(remaining);
+  const withoutEntry = removeRecentProject(projects, path);
+  const remaining = keepMostRecent(withoutEntry);
+  if (withoutEntry.length !== projects.length) await deps.recentProjects.save(remaining);
   return withAvailability(deps, remaining);
 }
 
