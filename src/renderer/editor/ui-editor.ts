@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { displayedDiagnostics, type Diagnostic } from '../../modules/editor/domain/code/code-diagnostics.js';
 import { layerIdForNode, nodeRange, type TextRange } from '../../modules/editor/domain/code/code-targets.js';
 import { problemCounter, syncStateOf } from '../../modules/editor/domain/code/problem-summary.js';
+import { layerSubtitle, selectionLabel } from '../../modules/editor/domain/layers/layer-label.js';
 import { findLayer, layerIds } from '../../modules/editor/domain/layers/layer-lookup.js';
 import { buildLayerTree, countLayers, type LayerNode } from '../../modules/editor/domain/layers/layer-tree.js';
 import { samePath } from '../../modules/sync/domain/library/component-summary.js';
@@ -11,6 +12,7 @@ import type { ComponentChange, OpenedComponent } from '../../modules/sync/applic
 import type { AnalyzerStatus } from '../../modules/sync/ports/component-analyzer.js';
 import type { UiGenApi } from '../../preload/ui-gen-api.js';
 import { icon } from '../icons/icon.js';
+import { placeTabIndicator } from '../motion/motion.js';
 import type { ToastRequest } from '../motion/toast.js';
 import { NOTICE_REQUESTED, type NoticeRequestedDetail } from '../studio-events.js';
 import type { CanvasPhase, CanvasSelectDetail } from './canvas/ui-editor-canvas.js';
@@ -31,8 +33,7 @@ declare global {
 }
 
 type LeftTab = 'layers' | 'components';
-
-const LEFT_TABS: readonly LeftTab[] = ['layers', 'components'];
+type RightTab = 'properties' | 'interactions';
 const NO_BREAK_SPACE = String.fromCodePoint(0xa0);
 const TYPING = 'input, textarea, select, [contenteditable="true"]';
 const TOGGLE_KEYS: Readonly<Record<string, LayerToggle>> = { h: 'hidden', l: 'locked' };
@@ -114,6 +115,7 @@ export class UiEditor extends LitElement {
   @state() private opened: OpenedComponent | null = null;
   @state() private restarting = false;
   @state() private leftTab: LeftTab = 'layers';
+  @state() private rightTab: RightTab = 'properties';
   @state() private layers: readonly LayerNode[] = [];
   @state() private selectedId: string | null = null;
   @state() private hoverId: string | null = null;
@@ -144,6 +146,10 @@ export class UiEditor extends LitElement {
       this.rebuildLayers();
       this.diagnostics = displayedDiagnostics(this.opened);
     }
+  }
+
+  protected override updated(): void {
+    for (const list of this.renderRoot.querySelectorAll<HTMLElement>('.ui-tabs')) placeTabIndicator(list);
   }
 
   protected override firstUpdated(): void {
@@ -237,15 +243,48 @@ export class UiEditor extends LitElement {
   }
 
   private renderRightPanel(): TemplateResult {
+    const interactions = this.opened === null ? nothing : html`<button class="ui-tab" type="button" role="tab" id="tab-inter" aria-controls="tp-inter" aria-selected=${String(this.rightTab === 'interactions')} tabindex=${this.rightTab === 'interactions' ? '0' : '-1'} @click=${() => { this.rightTab = 'interactions'; }}>Interactions <span class="ui-count" id="rule-count">0</span></button>`;
     return html`
       <aside class="ui-panel ui-panel--right" id="panneau-droit" aria-label="Propriétés et interactions">
-        <div class="ui-tabs" role="tablist" aria-label="Panneau de droite">
-          <button class="ui-tab" type="button" role="tab" id="tab-props" aria-controls="tp-props" aria-selected="true">Propriétés</button>
+        <div class="ui-tabs" role="tablist" aria-label="Panneau de droite" @keydown=${this.onTabKeydown}>
+          <button class="ui-tab" type="button" role="tab" id="tab-props" aria-controls="tp-props" aria-selected=${String(this.rightTab === 'properties')} tabindex=${this.rightTab === 'properties' ? '0' : '-1'} @click=${() => { this.rightTab = 'properties'; }}>Propriétés</button>
+          ${interactions}
         </div>
-        <div class="ed-tabpanel" role="tabpanel" id="tp-props" aria-labelledby="tab-props">
+        ${this.renderInspectorHead()}
+        <div class="ed-tabpanel" role="tabpanel" id="tp-props" aria-labelledby="tab-props" ?hidden=${this.rightTab !== 'properties'}>
           <ui-inspector .model=${this.opened?.model ?? null} .layer=${this.selectedLayer}></ui-inspector>
         </div>
+        ${this.opened === null ? nothing : this.renderInteractions()}
       </aside>
+    `;
+  }
+
+  private renderInspectorHead(): TemplateResult | typeof nothing {
+    const layer = this.selectedLayer;
+    const model = this.opened?.model;
+    if (layer === null || model === undefined) return nothing;
+    return html`
+      <div class="ed-insp-head" id="insp-head">
+        <p class="ed-insp-head__name">${icon('composants')}<span id="insp-name">${layer.name}</span></p>
+        <p class="ed-insp-head__sub" id="insp-sub">${layerSubtitle(layer, model.tag, Math.max(model.variants.length, 1))}</p>
+      </div>
+    `;
+  }
+
+  private renderInteractions(): TemplateResult {
+    return html`
+      <div class="ed-tabpanel" role="tabpanel" id="tp-inter" aria-labelledby="tab-inter" ?hidden=${this.rightTab !== 'interactions'}>
+        <div class="ui-panel__body">
+          <div class="ui-empty" id="rules-empty">
+            <span class="ui-empty__icon">${icon('eclair')}</span>
+            <p class="ui-empty__title" id="rules-empty-title">Aucune interaction sur ce calque</p>
+            <p class="ui-empty__text">Les interactions se règlent sur les éléments qui réagissent au clic ou au clavier, comme hz-button.</p>
+            <div class="ui-empty__actions">
+              <button class="ui-btn ui-btn--secondary ui-btn--sm" type="button" disabled>Sélectionner le bouton de la carte Pro</button>
+            </div>
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -258,7 +297,9 @@ export class UiEditor extends LitElement {
         <span class="ui-statusbar__item" id="status-sync" role="status"><span class="ui-status-dot ui-status-dot--${sync.tone}" aria-hidden="true"></span><span id="status-sync-label">${sync.status}</span></span>
         ${counter === null ? nothing : html`<button class="ed-status-btn ed-status-warn${counter.hasError ? ' is-error' : ''}" type="button" id="status-warn" aria-label=${counter.name} @click=${this.onProblemsClick}>${icon('alerte')}<span id="status-warn-label">${String(counter.count)}<span class="ed-status-long"> ${counter.word}</span></span></button>`}
         <span class="ui-statusbar__spacer"></span>
-        ${this.opened === null ? nothing : html`<span class="ui-statusbar__item ed-status-num" id="status-cursor">Ligne ${String(this.cursor.line)}, col. ${String(this.cursor.column)}</span>`}
+        ${this.opened === null ? nothing : html`<span class="ui-statusbar__item ed-status-opt" id="status-sel">${this.selectedLayer === null ? this.tag : selectionLabel(this.selectedLayer)}</span><span class="ui-statusbar__item ed-status-num" id="status-cursor">Ligne ${String(this.cursor.line)}, col. ${String(this.cursor.column)}</span>`}
+        <span class="ui-statusbar__item ed-status-opt">Espaces : 2</span>
+        <span class="ui-statusbar__item ed-status-opt">UTF-8</span>
       </footer>
     `;
   }
@@ -382,20 +423,21 @@ export class UiEditor extends LitElement {
   };
 
   private readonly onTabKeydown = (event: KeyboardEvent): void => {
-    const index = LEFT_TABS.indexOf(this.leftTab);
-    const last = LEFT_TABS.length - 1;
+    const list = event.currentTarget;
+    if (!(list instanceof HTMLElement)) return;
+    const tabs = [...list.querySelectorAll<HTMLElement>('[role="tab"]')];
+    const index = tabs.findIndex((tab) => tab.getAttribute('aria-selected') === 'true');
+    const last = tabs.length - 1;
     const targets: Readonly<Record<string, number>> = {
       ArrowRight: Math.min(last, index + 1),
       ArrowLeft: Math.max(0, index - 1),
       Home: 0,
       End: last,
     };
-    const target = LEFT_TABS[targets[event.key] ?? index];
-    if (target === undefined || target === this.leftTab) return;
+    const target = tabs[targets[event.key] ?? index];
+    if (target === undefined || index < 0 || target === tabs[index]) return;
     event.preventDefault();
-    this.leftTab = target;
-    void this.updateComplete.then(() => {
-      this.renderRoot.querySelector<HTMLElement>(`#${target === 'layers' ? 'tab-calques' : 'tab-comp'}`)?.focus();
-    });
+    target.click();
+    target.focus();
   };
 }

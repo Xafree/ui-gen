@@ -231,6 +231,45 @@
 .ui-statusbar .icon { width: 13px; height: 13px; }
 .ed-status-num { font-variant-numeric: tabular-nums; }
 
+/* ---------- Inspecteur ---------- */
+.ed-insp-head { flex: none; display: grid; gap: 2px; padding: var(--ui-space-3); border-bottom: 1px solid var(--ui-border); }
+.ed-insp-head__name { display: flex; align-items: center; gap: var(--ui-space-1-5); min-width: 0; font-size: var(--ui-text-md); line-height: var(--ui-lh-md); font-weight: var(--ui-weight-semibold); }
+.ed-insp-head__name .icon { color: var(--ui-accent-text); }
+.ed-insp-head__name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--ui-font-mono); font-size: var(--ui-text-sm); }
+.ed-insp-head__sub { color: var(--ui-text-3); font-size: var(--ui-text-xs); line-height: var(--ui-lh-xs); }
+.ed-readonly { display: flex; align-items: center; gap: var(--ui-space-2); min-height: var(--ui-control-h); color: var(--ui-text); font-family: var(--ui-font-mono); font-size: var(--ui-text-xs); font-variant-numeric: tabular-nums; }
+.ed-readonly code { color: var(--ui-text-3); }
+.ed-pad-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-2); }
+.ed-pad-grid .ui-label { font-size: var(--ui-text-xs); color: var(--ui-text-3); font-weight: var(--ui-weight-regular); }
+.ed-select-swatch { position: relative; min-width: 0; flex: 1; }
+.ed-select-swatch .ui-swatch { position: absolute; left: 7px; top: 50%; translate: 0 -50%; z-index: 1; pointer-events: none; }
+.ed-select-swatch select { padding-left: 30px; }
+.ui-prop__control > .ui-select { flex: 1; }
+.ui-select select.ui-mono-select { font-family: var(--ui-font-mono); font-size: var(--ui-text-xs); }
+.ed-note { color: var(--ui-text-3); font-size: var(--ui-text-xs); line-height: var(--ui-lh-xs); }
+.ed-note code { color: var(--ui-text-2); }
+.ed-states { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-1); }
+.ed-states label { position: relative; display: block; }
+.ed-states input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.ed-states span {
+  display: flex; align-items: center; gap: var(--ui-space-1-5);
+  height: var(--ui-control-h); padding: 0 var(--ui-space-2);
+  border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-sm);
+  background: var(--ui-surface-raised); color: var(--ui-text-2);
+  font-weight: var(--ui-weight-medium); white-space: nowrap;
+  transition: background-color var(--ui-dur-fast) var(--ui-ease-out), border-color var(--ui-dur-fast) var(--ui-ease-out), color var(--ui-dur-fast) var(--ui-ease-out);
+}
+.ed-states span::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ui-border-control); flex: none; }
+.ed-states input:hover + span { color: var(--ui-text); border-color: var(--ui-border-input); }
+.ed-states input:checked + span { background: var(--ui-accent-soft); border-color: var(--ui-accent); color: var(--ui-accent-text); }
+.ed-states input:checked + span::before { background: var(--ui-accent); }
+.ed-states input:focus-visible + span { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
+.ed-kv { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: var(--ui-space-2); align-items: baseline; font-size: var(--ui-text-sm); }
+.ed-kv dt { color: var(--ui-text-2); }
+.ed-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-family: var(--ui-font-mono); font-size: var(--ui-text-xs); font-variant-numeric: tabular-nums; }
+.ed-kv dd span { color: var(--ui-text-3); }
+
+
 /* ---------- Points de rupture ---------- */
 @media (max-width: 1279px) {
   .ed-canvas-bar { left: 28px; }

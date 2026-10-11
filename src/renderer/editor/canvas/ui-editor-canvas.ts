@@ -30,6 +30,8 @@ import {
 import type { NodeRect } from '../../../modules/canvas/domain/harness-message.js';
 import type { OpenedComponent } from '../../../modules/sync/application/components/component-views.js';
 import { icon } from '../../icons/icon.js';
+import type { ToastRequest } from '../../motion/toast.js';
+import { NOTICE_REQUESTED, type NoticeRequestedDetail } from '../../studio-events.js';
 import { editorStyles } from '../editor-styles.js';
 import { EMPTY_LIBRARY_TITLE, IMPORT_HINT, IMPORT_SCREEN } from '../library/ui-component-library.js';
 import '../selection/ui-selection-overlay.js';
@@ -64,6 +66,11 @@ const TOOL_HINTS: Readonly<Partial<Record<Tool, string>>> = {
   frame: "Glissez pour dessiner un cadre. Il reste hors du code jusqu'à son intégration.",
   text: 'Cliquez pour placer un texte, puis saisissez-le.',
   hand: 'Glissez pour déplacer la vue. Astuce : maintenez Espace avec un autre outil.',
+};
+const INTERACTIONS_PENDING: ToastRequest = {
+  tone: 'info',
+  title: 'Disponible dans un prochain lot',
+  message: 'Les interactions arrivent avec le lot 4.',
 };
 const TYPING = 'input, textarea, select, [contenteditable="true"]';
 const OWN_KEYBOARD = '[role="tree"], [role="listbox"], [role="radiogroup"], [role="tablist"], #code-panel';
@@ -240,6 +247,7 @@ export class UiEditorCanvas extends LitElement {
         <span class="ed-frame-chip" id="frame-chip">${formatPixels(size.width)}</span>
         <span class="ui-spacer"></span>
         <button class="ui-btn ui-btn--secondary ui-btn--sm" type="button" id="hz-dark" aria-pressed=${String(this.darkPreview)} @click=${this.toggleDarkPreview}>${icon('lune', 'icon--sm')}<span class="ed-btn-label">Aperçu sombre</span></button>
+        <button class="ui-btn ui-btn--secondary ui-btn--sm" type="button" id="preview-toggle" aria-pressed="false" @click=${this.showInteractionsPending}>${icon('play', 'icon--sm')}<span class="ed-btn-label">Tester les interactions</span></button>
       </div>
     `;
   }
@@ -322,6 +330,10 @@ export class UiEditorCanvas extends LitElement {
 
   private readonly resetZoom = (): void => {
     this.zoomTo(1);
+  };
+
+  private readonly showInteractionsPending = (): void => {
+    this.dispatchEvent(new CustomEvent<NoticeRequestedDetail>(NOTICE_REQUESTED, { detail: { notice: INTERACTIONS_PENDING }, bubbles: true, composed: true }));
   };
 
   private readonly toggleDarkPreview = (): void => {

@@ -235,3 +235,31 @@ export function swap(container: HTMLElement, update: () => void): Promise<HTMLEl
     safety(timeline);
   });
 }
+
+const INDICATOR_BASE_WIDTH = 100;
+const placedIndicators = new WeakSet<Element>();
+
+function moveIndicator(list: HTMLElement, indicator: HTMLElement, instant: boolean): void {
+  const selected = list.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+  if (selected === null) return;
+  const target = { x: selected.offsetLeft, scaleX: selected.offsetWidth / INDICATOR_BASE_WIDTH };
+  const immediate = instant || !placedIndicators.has(indicator) || motionMode() !== 'full';
+  placedIndicators.add(indicator);
+  if (immediate) gsap.set(indicator, target);
+  else safety(gsap.to(indicator, { ...target, duration: DUR.base, ease: EASE.out }));
+}
+
+function createIndicator(list: HTMLElement): HTMLElement {
+  const indicator = document.createElement('span');
+  indicator.className = 'ui-tabs__indicator';
+  indicator.setAttribute('aria-hidden', 'true');
+  list.append(indicator);
+  list.classList.add('has-indicator');
+  new ResizeObserver(() => { moveIndicator(list, indicator, true); }).observe(list);
+  void document.fonts.ready.then(() => { moveIndicator(list, indicator, true); });
+  return indicator;
+}
+
+export function placeTabIndicator(list: HTMLElement): void {
+  moveIndicator(list, list.querySelector<HTMLElement>('.ui-tabs__indicator') ?? createIndicator(list), false);
+}

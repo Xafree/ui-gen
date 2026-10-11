@@ -133,6 +133,7 @@ export class UiCodeView extends LitElement {
       this.line = clamp(this.line, 1, this.lines.length);
       this.column = clamp(this.column, 1, this.currentLength + 1);
     }
+    if (changed.has('targetRange')) this.followTarget();
   }
 
   protected override updated(changed: PropertyValues<this>): void {
@@ -145,6 +146,16 @@ export class UiCodeView extends LitElement {
     if (changed.has('targetRange') && this.targetRange !== null) {
       this.scrollLineIntoView(this.renderRoot.querySelector<HTMLElement>('.ui-code__line.is-target'));
     }
+  }
+
+  private followTarget(): void {
+    const range = this.targetRange;
+    const current = this.lines[this.line - 1];
+    if (range === null || (current !== undefined && touchesLine(range, current))) return;
+    const opening = this.lines.find((line) => line.start <= range.start && range.start <= line.end);
+    if (opening === undefined) return;
+    this.line = opening.number;
+    this.column = range.start - opening.start + 1;
   }
 
   private get currentLength(): number {

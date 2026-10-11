@@ -13,6 +13,7 @@ export const SCREEN_SIZES: readonly ScreenSize[] = [
 ];
 
 const NO_BREAK_SPACE = String.fromCodePoint(0xa0);
+const NARROW_NO_BREAK_SPACE = String.fromCodePoint(0x202f);
 
 export const DEFAULT_SCREEN_SIZE: ScreenSizeId = 'ordinateur';
 
@@ -23,5 +24,5 @@ export function screenSizeById(id: ScreenSizeId): ScreenSize {
 }
 
 export function formatPixels(width: number): string {
-  return `${new Intl.NumberFormat('fr-FR').format(width)}${NO_BREAK_SPACE}px`;
+  return `${new Intl.NumberFormat('fr-FR').format(width).replaceAll(NARROW_NO_BREAK_SPACE, NO_BREAK_SPACE)}${NO_BREAK_SPACE}px`;
 }

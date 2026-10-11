@@ -17,6 +17,7 @@ import {
 } from '../../../modules/editor/domain/code/problem-summary.js';
 import type { OpenedComponent } from '../../../modules/sync/application/components/component-views.js';
 import { icon } from '../../icons/icon.js';
+import { placeTabIndicator } from '../../motion/motion.js';
 import type { ToastRequest } from '../../motion/toast.js';
 import { NOTICE_REQUESTED, type NoticeRequestedDetail } from '../../studio-events.js';
 import { editorStyles } from '../editor-styles.js';
@@ -77,7 +78,7 @@ export class UiCodePanel extends LitElement {
     const counter = problemCounter(this.diagnostics);
     const tab = component === null ? 'code' : this.tab;
     return html`
-      <section class="ed-code" id="code-panel" aria-label="Code Lit du composant" data-collapsed=${String(this.collapsed)}>
+      <section class="ed-code" id="code-panel" aria-label="Code Lit du composant" data-collapsed=${String(this.isCollapsed)}>
         <div class="ed-split" id="code-split" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Redimensionner le panneau de code" aria-controls="code-panel" aria-valuemin="120" aria-valuemax=${String(this.maximum)} aria-valuenow=${String(this.height)} @pointerdown=${this.onSplitPointerDown} @dblclick=${this.onSplitReset} @keydown=${this.onSplitKeydown}></div>
         <div class="ed-code__head">
           <div class="ui-tabs ui-tabs--bare" role="tablist" aria-label="Panneau de code" @click=${this.onTabsClick}>
@@ -88,7 +89,7 @@ export class UiCodePanel extends LitElement {
           <span class="ui-spacer"></span>
           ${component === null ? nothing : html`<span class="ed-sync" id="code-sync"><span class="ui-status-dot ui-status-dot--${sync.tone}" aria-hidden="true"></span><span class="ed-sync__label">${sync.code}</span></span>`}
           ${component === null ? nothing : html`<button class="ui-icon-btn ui-icon-btn--sm" type="button" id="code-copy" aria-label="Copier le code" data-tip="Copier le code" data-tip-pos="end" @click=${this.onCopy}>${icon('copier')}</button>`}
-          <button class="ui-icon-btn ui-icon-btn--sm ed-collapse" type="button" id="code-collapse" aria-expanded=${String(!this.collapsed)} aria-controls="code-body" aria-label=${this.collapsed ? 'Déplier le panneau de code' : 'Replier le panneau de code'} data-tip=${this.collapsed ? 'Déplier (Ctrl J)' : 'Replier (Ctrl J)'} data-tip-pos="end" @click=${this.toggle}>${icon('chevron-bas')}</button>
+          <button class="ui-icon-btn ui-icon-btn--sm ed-collapse" type="button" id="code-collapse" aria-expanded=${String(!this.isCollapsed)} aria-controls="code-body" aria-label=${this.isCollapsed ? 'Déplier le panneau de code' : 'Replier le panneau de code'} data-tip=${this.isCollapsed ? 'Déplier (Ctrl J)' : 'Replier (Ctrl J)'} data-tip-pos="end" @click=${this.toggle}>${icon('chevron-bas')}</button>
         </div>
         <div class="ed-code__body" id="code-body">
           <div class="ed-code__panel" role="tabpanel" id="tp-code" aria-labelledby="tab-code" ?hidden=${tab !== 'code'}>
@@ -117,7 +118,12 @@ export class UiCodePanel extends LitElement {
   }
 
   protected override updated(): void {
+    for (const list of this.renderRoot.querySelectorAll<HTMLElement>('.ui-tabs')) placeTabIndicator(list);
     this.section?.style.setProperty('--ed-code-h', `${String(this.height)}px`);
+  }
+
+  private get isCollapsed(): boolean {
+    return this.collapsed || this.component === null;
   }
 
   private get section(): HTMLElement | null {

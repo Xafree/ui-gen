@@ -100,10 +100,6 @@ export class UiInspector extends LitElement {
     const variant = variantOf(layer);
     const values = layer.nodeId === null ? {} : inspectorValues(model, layer.nodeId, variant);
     return html`
-      <div class="ed-insp-head" id="insp-head">
-        <p class="ed-insp-head__name">${icon('composants')}<span id="insp-name">${layer.name}</span></p>
-        <p class="ed-insp-head__sub" id="insp-sub">${variant === null ? '' : `Variante ${variant} · `}${model.tag}.ts</p>
-      </div>
       <div class="ui-panel__body">
         ${SECTIONS.map((section) => this.renderSection(section, values))}
         ${this.renderVariants(model, variant)}${this.renderStates()}
