@@ -15,6 +15,8 @@ const SKIPPED_FOLDERS: ReadonlySet<string> = new Set(['node_modules', 'dist', 'o
 const SOURCE_FILE = /\.(?:ts|mts|js|mjs)$/;
 const DECLARATION_SUFFIX = '.d.ts';
 const MAX_SOURCE_BYTES = 1_000_000;
+const MAX_SOURCE_FILES = 2000;
+const SKIPPABLE_CODES: ReadonlySet<string> = new Set(['ENOENT', 'EACCES', 'EPERM']);
 const BYTE_ORDER_MARK = '\uFEFF';
 const LEFTOVER_REMOVAL = { recursive: true, force: true, maxRetries: 3 } as const;
 const RETRYABLE_RENAME_CODES: ReadonlySet<string> = new Set(['EPERM', 'EBUSY', 'EACCES']);
@@ -69,15 +71,69 @@ function isSourceName(fileName: string): boolean {
   return SOURCE_FILE.test(fileName) && !fileName.endsWith(DECLARATION_SUFFIX);
 }
 
+function relativeSlashPath(root: string, path: string): string {
+  return relative(root, path).replaceAll(sep, '/');
+}
+
+function isSkippableCode(error: unknown): boolean {
+  return SKIPPABLE_CODES.has(errorCode(error));
+}
+
+function logSkipped(root: string, path: string, error: unknown): void {
+  console.warn(`Skipped unreadable entry ${relativeSlashPath(root, path)} (${errorCode(error)})`);
+}
+
+async function isReadableSize(root: string, path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).size <= MAX_SOURCE_BYTES;
+  } catch (error) {
+    if (!isSkippableCode(error)) throw error;
+    logSkipped(root, path, error);
+    return false;
+  }
+}
+
+async function listEntries(root: string, folder: string) {
+  if (folder === root) return await readdir(folder, { withFileTypes: true });
+  try {
+    return await readdir(folder, { withFileTypes: true });
+  } catch (error) {
+    if (!isSkippableCode(error)) throw error;
+    logSkipped(root, folder, error);
+    return [];
+  }
+}
+
 async function collectSourcePaths(root: string, folder: string, found: string[]): Promise<void> {
-  for (const entry of await readdir(folder, { withFileTypes: true })) {
+  for (const entry of await listEntries(root, folder)) {
     const path = join(folder, entry.name);
     if (entry.isDirectory()) {
       if (isTraversable(entry.name)) await collectSourcePaths(root, path, found);
-    } else if (entry.isFile() && isSourceName(entry.name) && (await stat(path)).size <= MAX_SOURCE_BYTES) {
-      found.push(relative(root, path).replaceAll(sep, '/'));
+    } else if (entry.isFile() && isSourceName(entry.name) && (await isReadableSize(root, path))) {
+      found.push(relativeSlashPath(root, path));
     }
   }
+}
+
+async function readSourceIfReadable(folder: string, relativePath: string): Promise<SourceFile | null> {
+  const path = toNativePath(folder, relativePath);
+  try {
+    return { relativePath, content: await readFile(path, 'utf8') };
+  } catch (error) {
+    if (!isSkippableCode(error)) throw error;
+    logSkipped(folder, path, error);
+    return null;
+  }
+}
+
+async function readFirstSources(folder: string, relativePaths: readonly string[]): Promise<SourceFile[]> {
+  const files: SourceFile[] = [];
+  for (const relativePath of relativePaths) {
+    if (files.length === MAX_SOURCE_FILES) break;
+    const file = await readSourceIfReadable(folder, relativePath);
+    if (file !== null) files.push(file);
+  }
+  return files;
 }
 
 async function lstatIfPresent(path: string) {
@@ -165,11 +221,7 @@ export class NodeProjectFileSystem implements ProjectFileSystem {
     try {
       const relativePaths: string[] = [];
       await collectSourcePaths(folder, folder, relativePaths);
-      const files: SourceFile[] = [];
-      for (const relativePath of relativePaths.toSorted(comparePaths)) {
-        files.push({ relativePath, content: await readFile(toNativePath(folder, relativePath), 'utf8') });
-      }
-      return files;
+      return await readFirstSources(folder, relativePaths.toSorted(comparePaths));
     } catch (error) {
       throw writeFailure(folder, error);
     }
