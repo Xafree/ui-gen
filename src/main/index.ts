@@ -6,7 +6,9 @@ import { NodeProjectFileSystem } from '../modules/project/adapters/node-fs/node-
 import { JsonRecentProjectsStore } from '../modules/project/adapters/user-data/json-recent-projects-store.js';
 import { RECENT_PROJECTS_FILE } from '../modules/project/domain/recents/recent-projects.js';
 import { registerProjectHandlers } from './ipc/project-handlers.js';
+import { registerRecentListHandlers } from './ipc/recent-list-handlers.js';
 import { createSenderGuard } from './ipc/sender-guard.js';
+import { ForgottenRecents } from './session/forgotten-recents.js';
 import { ProjectSession } from './session/project-session.js';
 
 const USER_DATA_ARGUMENT = '--user-data-dir=';
@@ -24,16 +26,19 @@ function rendererUrl(): string {
 }
 
 function registerIpcHandlers(trustedRendererUrl: string): void {
+  const project = {
+    fileSystem: new NodeProjectFileSystem(),
+    recentProjects: new JsonRecentProjectsStore(join(app.getPath('userData'), RECENT_PROJECTS_FILE)),
+    clock: () => new Date(),
+  };
+  const isTrustedSender = createSenderGuard(trustedRendererUrl);
   registerProjectHandlers(ipcMain, {
-    project: {
-      fileSystem: new NodeProjectFileSystem(),
-      recentProjects: new JsonRecentProjectsStore(join(app.getPath('userData'), RECENT_PROJECTS_FILE)),
-      clock: () => new Date(),
-    },
+    project,
     folderPicker: createElectronFolderPicker(() => BrowserWindow.getAllWindows()[0] ?? null),
     session: new ProjectSession(app.getPath('documents')),
-    isTrustedSender: createSenderGuard(trustedRendererUrl),
+    isTrustedSender,
   });
+  registerRecentListHandlers(ipcMain, { project, forgotten: new ForgottenRecents(), isTrustedSender });
 }
 
 async function createWindow(url: string): Promise<void> {

@@ -10,6 +10,7 @@ import type {
   RecentProjectsListing,
   RecentProjectView,
 } from '../modules/project/application/recents/recent-projects-use-cases.js';
+import type { RecentProject } from '../modules/project/domain/recents/recent-projects.js';
 import type { ChooseLocationOutcome, OpenFolderOutcome, UiGenApi } from './ui-gen-api.js';
 
 function invoke(channel: IpcChannel, ...payload: readonly unknown[]): Promise<unknown> {
@@ -21,6 +22,9 @@ const api: UiGenApi = Object.freeze({
   recents: Object.freeze({
     list: () => invoke(IPC_CHANNELS.recentsList) as Promise<RecentProjectsListing>,
     remove: (path: string) => invoke(IPC_CHANNELS.recentsRemove, { path }) as Promise<RecentProjectView[]>,
+    clear: () => invoke(IPC_CHANNELS.recentsClear) as Promise<RecentProjectView[]>,
+    restore: (projects: readonly RecentProject[]) =>
+      invoke(IPC_CHANNELS.recentsRestore, { projects }) as Promise<RecentProjectView[]>,
     open: (path: string) => invoke(IPC_CHANNELS.recentsOpen, { path }) as Promise<OpenProjectOutcome>,
   }),
   project: Object.freeze({

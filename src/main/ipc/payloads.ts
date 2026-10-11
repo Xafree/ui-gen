@@ -19,7 +19,7 @@ export interface PathPayload {
 
 const NUL = '\u0000';
 const MAX_PATH_LENGTH = 32_767;
-const MAX_NAME_LENGTH = 200;
+export const MAX_NAME_LENGTH = 200;
 const MAX_PACKAGE_NAME_LENGTH = 214;
 const MAX_TAG_PREFIX_LENGTH = 64;
 const MAX_COMPONENTS_DIR_LENGTH = 1_024;
@@ -33,14 +33,14 @@ function isPlainObject(value: unknown): value is Readonly<Record<string, unknown
   return prototype === Object.prototype || prototype === null;
 }
 
-function readExactObject(payload: unknown, keys: readonly string[]): Readonly<Record<string, unknown>> | null {
+export function readExactObject(payload: unknown, keys: readonly string[]): Readonly<Record<string, unknown>> | null {
   if (!isPlainObject(payload)) return null;
   const ownKeys = Reflect.ownKeys(payload);
   const hasExactKeys = ownKeys.length === keys.length && keys.every((key) => Object.hasOwn(payload, key));
   return hasExactKeys ? payload : null;
 }
 
-function readText(value: unknown, maxLength: number): string | null {
+export function readText(value: unknown, maxLength: number): string | null {
   return typeof value === 'string' && value.length <= maxLength && !value.includes(NUL) ? value : null;
 }
 
@@ -48,7 +48,7 @@ function isAbsoluteWindowsPath(path: string): boolean {
   return DRIVE_PATH.test(path) || (UNC_SHARE_PATH.test(path) && !DEVICE_NAMESPACE_PATH.test(path));
 }
 
-function readAbsolutePath(value: unknown): string | null {
+export function readAbsolutePath(value: unknown): string | null {
   const path = readText(value, MAX_PATH_LENGTH);
   return path !== null && isAbsoluteWindowsPath(path) ? path : null;
 }

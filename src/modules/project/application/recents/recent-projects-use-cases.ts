@@ -15,7 +15,7 @@ export interface RecentProjectsListing {
   readonly unreadable: boolean;
 }
 
-type RecentDependencies = Pick<ProjectDependencies, 'fileSystem' | 'recentProjects'>;
+export type RecentDependencies = Pick<ProjectDependencies, 'fileSystem' | 'recentProjects'>;
 
 async function isAvailable(deps: RecentDependencies, path: string): Promise<boolean> {
   try {
@@ -26,7 +26,10 @@ async function isAvailable(deps: RecentDependencies, path: string): Promise<bool
   }
 }
 
-function withAvailability(deps: RecentDependencies, projects: readonly RecentProject[]): Promise<RecentProjectView[]> {
+export function withAvailability(
+  deps: RecentDependencies,
+  projects: readonly RecentProject[],
+): Promise<RecentProjectView[]> {
   return Promise.all(
     projects.map(async (project) => ({ ...project, available: await isAvailable(deps, project.path) })),
   );

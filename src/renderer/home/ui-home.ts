@@ -3,10 +3,11 @@ import { customElement, property, query, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import type { OpenedProject, OpenProjectOutcome } from '../../modules/project/application/open/project-outcomes.js';
 import type { RecentProjectView } from '../../modules/project/application/recents/recent-projects-use-cases.js';
+import type { RecentProject } from '../../modules/project/domain/recents/recent-projects.js';
 import type { UiGenApi } from '../../preload/ui-gen-api.js';
 import { icon, studioMark } from '../icons/icon.js';
 import { enter, swap } from '../motion/motion.js';
-import { showToast, type ToastRequest } from '../motion/toast.js';
+import { showToast, type ToastAction, type ToastRequest } from '../motion/toast.js';
 import { hostContents, studioStyles } from '../styles/studio-styles.js';
 import {
   PROJECT_OPENED,
@@ -42,9 +43,15 @@ type OpenTrigger = 'btn-open' | 'empty-open';
 
 const READING_FOLDER = 'Lecture du dossier…';
 const OPEN_PROJECT = 'Ouvrir un projet';
+const UNDO = 'Annuler';
+const FOCUSABLE_IN_ROW = 'a, button';
 
 function triggerOf(event: Event): HTMLElement | null {
   return event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+}
+
+function toRecentProject({ path, name, openedAt }: RecentProjectView): RecentProject {
+  return { path, name, openedAt };
 }
 
 @customElement('ui-home')
@@ -59,6 +66,9 @@ export class UiHome extends LitElement {
   @state() private opening: OpenTrigger | null = null;
 
   @query('#recent-body') private recentBody!: HTMLElement;
+  @query('#recent-list') private recentList!: HTMLUListElement;
+  @query('#empty-create') private emptyCreateButton!: HTMLButtonElement;
+  @query('#btn-open') private openButton!: HTMLButtonElement;
   @query('.ui-toast-region') private toastRegion!: HTMLOListElement;
   @query('#main') private main!: HTMLElement;
   @query('ui-create-dialog') private createDialog!: UiCreateDialog;
@@ -105,7 +115,7 @@ export class UiHome extends LitElement {
                 <h2 class="ac-recent__title" id="recent-title">Projets récents</h2>
                 <span class="ui-count" id="recent-count" ?hidden=${empty}>${String(this.recents.length)}</span>
                 <span class="ui-spacer"></span>
-                <button class="ui-btn ui-btn--ghost ui-btn--sm" type="button" id="recent-clear" ?hidden=${empty}>${icon('corbeille', 'icon--sm')}Effacer la liste</button>
+                <button class="ui-btn ui-btn--ghost ui-btn--sm" type="button" id="recent-clear" ?hidden=${empty} @click=${this.onClearClick}>${icon('corbeille', 'icon--sm')}Effacer la liste</button>
               </div>
               <div class="ac-recent__body" id="recent-body">
                 <ul class="ui-list ac-recent__list" id="recent-list" aria-labelledby="recent-title" ?hidden=${empty}>
@@ -224,34 +234,76 @@ export class UiHome extends LitElement {
   }
 
   private async removeRecent(event: MouseEvent, project: RecentProjectView): Promise<void> {
-    const button = triggerOf(event);
-    let remaining: RecentProjectView[];
-    try {
-      remaining = await this.api.recents.remove(project.path);
-    } catch (error) {
-      this.refuse(error, button);
-      return;
-    }
-    await swap(this.recentBody, () => {
-      this.recents = remaining;
-    });
-    await this.updateComplete;
-    const next =
-      this.renderRoot.querySelector<HTMLElement>('#recent-list a, #recent-list button') ??
-      this.renderRoot.querySelector<HTMLElement>('#btn-open');
-    next?.focus();
+    const remaining = await this.requestRecents(() => this.api.recents.remove(project.path), triggerOf(event));
+    if (remaining === null) return;
+    await this.showRecents(remaining);
+    this.recentFocusTarget(null).focus();
     this.toast({
       tone: 'success',
       title: `${project.name} retiré de la liste`,
       message: `Le dossier ${project.path} n'a pas été modifié.`,
+      action: this.undoAction([toRecentProject(project)], project.path),
     });
+  }
+
+  private async clearRecents(event: MouseEvent): Promise<void> {
+    const cleared = this.recents.map(toRecentProject);
+    const remaining = await this.requestRecents(() => this.api.recents.clear(), triggerOf(event));
+    if (remaining === null) return;
+    await this.showRecents(remaining);
+    this.emptyCreateButton.focus();
+    this.toast({
+      tone: 'success',
+      title: 'Liste des projets récents effacée',
+      message: "Aucun dossier n'a été modifié.",
+      action: this.undoAction(cleared, null),
+    });
+  }
+
+  private async restoreRecents(projects: readonly RecentProject[], focusPath: string | null): Promise<void> {
+    const restored = await this.requestRecents(() => this.api.recents.restore(projects), this.recentFocusTarget(null));
+    if (restored === null) return;
+    await this.showRecents(restored);
+    this.recentFocusTarget(focusPath).focus();
+  }
+
+  private async requestRecents(
+    request: () => Promise<RecentProjectView[]>,
+    refusalFocus: HTMLElement | null,
+  ): Promise<RecentProjectView[] | null> {
+    try {
+      return await request();
+    } catch (error) {
+      this.refuse(error, refusalFocus);
+      return null;
+    }
+  }
+
+  private undoAction(projects: readonly RecentProject[], focusPath: string | null): ToastAction {
+    return {
+      label: UNDO,
+      onClick: () => {
+        void this.restoreRecents(projects, focusPath);
+      },
+    };
+  }
+
+  private recentFocusTarget(path: string | null): HTMLElement {
+    const index = this.recents.findIndex((project) => project.path === path);
+    const row = this.recentList.children.item(index)?.querySelector<HTMLElement>(FOCUSABLE_IN_ROW);
+    return row ?? this.recentList.querySelector<HTMLElement>(FOCUSABLE_IN_ROW) ?? this.openButton;
+  }
+
+  private async showRecents(projects: readonly RecentProjectView[]): Promise<void> {
+    await swap(this.recentBody, () => {
+      this.recents = projects;
+    });
+    await this.updateComplete;
   }
 
   private async reloadRecents(): Promise<void> {
     const { projects } = await this.api.recents.list();
-    await swap(this.recentBody, () => {
-      this.recents = projects;
-    });
+    await this.showRecents(projects);
   }
 
   private projectOpened(project: OpenedProject, notice: ToastRequest | null): void {
@@ -279,6 +331,10 @@ export class UiHome extends LitElement {
 
   private readonly onOpenClick = (event: MouseEvent): void => {
     void this.openFolder(event);
+  };
+
+  private readonly onClearClick = (event: MouseEvent): void => {
+    void this.clearRecents(event);
   };
 
   private readonly onProjectCreated = (event: CustomEvent<ProjectCreatedDetail>): void => {

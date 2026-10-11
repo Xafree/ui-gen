@@ -1,6 +1,8 @@
 export const IPC_CHANNELS = {
   recentsList: 'recents:list',
   recentsRemove: 'recents:remove',
+  recentsClear: 'recents:clear',
+  recentsRestore: 'recents:restore',
   recentsOpen: 'recents:open',
   projectDefaultLocation: 'project:default-location',
   projectChooseLocation: 'project:choose-location',

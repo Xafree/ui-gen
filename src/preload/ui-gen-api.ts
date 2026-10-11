@@ -8,6 +8,7 @@ import type {
   RecentProjectsListing,
   RecentProjectView,
 } from '../modules/project/application/recents/recent-projects-use-cases.js';
+import type { RecentProject } from '../modules/project/domain/recents/recent-projects.js';
 
 export type ChooseLocationOutcome =
   | { readonly canceled: true }
@@ -20,6 +21,8 @@ export interface UiGenApi {
   readonly recents: {
     list(): Promise<RecentProjectsListing>;
     remove(path: string): Promise<RecentProjectView[]>;
+    clear(): Promise<RecentProjectView[]>;
+    restore(projects: readonly RecentProject[]): Promise<RecentProjectView[]>;
     open(path: string): Promise<OpenProjectOutcome>;
   };
   readonly project: {

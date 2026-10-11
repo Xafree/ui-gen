@@ -13,7 +13,6 @@ import type {
 import {
   listRecentProjects,
   proposeProjectLocation,
-  removeRecentProjectEntry,
 } from '../../modules/project/application/recents/recent-projects-use-cases.js';
 import type { FolderPicker } from '../../modules/project/ports/folder-picker.js';
 import type { ChooseLocationOutcome, OpenFolderOutcome } from '../../preload/ui-gen-api.js';
@@ -43,9 +42,9 @@ export interface ProjectHandlerDependencies {
   readonly isTrustedSender: (senderUrl: string) => boolean;
 }
 
-type PayloadReader<Input> = (payload: unknown) => Input | null;
+export type PayloadReader<Input> = (payload: unknown) => Input | null;
 
-type GuardedHandle = <Input>(
+export type GuardedHandle = <Input>(
   channel: IpcChannel,
   read: PayloadReader<Input>,
   useCase: (input: Input) => Promise<unknown>,
@@ -63,7 +62,7 @@ const ADOPTION_NOT_PENDING: OpenProjectOutcome = {
   errors: [{ field: 'path', code: 'not-pending' }],
 };
 
-function withoutPayload(): undefined {
+export function withoutPayload(): undefined {
   return undefined;
 }
 
@@ -81,7 +80,7 @@ async function runUseCase<Result>(channel: IpcChannel, useCase: () => Promise<Re
   }
 }
 
-function guardedHandle(registry: IpcRegistry, isTrustedSender: (senderUrl: string) => boolean): GuardedHandle {
+export function guardedHandle(registry: IpcRegistry, isTrustedSender: (senderUrl: string) => boolean): GuardedHandle {
   return (channel, read, useCase) => {
     registry.handle(channel, async (event, payload) => {
       const senderUrl = event.senderFrame?.url ?? null;
@@ -162,7 +161,6 @@ function closeProject(session: ProjectSession): Promise<void> {
 export function registerProjectHandlers(registry: IpcRegistry, deps: ProjectHandlerDependencies): void {
   const handle = guardedHandle(registry, deps.isTrustedSender);
   handle(IPC_CHANNELS.recentsList, withoutPayload, () => listRecentProjects(deps.project));
-  handle(IPC_CHANNELS.recentsRemove, readPathPayload, ({ path }) => removeRecentProjectEntry(deps.project, path));
   handle(IPC_CHANNELS.recentsOpen, readPathPayload, (payload) => openRecent(deps, payload));
   handle(IPC_CHANNELS.projectDefaultLocation, withoutPayload, () => proposeLocation(deps));
   handle(IPC_CHANNELS.projectChooseLocation, withoutPayload, () => chooseLocation(deps));
