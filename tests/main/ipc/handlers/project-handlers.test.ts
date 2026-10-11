@@ -185,7 +185,13 @@ describe('registerProjectHandlers', () => {
       'recents:remove',
       'recents:restore',
     ]);
-    expect(registry.channels.toSorted()).toEqual(Object.values(IPC_CHANNELS).toSorted());
+    expect(Object.values(IPC_CHANNELS)).toEqual(expect.arrayContaining(registry.channels));
+  });
+
+  it('declares the component channels next to the project ones', () => {
+    expect(Object.values(IPC_CHANNELS)).toEqual(
+      expect.arrayContaining(['component:list', 'component:open', 'component:last-opened']),
+    );
   });
 });
 

@@ -79,13 +79,14 @@ async function withStudio(run: (studio: Studio) => Promise<void>): Promise<void>
   }
 }
 
-test('exposes only the project API, opens a 1440 x 900 window and keeps the system theme', async () => {
+test('exposes only the project and component API, opens a 1440 x 900 window and keeps the system theme', async () => {
   await withStudio(async ({ app, window }) => {
     expect(
       await window.evaluate(() => {
         const api = (globalThis as unknown as BridgeHost).uiGen;
         return {
           top: Object.keys(api).sort(),
+          components: Object.keys(api.components).sort(),
           recents: Object.keys(api.recents).sort(),
           project: Object.keys(api.project).sort(),
           ipcRenderer: 'ipcRenderer' in globalThis,
@@ -93,7 +94,8 @@ test('exposes only the project API, opens a 1440 x 900 window and keeps the syst
         };
       }),
     ).toEqual({
-      top: ['platform', 'project', 'recents'],
+      top: ['components', 'platform', 'project', 'recents'],
+      components: ['lastOpened', 'list', 'onChanged', 'onStatus', 'open'],
       recents: ['clear', 'list', 'open', 'remove', 'restore'],
       project: ['adopt', 'chooseLocation', 'close', 'create', 'defaultLocation', 'openFolder'],
       ipcRenderer: false,
