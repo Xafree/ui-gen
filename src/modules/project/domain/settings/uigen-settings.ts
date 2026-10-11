@@ -60,11 +60,11 @@ const FIELD_RULES: readonly FieldRule[] = [
   { field: 'componentsDir', accepts: isComponentsDir, errorCode: () => 'invalid-components-dir' },
 ];
 
-const SCHEMA_FIELDS: readonly string[] = FIELD_RULES.map(({ field }) => field);
+const SCHEMA_FIELDS: ReadonlySet<string> = new Set(FIELD_RULES.map(({ field }) => field));
 
 function unknownFieldErrors(record: Readonly<Record<string, unknown>>): SettingsError[] {
   return Object.keys(record)
-    .filter((key) => !SCHEMA_FIELDS.includes(key))
+    .filter((key) => !SCHEMA_FIELDS.has(key))
     .map((field): SettingsError => ({ code: 'unknown-field', field }));
 }
 

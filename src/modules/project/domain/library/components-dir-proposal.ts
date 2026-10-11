@@ -20,6 +20,6 @@ export function proposeComponentsDir(sources: readonly ComponentSource[]): strin
     .map((source) => source.relativePath.split('/').slice(0, -1));
   const [first, ...others] = folders;
   if (first === undefined) return DEFAULT_COMPONENTS_DIR;
-  const common = others.reduce(commonLeadingSegments, first);
+  const common = others.reduce((shared, folder) => commonLeadingSegments(shared, folder), first);
   return common.length === 0 ? '.' : common.join('/');
 }
