@@ -151,12 +151,10 @@
   --ui-cobalt-600: #2B5BD7;
   --ui-cobalt-700: #2450C2;
   --ui-cobalt-800: #1F45A8;
-}
 
 /* --------------------------------------------------------------------------
    2. STUDIO · thème clair (défaut)
    -------------------------------------------------------------------------- */
-:root {
   color-scheme: light;
 
   /* Surfaces */
@@ -404,6 +402,61 @@
   --hz-p-font: "Figtree", "Segoe UI", system-ui, sans-serif;
   --hz-p-radius: 8px;
   --hz-p-radius-field: 8px;
+
+  /* Sémantiques Kit Horizon · mode clair (défaut) */
+  --hz-color-accent: var(--hz-p-accent);
+  --hz-color-accent-hover: var(--hz-p-accent-hover);
+  --hz-color-on-accent: var(--hz-p-on-accent);
+  --hz-color-accent-soft: color-mix(in oklab, var(--hz-p-accent) 12%, transparent);
+  --hz-color-bg: oklch(99.4% calc(var(--hz-gray-chroma) * 0.5) var(--hz-gray-hue));
+  --hz-color-surface: oklch(97.6% var(--hz-gray-chroma) var(--hz-gray-hue));
+  --hz-color-surface-2: oklch(95.2% var(--hz-gray-chroma) var(--hz-gray-hue));
+  --hz-color-raised: oklch(99.4% calc(var(--hz-gray-chroma) * 0.5) var(--hz-gray-hue));
+  --hz-color-border: oklch(90.5% var(--hz-gray-chroma) var(--hz-gray-hue));
+  --hz-color-border-strong: oklch(80% var(--hz-gray-chroma) var(--hz-gray-hue));
+  --hz-color-text: oklch(22% var(--hz-gray-chroma) var(--hz-gray-hue));
+  --hz-color-muted: oklch(50% var(--hz-gray-chroma) var(--hz-gray-hue));
+  --hz-color-success: #1F7A4D;
+  --hz-color-success-soft: #E5F3EB;
+  --hz-color-warning: #9A5B00;
+  --hz-color-warning-soft: #FCF1DC;
+  --hz-color-danger: #C0352B;
+  --hz-color-danger-soft: #FCE9E7;
+  --hz-color-focus: var(--hz-p-accent);
+  --hz-color-scrim: rgba(15, 20, 25, 0.45);
+
+  --hz-font-sans: var(--hz-p-font);
+  --hz-font-mono: "Geist Mono", "Cascadia Mono", Consolas, monospace;
+  --hz-text-xs: 12px;
+  --hz-text-sm: 13px;
+  --hz-text-md: 14px;
+  --hz-text-lg: 16px;
+  --hz-text-xl: 20px;
+  --hz-text-2xl: 28px;
+  --hz-weight-regular: 400;
+  --hz-weight-medium: 500;
+  --hz-weight-bold: 650;
+
+  --hz-space-1: 4px;
+  --hz-space-2: 8px;
+  --hz-space-3: 12px;
+  --hz-space-4: 16px;
+  --hz-space-5: 20px;
+  --hz-space-6: 24px;
+  --hz-space-8: 32px;
+
+  --hz-radius-sm: calc(var(--hz-p-radius) * 0.5);
+  --hz-radius-md: var(--hz-p-radius);
+  --hz-radius-lg: calc(var(--hz-p-radius) * 1.5);
+  --hz-radius-field: var(--hz-p-radius-field);
+  --hz-radius-full: 999px;
+
+  --hz-shadow-sm: 0 1px 2px oklch(20% 0.02 var(--hz-gray-hue) / 0.06);
+  --hz-shadow-md: 0 4px 14px oklch(20% 0.02 var(--hz-gray-hue) / 0.08);
+
+  --hz-control-h-sm: 32px;
+  --hz-control-h: 40px;
+  --hz-control-h-lg: 48px;
 }
 
 /* Préréglages du playground (inspirés de theme-factory, recalibrés AA) */
@@ -471,65 +524,6 @@
   --hz-p-font: "Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
   --hz-p-radius: 2px;
   --hz-p-radius-field: 2px;
-}
-
-/* Sémantiques Kit Horizon · mode clair (défaut) */
-:root,
-[data-hz-preset],
-[data-hz-theme] {
-  --hz-color-accent: var(--hz-p-accent);
-  --hz-color-accent-hover: var(--hz-p-accent-hover);
-  --hz-color-on-accent: var(--hz-p-on-accent);
-  --hz-color-accent-soft: color-mix(in oklab, var(--hz-p-accent) 12%, transparent);
-  --hz-color-bg: oklch(99.4% calc(var(--hz-gray-chroma) * 0.5) var(--hz-gray-hue));
-  --hz-color-surface: oklch(97.6% var(--hz-gray-chroma) var(--hz-gray-hue));
-  --hz-color-surface-2: oklch(95.2% var(--hz-gray-chroma) var(--hz-gray-hue));
-  --hz-color-raised: oklch(99.4% calc(var(--hz-gray-chroma) * 0.5) var(--hz-gray-hue));
-  --hz-color-border: oklch(90.5% var(--hz-gray-chroma) var(--hz-gray-hue));
-  --hz-color-border-strong: oklch(80% var(--hz-gray-chroma) var(--hz-gray-hue));
-  --hz-color-text: oklch(22% var(--hz-gray-chroma) var(--hz-gray-hue));
-  --hz-color-muted: oklch(50% var(--hz-gray-chroma) var(--hz-gray-hue));
-  --hz-color-success: #1F7A4D;
-  --hz-color-success-soft: #E5F3EB;
-  --hz-color-warning: #9A5B00;
-  --hz-color-warning-soft: #FCF1DC;
-  --hz-color-danger: #C0352B;
-  --hz-color-danger-soft: #FCE9E7;
-  --hz-color-focus: var(--hz-p-accent);
-  --hz-color-scrim: rgba(15, 20, 25, 0.45);
-
-  --hz-font-sans: var(--hz-p-font);
-  --hz-font-mono: "Geist Mono", "Cascadia Mono", Consolas, monospace;
-  --hz-text-xs: 12px;
-  --hz-text-sm: 13px;
-  --hz-text-md: 14px;
-  --hz-text-lg: 16px;
-  --hz-text-xl: 20px;
-  --hz-text-2xl: 28px;
-  --hz-weight-regular: 400;
-  --hz-weight-medium: 500;
-  --hz-weight-bold: 650;
-
-  --hz-space-1: 4px;
-  --hz-space-2: 8px;
-  --hz-space-3: 12px;
-  --hz-space-4: 16px;
-  --hz-space-5: 20px;
-  --hz-space-6: 24px;
-  --hz-space-8: 32px;
-
-  --hz-radius-sm: calc(var(--hz-p-radius) * 0.5);
-  --hz-radius-md: var(--hz-p-radius);
-  --hz-radius-lg: calc(var(--hz-p-radius) * 1.5);
-  --hz-radius-field: var(--hz-p-radius-field);
-  --hz-radius-full: 999px;
-
-  --hz-shadow-sm: 0 1px 2px oklch(20% 0.02 var(--hz-gray-hue) / 0.06);
-  --hz-shadow-md: 0 4px 14px oklch(20% 0.02 var(--hz-gray-hue) / 0.08);
-
-  --hz-control-h-sm: 32px;
-  --hz-control-h: 40px;
-  --hz-control-h-lg: 48px;
 }
 
 /* Sémantiques Kit Horizon · mode sombre (aperçu uniquement) */
