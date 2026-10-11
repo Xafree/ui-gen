@@ -114,7 +114,7 @@ describe('diagnostics of a component read with the TypeScript parser', () => {
     const model = read(text);
 
     expect(located(model, text).filter((diagnostic) => diagnostic.severity === 'error')).toEqual([
-      { severity: 'error', code: 'ts(1109)', message: 'Expression expected.', line: 120, column: 24, source: ';' },
+      { severity: 'error', code: 'ts(1109)', message: 'Expression attendue.', line: 120, column: 24, source: ';' },
     ]);
   });
 
@@ -132,10 +132,10 @@ describe('diagnostics of a component read with the TypeScript parser', () => {
         .filter((diagnostic) => diagnostic.severity === 'error')
         .map(({ code, message, line, column }) => ({ code, message, line, column })),
     ).toEqual([
-      { code: 'ts(1005)', message: "';' expected.", line: 145, column: 12 },
+      { code: 'ts(1005)', message: "';' attendu.", line: 145, column: 12 },
       {
         code: 'ts(1068)',
-        message: 'Unexpected token. A constructor, method, accessor, or property was expected.',
+        message: 'Jeton inattendu. Un constructeur, une méthode, un accesseur ou une propriété est attendu.',
         line: 175,
         column: 1,
       },
