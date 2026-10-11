@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { setTimeout as pause } from 'node:timers/promises';
 import {
   ProjectWriteError,
   type FolderState,
@@ -16,6 +17,9 @@ const DECLARATION_SUFFIX = '.d.ts';
 const MAX_SOURCE_BYTES = 1_000_000;
 const BYTE_ORDER_MARK = '\uFEFF';
 const LEFTOVER_REMOVAL = { recursive: true, force: true, maxRetries: 3 } as const;
+const RETRYABLE_RENAME_CODES: ReadonlySet<string> = new Set(['EPERM', 'EBUSY', 'EACCES']);
+const RENAME_RETRIES = 3;
+const RENAME_RETRY_DELAY_MS = 100;
 
 function errorCode(error: unknown): string {
   return error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : 'UNKNOWN';
@@ -33,8 +37,15 @@ function isInside(folder: string, path: string): boolean {
 
 function toNativePath(folder: string, relativePath: string): string {
   const path = join(folder, ...relativePath.split('/'));
-  if (!isInside(folder, path)) throw new ProjectWriteError(path, 'EINVAL');
+  if (!isInside(folder, path)) {
+    console.error(`Refused ${JSON.stringify(relativePath)}: it leaves ${folder}`);
+    throw new ProjectWriteError(path, 'EINVAL');
+  }
   return path;
+}
+
+function comparePaths(left: string, right: string): number {
+  return left.localeCompare(right, 'en') || (left < right ? -1 : 1);
 }
 
 function withoutByteOrderMark(text: string): string {
@@ -78,11 +89,30 @@ async function lstatIfPresent(path: string) {
   }
 }
 
-async function freeTarget(target: string): Promise<void> {
+async function freeTarget(target: string): Promise<boolean> {
   const info = await lstatIfPresent(target);
-  if (info === null) return;
+  if (info === null) return false;
   if (!info.isDirectory()) throw new ProjectWriteError(target, 'EEXIST');
   await rmdir(target);
+  return true;
+}
+
+async function renameWithRetry(from: string, to: string, retriesLeft = RENAME_RETRIES): Promise<void> {
+  try {
+    await rename(from, to);
+  } catch (error) {
+    if (retriesLeft === 0 || !RETRYABLE_RENAME_CODES.has(errorCode(error))) throw error;
+    await pause(RENAME_RETRY_DELAY_MS);
+    await renameWithRetry(from, to, retriesLeft - 1);
+  }
+}
+
+async function restoreEmptyFolder(path: string): Promise<void> {
+  try {
+    await mkdir(path);
+  } catch (error) {
+    console.error(`Cannot put back the empty folder ${path}`, error);
+  }
 }
 
 async function removeLeftover(path: string): Promise<void> {
@@ -132,25 +162,31 @@ export class NodeProjectFileSystem implements ProjectFileSystem {
   }
 
   async listSourceFiles(folder: string): Promise<SourceFile[]> {
-    const relativePaths: string[] = [];
-    await collectSourcePaths(folder, folder, relativePaths);
-    const files: SourceFile[] = [];
-    for (const relativePath of relativePaths.toSorted((left, right) => left.localeCompare(right, 'en'))) {
-      files.push({ relativePath, content: await readFile(toNativePath(folder, relativePath), 'utf8') });
+    try {
+      const relativePaths: string[] = [];
+      await collectSourcePaths(folder, folder, relativePaths);
+      const files: SourceFile[] = [];
+      for (const relativePath of relativePaths.toSorted(comparePaths)) {
+        files.push({ relativePath, content: await readFile(toNativePath(folder, relativePath), 'utf8') });
+      }
+      return files;
+    } catch (error) {
+      throw writeFailure(folder, error);
     }
-    return files;
   }
 
   async createFolderAtomically(target: string, entries: readonly ProjectEntry[]): Promise<void> {
     const staging = join(dirname(target), `.${basename(target)}.uigen-${randomUUID()}`);
     const staged = entries.map((entry) => ({ entry, path: toNativePath(staging, entry.relativePath) }));
+    let replacedEmptyFolder = false;
     try {
       await mkdir(staging);
       for (const { entry, path } of staged) await writeEntry(entry, path);
-      await freeTarget(target);
-      await rename(staging, target);
+      replacedEmptyFolder = await freeTarget(target);
+      await renameWithRetry(staging, target);
     } catch (error) {
       await removeLeftover(staging);
+      if (replacedEmptyFolder) await restoreEmptyFolder(target);
       throw writeFailure(target, error);
     }
   }
