@@ -4,6 +4,7 @@ export default {
     command: 'npx --no-install vitest run --project node tests/modules',
   },
   coverageAnalysis: 'off',
+  timeoutMS: 60000,
   mutate: ['src/modules/*/domain/**/*.ts', 'src/modules/*/application/**/*.ts'],
   incremental: true,
   incrementalFile: 'reports/stryker-incremental.json',
