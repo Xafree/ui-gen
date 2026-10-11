@@ -101,14 +101,16 @@ describe('permissions asked by the canvas', () => {
   });
 
   it('denies requests and checks of the canvas, and leaves the studio alone', () => {
-    let request: ((...args: unknown[]) => void) | null = null;
-    let check: ((...args: unknown[]) => boolean) | null = null;
+    const handlers: { request: (...args: unknown[]) => void; check: (...args: unknown[]) => boolean } = {
+      request: () => undefined,
+      check: () => true,
+    };
     const studioSession = {
       setPermissionRequestHandler: (handler: (...args: unknown[]) => void) => {
-        request = handler;
+        handlers.request = handler;
       },
       setPermissionCheckHandler: (handler: (...args: unknown[]) => boolean) => {
-        check = handler;
+        handlers.check = handler;
       },
     };
     denyCanvasPermissions(studioSession as unknown as Session);
@@ -117,14 +119,14 @@ describe('permissions asked by the canvas', () => {
     const answer = (granted: boolean): void => {
       answers.push(granted);
     };
-    request?.(null, 'geolocation', answer, { requestingUrl: HARNESS, isMainFrame: false });
-    request?.(null, 'clipboard-read', answer, { requestingUrl: 'file:///E:/app/index.html', isMainFrame: true });
+    handlers.request(null, 'geolocation', answer, { requestingUrl: HARNESS, isMainFrame: false });
+    handlers.request(null, 'clipboard-read', answer, { requestingUrl: 'file:///E:/app/index.html', isMainFrame: true });
 
     expect(answers).toEqual([false, true]);
-    expect(check?.(null, 'media', 'null', { requestingUrl: HARNESS, isMainFrame: false })).toBe(false);
-    expect(check?.(null, 'media', 'null', { isMainFrame: false })).toBe(false);
-    expect(check?.(null, 'clipboard-read', 'file://', { requestingUrl: 'file:///E:/app/index.html', isMainFrame: true })).toBe(
-      true,
-    );
+    expect(handlers.check(null, 'media', 'null', { requestingUrl: HARNESS, isMainFrame: false })).toBe(false);
+    expect(handlers.check(null, 'media', 'null', { isMainFrame: false })).toBe(false);
+    expect(
+      handlers.check(null, 'clipboard-read', 'file://', { requestingUrl: 'file:///E:/app/index.html', isMainFrame: true }),
+    ).toBe(true);
   });
 });
