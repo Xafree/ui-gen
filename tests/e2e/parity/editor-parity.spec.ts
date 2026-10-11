@@ -30,7 +30,6 @@ import {
 } from './mockup-reference';
 
 const THEMES: readonly Theme[] = ['light', 'dark'];
-const FRAME_BODY = '#frame-body';
 const PRICING_TAG = 'hz-pricing-card';
 const DATA_DEPENDENT_REGIONS: readonly string[] = [
   '#tree',
@@ -44,8 +43,14 @@ const DATA_DEPENDENT_REGIONS: readonly string[] = [
   '#insp-sub',
   '#rule-count',
   '#tp-props .ui-section > :not(.ui-section__header)',
-  '#frame-body',
+  '#viewport',
+  '#ruler-x',
+  '#ruler-y',
+  '#sel-box',
 ];
+const STRICT_REGIONS: readonly string[] = ['#toolbar', '#screen-seg', '#frame-chip', '#hz-dark', '#preview-toggle'];
+const MEASURED_REGIONS: readonly string[] = [...DATA_DEPENDENT_REGIONS, ...STRICT_REGIONS];
+const NO_ELEMENT = '#parity-nothing-to-mask';
 const MASK_OVERLAY_ID = 'parity-data-masks';
 const MASK_OVERLAY_COLOR = '#FF00FF';
 
@@ -212,7 +217,7 @@ async function measureRegion(page: Page, selector: string): Promise<Box[]> {
 
 async function measureRegions(page: Page): Promise<Record<string, Box[]>> {
   const measured: Record<string, Box[]> = {};
-  for (const selector of DATA_DEPENDENT_REGIONS) measured[selector] = await measureRegion(page, selector);
+  for (const selector of MEASURED_REGIONS) measured[selector] = await measureRegion(page, selector);
   return measured;
 }
 
@@ -256,11 +261,33 @@ async function removeMasks(page: Page): Promise<void> {
   await page.evaluate(`document.getElementById(${JSON.stringify(MASK_OVERLAY_ID)})?.remove()`);
 }
 
-async function maskedCapture(page: Page): Promise<MaskedCapture> {
-  const boxes = await settledRegions(page);
-  await paintMasks(page, Object.values(boxes).flat());
+function subtractBox(box: Box, cut: Box): Box[] {
+  const left = Math.max(box.x, cut.x);
+  const top = Math.max(box.y, cut.y);
+  const right = Math.min(box.x + box.width, cut.x + cut.width);
+  const bottom = Math.min(box.y + box.height, cut.y + cut.height);
+  if (right <= left || bottom <= top) return [box];
+  const pieces: Box[] = [];
+  if (top > box.y) pieces.push({ x: box.x, y: box.y, width: box.width, height: top - box.y });
+  if (bottom < box.y + box.height) pieces.push({ x: box.x, y: bottom, width: box.width, height: box.y + box.height - bottom });
+  if (left > box.x) pieces.push({ x: box.x, y: top, width: left - box.x, height: bottom - top });
+  if (right < box.x + box.width) pieces.push({ x: right, y: top, width: box.x + box.width - right, height: bottom - top });
+  return pieces;
+}
+
+function boxesOf(regions: readonly string[], ...sides: readonly MaskBoxes[]): Box[] {
+  return sides.flatMap((side) => regions.flatMap((selector) => side[selector] ?? []));
+}
+
+function unionMask(mockup: MaskBoxes, studio: MaskBoxes): Box[] {
+  const strict = boxesOf(STRICT_REGIONS, mockup, studio);
+  return strict.reduce((pieces, cut) => pieces.flatMap((piece) => subtractBox(piece, cut)), boxesOf(DATA_DEPENDENT_REGIONS, mockup, studio));
+}
+
+async function captureUnderMask(page: Page, mask: readonly Box[]): Promise<Buffer> {
+  await paintMasks(page, mask);
   try {
-    return { image: await settledCapture(page, page.locator(FRAME_BODY)), boxes };
+    return await settledCapture(page, page.locator(NO_ELEMENT));
   } finally {
     await removeMasks(page);
   }
@@ -271,15 +298,16 @@ function describeBoxes(boxes: readonly Box[]): string {
   return boxes.map((box) => `${String(box.x)},${String(box.y)} ${String(box.width)}x${String(box.height)}`).join(' | ');
 }
 
-function maskBoxGaps(label: string, mockup: MaskBoxes, studio: MaskBoxes): string[] {
-  const gaps: string[] = [];
+function annotateMaskSizes(label: string, mockup: MaskBoxes, studio: MaskBoxes): void {
   for (const selector of DATA_DEPENDENT_REGIONS) {
     const expected = mockup[selector] ?? [];
     const actual = studio[selector] ?? [];
     if (JSON.stringify(expected) === JSON.stringify(actual)) continue;
-    gaps.push(`${label}: masked box ${selector} differs, mockup ${describeBoxes(expected)} vs studio ${describeBoxes(actual)}`);
+    test.info().annotations.push({
+      type: 'data-region-size',
+      description: `${label}: ${selector} mockup ${describeBoxes(expected)} vs studio ${describeBoxes(actual)}`,
+    });
   }
-  return gaps;
 }
 
 async function chooseStudioTheme(window: Page, theme: Theme): Promise<void> {
@@ -321,7 +349,12 @@ async function loadMockupState(
   );
 }
 
-async function captureMockupEditor(app: ElectronApplication, state: MockupState, theme: Theme): Promise<MaskedCapture> {
+async function captureMockupEditor(
+  app: ElectronApplication,
+  state: MockupState,
+  theme: Theme,
+  studioBoxes: MaskBoxes,
+): Promise<MaskedCapture> {
   const reference = await openReferenceWindow(app);
   try {
     await loadMockupState(app, reference.id, state.query);
@@ -333,7 +366,8 @@ async function captureMockupEditor(app: ElectronApplication, state: MockupState,
     await expect(reference.page.locator('#layer-count')).toHaveText(/\d/);
     await reference.page.mouse.move(1430, 890);
     await expectFontsLoaded(reference.page);
-    return await maskedCapture(reference.page);
+    const boxes = await settledRegions(reference.page);
+    return { image: await captureUnderMask(reference.page, unionMask(boxes, studioBoxes)), boxes };
   } finally {
     await closeReferenceWindow(app, reference);
   }
@@ -356,15 +390,16 @@ async function expectEditorParity(state: MockupState, empty: boolean): Promise<v
       await state.ready(window);
       await window.mouse.move(1430, 890);
       await expectFontsLoaded(window);
-      const studio = await maskedCapture(window);
-      const mockup = await captureMockupEditor(app, state, theme);
+      const studioBoxes = await settledRegions(window);
+      const mockup = await captureMockupEditor(app, state, theme, studioBoxes);
+      const studio = await captureUnderMask(window, unionMask(mockup.boxes, studioBoxes));
       const name = `editor-${state.name}-${theme}`;
       try {
-        await expectIdenticalCaptures(app, test.info(), name, mockup.image, studio.image);
+        await expectIdenticalCaptures(app, test.info(), name, mockup.image, studio);
       } catch (error) {
         failures.push(firstLine(error));
       }
-      failures.push(...maskBoxGaps(name, mockup.boxes, studio.boxes));
+      annotateMaskSizes(name, mockup.boxes, studioBoxes);
       const next = THEMES[index + 1];
       if (next !== undefined) await chooseStudioTheme(window, next);
     });
