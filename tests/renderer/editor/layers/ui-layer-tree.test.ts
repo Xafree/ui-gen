@@ -45,7 +45,7 @@ describe('<ui-layer-tree> content', () => {
 
     expect(tree().getAttribute('aria-label')).toBe('Calques de hz-plan-badge');
     expect(tree().classList.contains('ui-tree')).toBe(true);
-    expect(treeItems()).toHaveLength(7);
+    expect(treeItems()).toHaveLength(9);
   });
 
   // covers: FCT-0035
@@ -98,7 +98,7 @@ describe('<ui-layer-tree> content', () => {
   it('gives the number of layers in the header, with a non-breaking space', async () => {
     await mountWithLayers(mounted);
 
-    expect(layerCount()).toBe('7\u00a0calques');
+    expect(layerCount()).toBe('9\u00a0calques');
   });
 
   // covers: FCT-0035
@@ -130,7 +130,7 @@ describe('<ui-layer-tree> content', () => {
       'accent:0.1',
       'accent:1',
     ]);
-    expect(layerCount()).toBe('9\u00a0calques');
+    expect(layerCount()).toBe('11\u00a0calques');
   });
 });
 

@@ -24,6 +24,7 @@ export interface Box {
 }
 
 const BOX_TOLERANCE = 2;
+const ACTUAL_SIZE_LABEL = '100 %';
 
 export async function prepareOfferCardEditor(label: string): Promise<OfferCardEditor> {
   const root = await makeTempFolder(label);
@@ -39,12 +40,19 @@ export async function disposeOfferCardEditor(editor: OfferCardEditor): Promise<v
   await removeFolder(editor.userData);
 }
 
+async function zoomToActualSize(window: Page): Promise<void> {
+  const zoomValue = window.locator('#zoom-value');
+  await zoomValue.click();
+  await expect(zoomValue).toHaveText(ACTUAL_SIZE_LABEL);
+}
+
 export async function withOfferCard(editor: OfferCardEditor, run: (studio: Studio) => Promise<void>): Promise<void> {
   const studio = await launchStudio(editor.userData);
   try {
     await openRecentProject(studio.window);
     await expect(canvasContent(studio.window).locator('hz-offer-card')).toHaveCount(3);
     await expect(canvasContent(studio.window).locator('hz-offer-card[variant="pro"] h3.plan')).toHaveText('Horizon');
+    await zoomToActualSize(studio.window);
     await run(studio);
   } finally {
     await closeStudio(studio.app);
