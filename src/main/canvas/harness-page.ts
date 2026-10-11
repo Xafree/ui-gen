@@ -33,6 +33,7 @@ export const HARNESS_CONTENT_SECURITY_POLICY = [
   "default-src uigen-canvas:",
   "connect-src 'none'",
   `script-src uigen-canvas: 'sha256-${IMPORT_MAP_HASH}'`,
+  "style-src uigen-canvas: 'unsafe-inline'",
 ].join('; ');
 
 export function buildHarnessPage(withProjectTokens: boolean): HarnessPage {

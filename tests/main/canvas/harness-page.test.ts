@@ -31,7 +31,7 @@ describe('the harness page', () => {
     const hash = createHash('sha256').update(importMapOf(html).text).digest('base64');
 
     expect(contentSecurityPolicy).toBe(
-      `default-src uigen-canvas:; connect-src 'none'; script-src uigen-canvas: 'sha256-${hash}'`,
+      `default-src uigen-canvas:; connect-src 'none'; script-src uigen-canvas: 'sha256-${hash}'; style-src uigen-canvas: 'unsafe-inline'`,
     );
   });
 
