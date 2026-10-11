@@ -1,9 +1,11 @@
-const SELECTION_PAGE = `
-addEventListener('message', (event) => {
-  const port = event.ports[0];
+import { connectingPrelude } from '../canvas/fake-harness.js';
+
+const SELECTION_PAGE = `${connectingPrelude()}
+{
   port.onmessage = (message) => {
     if (message.data.type === 'hit-test') port.postMessage({ type: 'hit', id: 'accent:0.1' });
   };
+  connect();
   port.postMessage({ type: 'ready' });
   port.postMessage({
     type: 'rects',
@@ -16,7 +18,7 @@ addEventListener('message', (event) => {
       { id: 'accent:0.1', x: 320, y: 80, width: 80, height: 14 },
     ],
   });
-});
+}
 `;
 
 export const SELECTION_HARNESS_URL = `data:text/html;charset=utf-8,${encodeURIComponent(`<script>${SELECTION_PAGE}</script>`)}`;

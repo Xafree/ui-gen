@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NodeRect } from '../../../../src/modules/canvas/domain/harness-message.js';
 import { CANVAS_RECTS, UiCanvasFrame, type CanvasRectsDetail } from '../../../../src/renderer/editor/canvas/ui-canvas-frame.js';
-import { openedComponent } from './fake-harness.js';
+import { connectingPrelude, openedComponent } from './fake-harness.js';
 
-const LAYER_STATE_ECHO = `
-addEventListener('message', (event) => {
-  const port = event.ports[0];
+const LAYER_STATE_ECHO = `${connectingPrelude()}
+{
   port.onmessage = (message) => {
     if (message.data.type === 'layer-state') {
       port.postMessage({ type: 'rects', rects: [{ id: '0', x: message.data.hidden.length, y: message.data.locked.length, width: 1, height: 1 }] });
     }
   };
+  connect();
   port.postMessage({ type: 'ready' });
-});
+}
 `;
 
 const ECHO_URL = `data:text/html;charset=utf-8,${encodeURIComponent(`<script>${LAYER_STATE_ECHO}</script>`)}`;

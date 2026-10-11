@@ -1,26 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { buildLayerTree, countLayers, type LayerNode } from '../../../../../src/modules/editor/domain/layers/layer-tree.js';
-import type { ComponentModel, NodeId, TemplateNode } from '../../../../../src/modules/sync/application/component-model.js';
+import type { ComponentModel, TemplateNode } from '../../../../../src/modules/sync/application/component-model.js';
 
 const RANGE = { start: 0, end: 1 };
 
-function element(id: NodeId, tag: string, children: readonly TemplateNode[] = []): TemplateNode {
+function element(id: string, tag: string, children: readonly TemplateNode[] = []): TemplateNode {
   return { kind: 'element', id, tag, range: RANGE, attributes: [], classes: [], children };
 }
 
-function text(id: NodeId, value: string): TemplateNode {
+function text(id: string, value: string): TemplateNode {
   return { kind: 'text', id, range: RANGE, text: value };
 }
 
-function binding(id: NodeId, property: string): TemplateNode {
+function binding(id: string, property: string): TemplateNode {
   return { kind: 'binding', id, range: RANGE, property };
 }
 
-function conditional(id: NodeId, whenTrue: readonly TemplateNode[], whenFalse: readonly TemplateNode[]): TemplateNode {
+function conditional(id: string, whenTrue: readonly TemplateNode[], whenFalse: readonly TemplateNode[]): TemplateNode {
   return { kind: 'conditional', id, range: RANGE, condition: 'this.featured', whenTrue, whenFalse };
 }
 
-function opaque(id: NodeId): TemplateNode {
+function opaque(id: string): TemplateNode {
   return { kind: 'opaque', id, range: RANGE, source: '${this.items.map((item) => html`<li>${item}</li>`)}' };
 }
 
@@ -78,7 +78,7 @@ function elementNodeIdsIn(nodes: readonly LayerNode[], elementIds: readonly stri
     .filter((nodeId) => nodeId !== null && elementIds.includes(nodeId));
 }
 
-function layerWithNodeId(nodes: readonly LayerNode[], nodeId: NodeId): LayerNode {
+function layerWithNodeId(nodes: readonly LayerNode[], nodeId: string): LayerNode {
   const layer = flatten(nodes).find((candidate) => candidate.nodeId === nodeId);
   if (layer === undefined) throw new Error(`No layer for node ${nodeId}`);
   return layer;
