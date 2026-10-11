@@ -15,7 +15,10 @@ import {
   type TemplateNodeShape,
 } from '../../sync-fixtures';
 
-type Range = { readonly start: number; readonly end: number };
+interface Range {
+  readonly start: number;
+  readonly end: number;
+}
 
 function expectInside(text: string, range: Range): void {
   expect(range.start).toBeGreaterThanOrEqual(0);

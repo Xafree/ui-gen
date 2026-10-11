@@ -29,7 +29,7 @@ export function readFixtureModel(name: string): { readonly text: string; readonl
 
 export function replaceOnce(text: string, search: string, replacement: string): string {
   const index = text.indexOf(search);
-  if (index < 0 || text.indexOf(search, index + 1) >= 0) {
+  if (index < 0 || text.includes(search, index + 1)) {
     throw new Error(`expected exactly one occurrence of ${search}`);
   }
   return text.slice(0, index) + replacement + text.slice(index + search.length);

@@ -5,6 +5,7 @@ import {
   PLAN_BADGE,
   PRICING_CARD,
   allNodes,
+  outline,
   read,
   readFixture,
   readFixtureModel,
@@ -70,26 +71,50 @@ describe('diagnostics of a component read with the TypeScript parser', () => {
   });
 
   // covers: FCT-0039
-  it('warns on the call, ternaries and conditional templates of the mockup pricing card, never as errors', () => {
+  it('warns exactly on the content expressions of the mockup pricing card, not on its attribute and listener expressions', () => {
     const { text, model } = readFixtureModel(PRICING_CARD);
-    const diagnostics = located(model, text);
 
-    expect(diagnostics).toContainEqual(
+    expect(located(model, text)).toEqual([
       warning(148, 9, '${this.badge ? html`<hz-badge tone="accent">${this.badge}</hz-badge>` : nothing}'),
-    );
-    expect(diagnostics).toContainEqual(warning(152, 11, '${formatPrice(this.price, this.locale)}'));
-    expect(diagnostics).toContainEqual(
+      warning(152, 11, '${formatPrice(this.price, this.locale)}'),
       warning(
         168,
         9,
         '${this.variant === \'pro\' ? html`<svg slot="end" aria-hidden="true"><use href="#arrow-right"></use></svg>` : nothing}',
       ),
-    );
-    expect(diagnostics).toContainEqual(
       warning(170, 7, '${this.hint ? html`<hz-tooltip class="hint">${this.hint}</hz-tooltip>` : nothing}'),
+    ]);
+  });
+
+  // covers: FCT-0040
+  it('reports no diagnostic for expressions in attribute, boolean attribute, property or event listener position', () => {
+    const text = replaceOnce(
+      readFixture(PLAN_BADGE),
+      '<button type="button" disabled>Choisir</button>',
+      '<button type=${this.size === \'sm\' ? \'reset\' : \'button\'} ?disabled=${!this.open} .title=${formatTitle(this.label)} @click=${() => this.choose()}>Choisir</button>',
     );
-    expect(diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
-    expect(diagnostics.every((diagnostic) => diagnostic.code === 'ui-gen(visual-sync)')).toBe(true);
+    const model = read(text);
+
+    expect(model.diagnostics).toEqual([]);
+    expect(outline(model.template)).toEqual([
+      [
+        'span.badge.badge--round',
+        [
+          ['strong', ['binding:label']],
+          'text:Encore',
+          'binding:count',
+          'text:places',
+          ['button', ['text:Choisir']],
+        ],
+      ],
+    ]);
+  });
+
+  // covers: FCT-0040
+  it('reports no diagnostic for a directive placed on an element', () => {
+    const text = replaceOnce(readFixture(PLAN_BADGE), '<strong>${this.label}</strong>', '<strong ${ref(this.labelRef)}>${this.label}</strong>');
+
+    expect(read(text).diagnostics).toEqual([]);
   });
 
   // covers: FCT-0039
