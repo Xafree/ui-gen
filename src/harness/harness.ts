@@ -279,8 +279,8 @@ function start(): void {
   });
   window.addEventListener('message', (event: MessageEvent<unknown>) => {
     const [received] = event.ports;
-    const fromStudio = event.source === window.parent && event.origin === studioMessageOrigin();
-    if (port === null && fromStudio && received !== undefined) connect(rendering, received);
+    if (port !== null || received === undefined) return;
+    if (event.origin === studioMessageOrigin() && event.source === window.parent) connect(rendering, received);
   });
 }
 
