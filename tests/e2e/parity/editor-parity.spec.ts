@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { makeTempFolder, removeFolder, writeFiles } from '../project/studio-app';
-import { openRecentProject } from '../editor/canvas/canvas-project';
+import { canvasContent, openRecentProject } from '../editor/canvas/canvas-project';
 import {
   PRICING_CARD_FILE,
   fixtureText,
@@ -18,6 +18,7 @@ import {
   writeKitHorizonSupport,
   writeTsconfig,
 } from '../editor/screen/editor-screen';
+import { clickRow, nodeIdOf, selectionBox, treeRow } from '../editor/selection/selection-project';
 import {
   closeReferenceWindow,
   expectFontsLoaded,
@@ -41,6 +42,7 @@ const DATA_DEPENDENT_REGIONS: readonly string[] = [
   '#status-sel',
   '#insp-name',
   '#insp-sub',
+  '#rule-count',
   '#tp-props .ui-section > :not(.ui-section__header)',
   '#frame-body',
 ];
@@ -95,7 +97,21 @@ async function expectComponentOnCanvas(window: Page): Promise<void> {
   await expect(window.locator('ui-canvas-frame iframe').last().contentFrame().locator(PRICING_TAG).first()).toBeAttached();
 }
 
-const DEFAULT_STATE: MockupState = { name: 'default', query: {}, ready: expectComponentOnCanvas };
+async function selectProCta(window: Page): Promise<void> {
+  const cta = canvasContent(window).locator(`${PRICING_TAG}[variant="pro"] hz-button.cta`);
+  const row = `pro:${await nodeIdOf(cta)}`;
+  await clickRow(window, row);
+  await expect(treeRow(window, row)).toHaveAttribute('aria-selected', 'true');
+  await expect(selectionBox(window)).toBeVisible();
+  await expect(window.locator('#insp-name')).toBeVisible();
+}
+
+async function expectProCtaSelected(window: Page): Promise<void> {
+  await expectComponentOnCanvas(window);
+  await selectProCta(window);
+}
+
+const DEFAULT_STATE: MockupState = { name: 'default', query: {}, ready: expectProCtaSelected };
 
 const NO_PROBLEMS_STATE: MockupState = {
   name: 'no-problems',
@@ -104,7 +120,7 @@ const NO_PROBLEMS_STATE: MockupState = {
     rewritePricingCard(project, (source) =>
       source.replace(FORMAT_PRICE_IMPORT, '').replace(FORMAT_PRICE_CALL, () => '${this.price}'),
     ),
-  ready: expectComponentOnCanvas,
+  ready: expectProCtaSelected,
 };
 
 const EMPTY_LIBRARY_STATE: MockupState = {
@@ -125,6 +141,7 @@ const SYNTAX_ERROR_STATE: MockupState = {
   ready: async (window) => {
     await expect(window.locator('ui-editor')).toBeVisible();
     await expect(window.locator('#problem-count')).toBeVisible();
+    await selectProCta(window);
   },
 };
 
