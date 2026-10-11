@@ -1,4 +1,4 @@
-const COMBINING_MARKS = /[̀-ͯ]/g;
+const COMBINING_MARKS = /[\u0300-\u036f]/g;
 const WORD_SEPARATORS = /[^a-z0-9]+/;
 
 export function toAsciiWords(value: string): string[] {
