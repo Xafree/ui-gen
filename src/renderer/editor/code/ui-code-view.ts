@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { markLines, type Diagnostic, type LineDiagnostics } from '../../../modules/editor/domain/code/code-diagnostics.js';
 import { splitCodeLines, type CodeLine, type CodeSegment } from '../../../modules/editor/domain/code/code-lines.js';
 import { nodeIdAtLine, touchesLine, type TextRange } from '../../../modules/editor/domain/code/code-targets.js';
-import type { NodeId, TemplateNode } from '../../../modules/sync/application/component-model.js';
+import type { TemplateNode } from '../../../modules/sync/application/component-model.js';
 import { diagnosticMeta, diagnosticTitle } from '../../../modules/editor/domain/code/problem-summary.js';
 import type { HighlightToken } from '../../../modules/sync/ports/code-highlighter.js';
 import { icon } from '../../icons/icon.js';
@@ -19,7 +19,7 @@ export const CODE_LINE_SELECT = 'code-line-select';
 export const CODE_CURSOR = 'code-cursor';
 
 export interface CodeLineSelectDetail {
-  readonly nodeId: NodeId;
+  readonly nodeId: string;
 }
 
 export interface CodeCursorDetail {
@@ -98,11 +98,12 @@ export class UiCodeView extends LitElement {
   private marks: readonly (LineDiagnostics | null)[] = [];
   private anchor: DOMRect | null = null;
   private notified = '';
+  private shownScrollTop = 0;
 
   override render(): TemplateResult {
     return html`
       <figure class="ui-code" id="code-figure" aria-label=${`Code Lit : ${this.label}`}>
-        <pre class="ui-code__pre" id="code-pre" tabindex="0" aria-describedby="code-help" @keydown=${this.onKeydown} @click=${this.onClick} @mouseover=${this.onMouseOver} @mouseout=${this.onMouseOut} @focusin=${this.onFocusIn} @focusout=${this.onFocusOut} @scroll=${this.hideDiagnostic}><code id="code">${this.lines.map((line) => this.renderLine(line))}</code></pre>
+        <pre class="ui-code__pre" id="code-pre" tabindex="0" aria-describedby="code-help" @keydown=${this.onKeydown} @click=${this.onClick} @mouseover=${this.onMouseOver} @mouseout=${this.onMouseOut} @focusin=${this.onFocusIn} @focusout=${this.onFocusOut} @scroll=${this.onScroll}><code id="code">${this.lines.map((line) => this.renderLine(line))}</code></pre>
         <p class="sr-only" id="code-help">Haut et bas : déplacer le curseur d'une ligne. Entrée : sélectionner sur le canvas l'élément de la ligne.</p>
       </figure>
       ${this.renderDiagnosticCard()}
@@ -210,11 +211,17 @@ export class UiCodeView extends LitElement {
     const index = Number(mark?.dataset['diag']);
     if (mark === null || Number.isNaN(index)) return;
     this.anchor = mark.getBoundingClientRect();
+    this.shownScrollTop = mark.closest('pre')?.scrollTop ?? 0;
     this.shown = index;
   }
 
   private readonly hideDiagnostic = (): void => {
     this.shown = null;
+  };
+
+  private readonly onScroll = (event: Event): void => {
+    const pre = event.currentTarget;
+    if (pre instanceof HTMLElement && pre.scrollTop !== this.shownScrollTop) this.hideDiagnostic();
   };
 
   private readonly onMouseOver = (event: MouseEvent): void => {
