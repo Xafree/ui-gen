@@ -8,10 +8,17 @@ import { icon, studioMark } from '../icons/icon.js';
 import { enter, swap } from '../motion/motion.js';
 import { showToast, type ToastRequest } from '../motion/toast.js';
 import { hostContents, studioStyles } from '../styles/studio-styles.js';
-import { PROJECT_OPENED, type ProjectOpenedDetail } from '../studio-events.js';
+import {
+  PROJECT_OPENED,
+  type NoticeRequestedDetail,
+  type ProjectCreatedDetail,
+  type ProjectOpenedDetail,
+} from '../studio-events.js';
 import { REQUEST_REFUSED } from '../studio-notices.js';
 import { ThemeController } from '../theme/theme-controller.js';
 import { themeToggleView, toggleTheme } from '../theme/theme.js';
+import './dialogs/ui-create-dialog.js';
+import type { UiCreateDialog } from './dialogs/ui-create-dialog.js';
 import { homeStyles } from './home-styles.js';
 import { formatOpenedAt, formatRelativeTime } from './recent-time.js';
 
@@ -44,6 +51,7 @@ export class UiHome extends LitElement {
   @query('#recent-body') private recentBody!: HTMLElement;
   @query('.ui-toast-region') private toastRegion!: HTMLOListElement;
   @query('#main') private main!: HTMLElement;
+  @query('ui-create-dialog') private createDialog!: UiCreateDialog;
 
   private readonly theme = new ThemeController(this);
   private openPending = false;
@@ -75,7 +83,7 @@ export class UiHome extends LitElement {
                 <p class="ac-start__lead">Créez une bibliothèque de composants Lit, ou ouvrez une bibliothèque existante pour la dessiner, la tester et l'exporter.</p>
               </div>
               <div class="ac-actions" data-enter>
-                <button class="ui-btn ui-btn--primary ui-btn--lg" type="button" id="btn-create">${icon('plus')}Créer un projet</button>
+                <button class="ui-btn ui-btn--primary ui-btn--lg" type="button" id="btn-create" @click=${this.onCreateClick}>${icon('plus')}Créer un projet</button>
                 <button class="ui-btn ui-btn--secondary ui-btn--lg" type="button" id="btn-open">${icon('dossier')}Ouvrir un projet</button>
               </div>
               <p class="ac-note" data-enter>${icon('info')}<span>Un projet est le dossier d'une bibliothèque Lit. UI-GEN y range ses réglages dans un fichier <code>uigen.json</code>.</span></p>
@@ -97,7 +105,7 @@ export class UiHome extends LitElement {
                   <p class="ui-empty__title">Aucun projet récent</p>
                   <p class="ui-empty__text">Les projets que vous créez ou ouvrez s'affichent ici, du plus récent au plus ancien.</p>
                   <div class="ui-empty__actions">
-                    <button class="ui-btn ui-btn--secondary ui-btn--sm" type="button" id="empty-create">Créer un projet</button>
+                    <button class="ui-btn ui-btn--secondary ui-btn--sm" type="button" id="empty-create" @click=${this.onCreateClick}>Créer un projet</button>
                     <button class="ui-btn ui-btn--ghost ui-btn--sm" type="button" id="empty-open">Ouvrir un projet</button>
                   </div>
                 </div>
@@ -106,6 +114,7 @@ export class UiHome extends LitElement {
             </section>
           </div>
         </main>
+        <ui-create-dialog .api=${this.api} @project-created=${this.onProjectCreated} @notice-requested=${this.onNoticeRequested}></ui-create-dialog>
         <ol class="ui-toast-region" aria-live="polite" aria-label="Notifications"></ol>
       </div>
     `;
@@ -211,5 +220,18 @@ export class UiHome extends LitElement {
   private readonly skipToMain = (event: MouseEvent): void => {
     event.preventDefault();
     this.main.focus();
+  };
+
+  private readonly onCreateClick = (event: MouseEvent): void => {
+    void this.createDialog.open(event.currentTarget instanceof Element ? event.currentTarget : null);
+  };
+
+  private readonly onProjectCreated = (event: CustomEvent<ProjectCreatedDetail>): void => {
+    const { project } = event.detail;
+    this.projectOpened(project, { tone: 'success', title: 'Projet créé', message: `${project.name} est prêt dans ${project.path}.` });
+  };
+
+  private readonly onNoticeRequested = (event: CustomEvent<NoticeRequestedDetail>): void => {
+    this.toast(event.detail.notice);
   };
 }
