@@ -3,8 +3,17 @@ import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { createElectronFolderPicker } from '../modules/project/adapters/electron-dialog/electron-folder-picker.js';
 import { NodeProjectFileSystem } from '../modules/project/adapters/node-fs/node-project-file-system.js';
+import { NodeComponentLibrary } from '../modules/sync/adapters/node-fs/node-component-library.js';
+import { JsonLastOpenedStore } from '../modules/sync/adapters/user-data/json-last-opened-store.js';
+import { ComputeClient } from '../modules/sync/adapters/utility-process/compute-client.js';
+import { LAST_OPENED_FILE } from '../modules/sync/domain/library/last-opened.js';
 import { JsonRecentProjectsStore } from '../modules/project/adapters/user-data/json-recent-projects-store.js';
 import { RECENT_PROJECTS_FILE } from '../modules/project/domain/recents/recent-projects.js';
+import { registerComponentHandlers } from './components/component-handlers.js';
+import { ComponentSession } from './components/component-session.js';
+import { createStudioPublisher } from './components/studio-publisher.js';
+import { forkComputeProcess } from './compute/electron-compute-process.js';
+import { PUSH_CHANNELS } from './ipc/channels.js';
 import { registerProjectHandlers } from './ipc/project-handlers.js';
 import { registerRecentListHandlers } from './ipc/recent-list-handlers.js';
 import { createSenderGuard } from './ipc/sender-guard.js';
@@ -13,6 +22,11 @@ import { ProjectSession } from './session/project-session.js';
 
 const USER_DATA_ARGUMENT = '--user-data-dir=';
 const RENDERER_ENTRY = join(import.meta.dirname, '../renderer/index.html');
+const COMPUTE_HOST_ENTRY = join(import.meta.dirname, 'compute-host.js');
+
+let studioWindow: BrowserWindow | null = null;
+let analyzer: ComputeClient | null = null;
+let components: ComponentSession | null = null;
 
 function userDataFolderFrom(argv: readonly string[]): string | null {
   const argument = argv.findLast((candidate) => candidate.startsWith(USER_DATA_ARGUMENT));
@@ -25,6 +39,27 @@ function rendererUrl(): string {
   return !app.isPackaged && devServerUrl !== undefined ? devServerUrl : pathToFileURL(RENDERER_ENTRY).href;
 }
 
+function startComponents(project: ProjectSession): ComponentSession {
+  const publish = createStudioPublisher(() => studioWindow?.webContents ?? null);
+  analyzer = new ComputeClient({
+    spawn: () => forkComputeProcess(COMPUTE_HOST_ENTRY),
+    onStatus: (status) => {
+      publish(PUSH_CHANNELS.componentStatus, status);
+    },
+  });
+  analyzer.start();
+  components = new ComponentSession({
+    project,
+    library: new NodeComponentLibrary(),
+    analyzer,
+    lastOpened: new JsonLastOpenedStore(join(app.getPath('userData'), LAST_OPENED_FILE)),
+    publish: (change) => {
+      publish(PUSH_CHANNELS.componentChanged, change);
+    },
+  });
+  return components;
+}
+
 function registerIpcHandlers(trustedRendererUrl: string): void {
   const project = {
     fileSystem: new NodeProjectFileSystem(),
@@ -32,12 +67,14 @@ function registerIpcHandlers(trustedRendererUrl: string): void {
     clock: () => new Date(),
   };
   const isTrustedSender = createSenderGuard(trustedRendererUrl);
+  const session = new ProjectSession(app.getPath('documents'));
   registerProjectHandlers(ipcMain, {
     project,
     folderPicker: createElectronFolderPicker(() => BrowserWindow.getAllWindows()[0] ?? null),
-    session: new ProjectSession(app.getPath('documents')),
+    session,
     isTrustedSender,
   });
+  registerComponentHandlers(ipcMain, { components: startComponents(session), isTrustedSender });
   registerRecentListHandlers(ipcMain, { project, forgotten: new ForgottenRecents(), isTrustedSender });
 }
 
@@ -55,6 +92,7 @@ async function createWindow(url: string): Promise<void> {
     },
   });
 
+  studioWindow = mainWindow;
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
@@ -71,6 +109,11 @@ if (userDataFolder !== null) app.setPath('userData', userDataFolder);
 
 app.on('window-all-closed', () => {
   app.quit();
+});
+
+app.on('will-quit', () => {
+  components?.dispose();
+  analyzer?.stop();
 });
 
 async function startStudio(): Promise<void> {

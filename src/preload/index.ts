@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC_CHANNELS, type IpcChannel } from '../main/ipc/channels.js';
+import { IPC_CHANNELS, PUSH_CHANNELS, type IpcChannel, type PushChannel } from '../main/ipc/channels.js';
 import type {
   CreateProjectOutcome,
   CreateProjectRequest,
@@ -11,10 +11,23 @@ import type {
   RecentProjectView,
 } from '../modules/project/application/recents/recent-projects-use-cases.js';
 import type { RecentProject } from '../modules/project/domain/recents/recent-projects.js';
+import type { ComponentChange, OpenedComponent } from '../modules/sync/application/components/component-views.js';
+import type { ComponentSummary } from '../modules/sync/domain/library/component-summary.js';
+import type { AnalyzerStatus } from '../modules/sync/ports/component-analyzer.js';
 import type { ChooseLocationOutcome, OpenFolderOutcome, UiGenApi } from './ui-gen-api.js';
 
 function invoke(channel: IpcChannel, ...payload: readonly unknown[]): Promise<unknown> {
   return ipcRenderer.invoke(channel, ...payload);
+}
+
+function subscribe(channel: PushChannel, listener: (message: unknown) => void): () => void {
+  const forward = (_event: unknown, message: unknown): void => {
+    listener(message);
+  };
+  ipcRenderer.on(channel, forward);
+  return () => {
+    ipcRenderer.removeListener(channel, forward);
+  };
 }
 
 const api: UiGenApi = Object.freeze({
@@ -35,6 +48,19 @@ const api: UiGenApi = Object.freeze({
     openFolder: () => invoke(IPC_CHANNELS.projectOpenFolder) as Promise<OpenFolderOutcome>,
     adopt: (request: AdoptLibraryRequest) => invoke(IPC_CHANNELS.projectAdopt, request) as Promise<OpenProjectOutcome>,
     close: () => invoke(IPC_CHANNELS.projectClose) as Promise<void>,
+  }),
+  components: Object.freeze({
+    list: () => invoke(IPC_CHANNELS.componentList) as Promise<ComponentSummary[]>,
+    open: (path: string) => invoke(IPC_CHANNELS.componentOpen, { path }) as Promise<OpenedComponent>,
+    lastOpened: () => invoke(IPC_CHANNELS.componentLastOpened) as Promise<string | null>,
+    onChanged: (listener: (change: ComponentChange) => void) =>
+      subscribe(PUSH_CHANNELS.componentChanged, (message) => {
+        listener(message as ComponentChange);
+      }),
+    onStatus: (listener: (status: AnalyzerStatus) => void) =>
+      subscribe(PUSH_CHANNELS.componentStatus, (message) => {
+        listener(message as AnalyzerStatus);
+      }),
   }),
 });
 

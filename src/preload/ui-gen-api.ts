@@ -8,6 +8,9 @@ import type {
   RecentProjectsListing,
   RecentProjectView,
 } from '../modules/project/application/recents/recent-projects-use-cases.js';
+import type { ComponentChange, OpenedComponent } from '../modules/sync/application/components/component-views.js';
+import type { ComponentSummary } from '../modules/sync/domain/library/component-summary.js';
+import type { AnalyzerStatus } from '../modules/sync/ports/component-analyzer.js';
 import type { RecentProject } from '../modules/project/domain/recents/recent-projects.js';
 
 export type ChooseLocationOutcome =
@@ -32,6 +35,13 @@ export interface UiGenApi {
     openFolder(): Promise<OpenFolderOutcome>;
     adopt(request: AdoptLibraryRequest): Promise<OpenProjectOutcome>;
     close(): Promise<void>;
+  };
+  readonly components: {
+    list(): Promise<ComponentSummary[]>;
+    open(path: string): Promise<OpenedComponent>;
+    lastOpened(): Promise<string | null>;
+    onChanged(listener: (change: ComponentChange) => void): () => void;
+    onStatus(listener: (status: AnalyzerStatus) => void): () => void;
   };
 }
 

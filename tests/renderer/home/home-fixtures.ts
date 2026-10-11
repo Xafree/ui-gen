@@ -33,6 +33,13 @@ export function makeUiGenApi(recents: Partial<RecentsApi>): UiGenApi {
       adopt: notExpected('project.adopt'),
       close: notExpected('project.close'),
     },
+    components: {
+      list: notExpected('components.list'),
+      open: notExpected('components.open'),
+      lastOpened: notExpected('components.lastOpened'),
+      onChanged: () => () => undefined,
+      onStatus: () => () => undefined,
+    },
   };
 }
 

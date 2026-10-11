@@ -1,7 +1,17 @@
+import { resolve } from 'node:path';
 import { defineConfig } from 'electron-vite';
 
 export default defineConfig({
-  main: {},
+  main: {
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve(import.meta.dirname, 'src/main/index.ts'),
+          'compute-host': resolve(import.meta.dirname, 'src/utility/compute-host.ts'),
+        },
+      },
+    },
+  },
   preload: {
     build: {
       rollupOptions: {

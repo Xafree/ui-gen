@@ -44,9 +44,11 @@ export interface ProjectHandlerDependencies {
 
 export type PayloadReader<Input> = (payload: unknown) => Input | null;
 
+export type AsyncPayloadReader<Input> = (payload: unknown) => Promise<Input | null>;
+
 export type GuardedHandle = <Input>(
   channel: IpcChannel,
-  read: PayloadReader<Input>,
+  read: PayloadReader<Input> | AsyncPayloadReader<Input>,
   useCase: (input: Input) => Promise<unknown>,
 ) => void;
 
@@ -85,7 +87,7 @@ export function guardedHandle(registry: IpcRegistry, isTrustedSender: (senderUrl
     registry.handle(channel, async (event, payload) => {
       const senderUrl = event.senderFrame?.url ?? null;
       if (senderUrl === null || !isTrustedSender(senderUrl)) throw refuse(channel, 'untrusted-sender', senderUrl);
-      const input = read(payload);
+      const input = await runUseCase(channel, async () => read(payload));
       if (input === null) throw refuse(channel, 'invalid-payload', senderUrl);
       return runUseCase(channel, () => useCase(input));
     });
