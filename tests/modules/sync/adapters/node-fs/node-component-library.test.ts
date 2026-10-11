@@ -77,7 +77,7 @@ describe('reading a component file', () => {
   it('accepts a file of exactly one megabyte', async () => {
     const path = await write('hz-edge.ts', 'x'.repeat(1_000_000));
 
-    expect((await library.readText(path)).length).toBe(1_000_000);
+    expect(await library.readText(path)).toHaveLength(1_000_000);
   });
 
   it('fails for a missing file', async () => {
