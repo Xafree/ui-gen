@@ -1,7 +1,10 @@
-import { html, LitElement, nothing, unsafeCSS, type TemplateResult } from 'lit';
+import { css, html, LitElement, nothing, unsafeCSS, type TemplateResult } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
 import type { OpenedProject } from '../../modules/project/application/open/project-outcomes.js';
+import type { OpenedComponent } from '../../modules/sync/application/components/component-views.js';
 import type { UiGenApi } from '../../preload/ui-gen-api.js';
+import '../editor/canvas/ui-canvas-frame.js';
+import { openStartingComponent } from '../editor/starting-component.js';
 import { icon, studioMark } from '../icons/icon.js';
 import { closePanel, enter, openPanel, swap } from '../motion/motion.js';
 import type { ToastRequest } from '../motion/toast.js';
@@ -31,6 +34,16 @@ const CHAT_PENDING: ToastRequest = {
   message: 'Le Chat IA arrive avec le lot 6.',
 };
 
+const canvasStage = css`
+  .av-stage {
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  }
+
+  .ui-empty[hidden] {
+    display: none;
+  }
+`;
+
 function windowTitle(id: ScreenId): string {
   return `${screenById(id).label}, UI-GEN`;
 }
@@ -45,7 +58,7 @@ function isSpace(event: KeyboardEvent): boolean {
 
 @customElement('ui-shell')
 export class UiShell extends LitElement {
-  static override readonly styles = [studioStyles, unsafeCSS(shellCss), hostContents];
+  static override readonly styles = [studioStyles, unsafeCSS(shellCss), hostContents, canvasStage];
 
   @property({ attribute: false }) api!: UiGenApi;
   @property({ attribute: false }) project!: OpenedProject;
@@ -54,12 +67,14 @@ export class UiShell extends LitElement {
   @state() private active: ScreenId = 'editor';
   @state() private shown: ScreenId = 'editor';
   @state() private openMenu: MenuId | null = null;
+  @state() private editorComponent: OpenedComponent | null = null;
 
   @query('#main') private readonly main!: HTMLElement;
   @query('#av-empty') private readonly emptyState!: HTMLElement;
   @query('.ui-topbar__project-menu') private readonly projectMenu!: HTMLElement;
 
   private readonly theme = new ThemeController(this);
+  private stopFollowingChanges: (() => void) | null = null;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -68,6 +83,8 @@ export class UiShell extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.stopFollowingChanges?.();
+    this.stopFollowingChanges = null;
     document.removeEventListener('click', this.onDocumentClick);
     document.removeEventListener('keydown', this.onDocumentKeydown);
     super.disconnectedCallback();
@@ -83,11 +100,12 @@ export class UiShell extends LitElement {
         </header>
         <main class="ui-stage av-stage" id="main" tabindex="-1">
           <h1 class="sr-only" id="av-heading">${shown.label}</h1>
-          <div class="ui-empty" id="av-empty">
+          <div class="ui-empty" id="av-empty" ?hidden=${this.editorComponent !== null && this.shown === 'editor'}>
             <span class="ui-empty__icon">${icon(shown.icon)}</span>
             <p class="ui-empty__title">Disponible dans un prochain lot</p>
             <p class="ui-empty__text" id="av-text">L'écran ${shown.label} arrive avec le lot ${String(shown.lot)}.</p>
           </div>
+          ${this.renderCanvas()}
         </main>
       </div>
     `;
@@ -97,6 +115,17 @@ export class UiShell extends LitElement {
     document.title = windowTitle(this.shown);
     enter([...this.emptyState.children], { stagger: 0.03 });
     if (this.notice !== null) this.requestNotice(this.notice);
+    this.stopFollowingChanges = this.api.components.onChanged((change) => {
+      if (this.editorComponent?.path === change.path) this.editorComponent = change;
+    });
+    void openStartingComponent(this.api.components).then((component) => {
+      this.editorComponent = component;
+    });
+  }
+
+  private renderCanvas(): TemplateResult | typeof nothing {
+    if (this.editorComponent === null) return nothing;
+    return html`<ui-canvas-frame .component=${this.editorComponent} .projectPath=${this.project.path} ?hidden=${this.shown !== 'editor'}></ui-canvas-frame>`;
   }
 
   private renderBrandGroup(): TemplateResult {

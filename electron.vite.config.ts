@@ -8,6 +8,7 @@ export default defineConfig({
         input: {
           index: resolve(import.meta.dirname, 'src/main/index.ts'),
           'compute-host': resolve(import.meta.dirname, 'src/utility/compute-host.ts'),
+          'canvas-harness': resolve(import.meta.dirname, 'src/harness/harness.ts'),
         },
       },
     },

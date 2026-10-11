@@ -8,6 +8,7 @@
   },
   "include": [
     "src/renderer/**/*.ts",
+    "src/harness/**/*.ts",
     "src/modules/**/*.ts",
     "src/preload/ui-gen-api.ts",
     "tests/renderer/**/*.ts"

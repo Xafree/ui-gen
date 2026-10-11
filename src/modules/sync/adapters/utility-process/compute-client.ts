@@ -1,6 +1,8 @@
 import type { AnalyzerStatus, ComponentAnalysis, ComponentAnalyzer } from '../../ports/component-analyzer.js';
 import type { ComponentModel } from '../../domain/model/component-model.js';
-import { readComputeMessage, type ComputeOperation, type ComputeReply, type ComputeRequest } from './compute-protocol.js';
+import { readComputeMessage, type ComputeReply, type ComputeRequest } from './compute-protocol.js';
+
+type DistributiveOmit<Union, Key extends PropertyKey> = Union extends unknown ? Omit<Union, Key> : never;
 
 export interface ComputeProcess {
   send(request: ComputeRequest): void;
@@ -8,6 +10,8 @@ export interface ComputeProcess {
   onExit(listener: () => void): void;
   kill(): void;
 }
+
+type RequestContent = DistributiveOmit<ComputeRequest, 'id'>;
 
 export interface ComputeClientOptions {
   readonly spawn: () => ComputeProcess;
@@ -69,15 +73,21 @@ export class ComputeClient implements ComponentAnalyzer {
   }
 
   async readModel(text: string): Promise<ComponentModel> {
-    const reply = await this.#request('read-model', text);
+    const reply = await this.#request({ operation: 'read-model', text });
     if (reply.outcome !== 'model') throw new ComputeUnavailableError('unexpected reply');
     return reply.model;
   }
 
   async analyze(text: string): Promise<ComponentAnalysis> {
-    const reply = await this.#request('analyze', text);
+    const reply = await this.#request({ operation: 'analyze', text });
     if (reply.outcome !== 'analysis') throw new ComputeUnavailableError('unexpected reply');
     return { model: reply.model, highlight: reply.highlight };
+  }
+
+  async transpile(source: string, tsconfigText: string | null, fileName: string): Promise<string> {
+    const reply = await this.#request({ operation: 'transpile', text: source, tsconfig: tsconfigText, fileName });
+    if (reply.outcome !== 'transpiled') throw new ComputeUnavailableError('unexpected reply');
+    return reply.code;
   }
 
   #launch(): void {
@@ -173,7 +183,7 @@ export class ComputeClient implements ComponentAnalyzer {
     });
   }
 
-  async #request(operation: ComputeOperation, text: string): Promise<ComputeReply> {
+  async #request(content: RequestContent): Promise<ComputeReply> {
     const process = await this.#whenReady();
     const id = ++this.#lastId;
     const timeoutMs = this.#options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
@@ -185,7 +195,7 @@ export class ComputeClient implements ComponentAnalyzer {
       }, timeoutMs);
       this.#pending.set(id, { process, resolve, reject, timer });
       try {
-        process.send({ id, operation, text });
+        process.send({ id, ...content });
       } catch (cause) {
         console.error('A request cannot reach the analysis process', cause);
         this.#pending.delete(id);

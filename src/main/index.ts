@@ -9,6 +9,9 @@ import { ComputeClient } from '../modules/sync/adapters/utility-process/compute-
 import { LAST_OPENED_FILE } from '../modules/sync/domain/library/last-opened.js';
 import { JsonRecentProjectsStore } from '../modules/project/adapters/user-data/json-recent-projects-store.js';
 import { RECENT_PROJECTS_FILE } from '../modules/project/domain/recents/recent-projects.js';
+import { denyCanvasPermissions, guardCanvasFrames } from './canvas/canvas-guards.js';
+import { createCanvasHandler } from './canvas/canvas-handler.js';
+import { handleCanvasProtocol, registerCanvasScheme } from './canvas/canvas-protocol.js';
 import { registerComponentHandlers } from './components/component-handlers.js';
 import { ComponentSession } from './components/component-session.js';
 import { createStudioPublisher } from './components/studio-publisher.js';
@@ -23,6 +26,7 @@ import { ProjectSession } from './session/project-session.js';
 const USER_DATA_ARGUMENT = '--user-data-dir=';
 const RENDERER_ENTRY = join(import.meta.dirname, '../renderer/index.html');
 const COMPUTE_HOST_ENTRY = join(import.meta.dirname, 'compute-host.js');
+const CANVAS_HARNESS_ENTRY = join(import.meta.dirname, 'canvas-harness.js');
 
 let studioWindow: BrowserWindow | null = null;
 let analyzer: ComputeClient | null = null;
@@ -60,6 +64,19 @@ function startComponents(project: ProjectSession): ComponentSession {
   return components;
 }
 
+function startCanvas(project: ProjectSession, compute: ComputeClient): void {
+  handleCanvasProtocol(
+    createCanvasHandler({
+      projectRoot: () => project.currentProject?.path ?? null,
+      compute,
+      studio: {
+        harnessScript: CANVAS_HARNESS_ENTRY,
+        packagesRoot: join(app.getAppPath(), 'node_modules'),
+      },
+    }),
+  );
+}
+
 function registerIpcHandlers(trustedRendererUrl: string): void {
   const project = {
     fileSystem: new NodeProjectFileSystem(),
@@ -75,6 +92,7 @@ function registerIpcHandlers(trustedRendererUrl: string): void {
     isTrustedSender,
   });
   registerComponentHandlers(ipcMain, { components: startComponents(session), isTrustedSender });
+  if (analyzer !== null) startCanvas(session, analyzer);
   registerRecentListHandlers(ipcMain, { project, forgotten: new ForgottenRecents(), isTrustedSender });
 }
 
@@ -89,6 +107,7 @@ async function createWindow(url: string): Promise<void> {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      nodeIntegrationInSubFrames: false,
     },
   });
 
@@ -96,13 +115,16 @@ async function createWindow(url: string): Promise<void> {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  guardCanvasFrames(mainWindow.webContents);
+  denyCanvasPermissions(mainWindow.webContents.session);
   mainWindow.webContents.on('will-navigate', (event) => {
     event.preventDefault();
   });
 
   await mainWindow.loadURL(url);
 }
+
+registerCanvasScheme();
 
 const userDataFolder = userDataFolderFrom(process.argv);
 if (userDataFolder !== null) app.setPath('userData', userDataFolder);
