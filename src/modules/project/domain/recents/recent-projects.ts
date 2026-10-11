@@ -37,7 +37,7 @@ function byMostRecent(left: RecentProject, right: RecentProject): number {
   return Date.parse(right.openedAt) - Date.parse(left.openedAt);
 }
 
-function keepMostRecent(projects: readonly RecentProject[]): RecentProject[] {
+export function keepMostRecent(projects: readonly RecentProject[]): RecentProject[] {
   return projects.toSorted(byMostRecent).slice(0, MAX_RECENT_PROJECTS);
 }
 
