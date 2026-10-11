@@ -127,7 +127,23 @@ function emptyIconPath(): string | null {
   return deepQueryAll('#av-empty .ui-empty__icon svg path')[0]?.getAttribute('d') ?? null;
 }
 
+function isEditorShown(): boolean {
+  return deepQueryAll('ui-editor').some((editor) => editor.checkVisibility());
+}
+
+async function expectEditorShown(): Promise<void> {
+  await expect.poll(() => currentNavLabels()).toEqual([EDITOR.label]);
+  await expect.poll(() => isEditorShown()).toBe(true);
+  expect(isShownNow(deepQueryAll('#av-empty')[0])).toBe(false);
+  expect(document.title).toBe(`${EDITOR.label}, UI-GEN`);
+  expect(visibleText(deepQueryAll('.ui-topbar__screens > button')[0] ?? null)).toBe(`Écran actuel : ${EDITOR.short}`);
+}
+
 async function expectScreenShown(screen: ExpectedScreen): Promise<void> {
+  if (screen === EDITOR) {
+    await expectEditorShown();
+    return;
+  }
   await expect.poll(() => currentNavLabels()).toEqual([screen.label]);
   await expect.poll(() => emptyStateText()).toBe(`L'écran ${screen.label} arrive avec le lot ${String(screen.lot)}.`);
   await expect.element(page.getByRole('heading', { level: 1, name: screen.label, exact: true })).toBeInTheDocument();
@@ -136,6 +152,7 @@ async function expectScreenShown(screen: ExpectedScreen): Promise<void> {
   expect(document.title).toBe(`${screen.label}, UI-GEN`);
   expect(visibleText(deepQueryAll('.ui-topbar__screens > button')[0] ?? null)).toBe(`Écran actuel : ${screen.short}`);
   expect(emptyIconPath()).toBe(firstPathOf(screen.icon));
+  expect(isEditorShown()).toBe(false);
 }
 
 afterEach(async () => {
@@ -178,7 +195,7 @@ describe('<ui-shell> top bar', () => {
   });
 
   // covers: FCT-0014
-  it('opens on the Éditeur, marked as the current page, with its pending empty state and window title', async () => {
+  it('opens on the Éditeur, marked as the current page, showing the editor in place of a pending empty state', async () => {
     await mountShell();
 
     await expect.element(navLink('Éditeur')).toHaveAttribute('aria-current', 'page');
@@ -186,19 +203,20 @@ describe('<ui-shell> top bar', () => {
       await expect.element(navLink(label)).not.toHaveAttribute('aria-current');
     }
     await expectScreenShown(EDITOR);
-    expect(visibleText(deepQueryAll('#av-empty .ui-empty__title')[0] ?? null)).toBe('Disponible dans un prochain lot');
   });
 
   // covers: FCT-0015
   it('shows the stage of a screen not yet built with no panel, no status bar and no action', async () => {
     await mountShell();
+    await navLink('Playground').click();
+    await expectScreenShown(PLAYGROUND);
 
     const stage = mainStage();
     expect(stage?.classList.contains('ui-stage')).toBe(true);
     expect(stage?.classList.contains('av-stage')).toBe(true);
     expect(stage?.querySelectorAll('button, a, input, select, textarea')).toHaveLength(0);
     expect(stage?.querySelectorAll('.ui-panel, .ui-statusbar, .ui-empty__actions')).toHaveLength(0);
-    expect(deepQueryAll('.ui-panel, .ui-statusbar')).toHaveLength(0);
+    expect(deepQueryAll('.ui-panel, .ui-statusbar').filter((element) => element.checkVisibility())).toHaveLength(0);
   });
 });
 
@@ -395,6 +413,8 @@ describe('<ui-shell> project menu', () => {
   it('closes on a click outside the menu without leaving the project', async () => {
     const shell = await mountShell();
     const closed = recordClosed(shell);
+    await navLink('Playground').click();
+    await expectScreenShown(PLAYGROUND);
     await projectButton().click();
     await expect.element(changeProjectItem()).toBeVisible();
     expect(isShownNow(projectMenuItem('Changer de projet'))).toBe(true);

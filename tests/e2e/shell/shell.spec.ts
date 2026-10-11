@@ -89,7 +89,7 @@ async function openKitHorizon(window: Page): Promise<void> {
 }
 
 // covers: FCT-0014
-test('shows the top bar of the opened project on the pending Éditeur, without any arrival notice', async () => {
+test('shows the top bar of the opened project above the Éditeur, without any arrival notice', async () => {
   await withStudio(async ({ window }) => {
     await openKitHorizon(window);
 
@@ -105,8 +105,10 @@ test('shows the top bar of the opened project on the pending Éditeur, without a
     await expect(window.getByRole('button', { name: /^Passer au thème (sombre|clair)$/ })).toBeVisible();
     await expect(window.getByRole('img', { name: 'Compte local' })).toBeVisible();
     await expect(window).toHaveTitle('Éditeur, UI-GEN');
-    await expect(window.getByText('Disponible dans un prochain lot', { exact: true })).toBeVisible();
-    await expect(window.getByText("L'écran Éditeur arrive avec le lot 1.", { exact: true })).toBeVisible();
+    await expect(window.locator('ui-editor')).toBeVisible();
+    await expect(window.locator('#frame-name')).toHaveText('hz-button');
+    await expect(window.getByText('Disponible dans un prochain lot', { exact: true })).toBeHidden();
+    await expect(window.getByText("L'écran Éditeur arrive avec le lot 1.", { exact: true })).toBeHidden();
     await expect(toasts(window)).toHaveCount(0);
   });
 });
