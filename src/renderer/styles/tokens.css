@@ -1,0 +1,559 @@
+/* ==========================================================================
+   UI-GEN · Tokens de design
+   --------------------------------------------------------------------------
+   Deux familles strictement séparées :
+   1. --ui-*  : le STUDIO (barre du haut, panneaux, contrôles, code).
+               Thème clair sur :root, thème sombre via prefers-color-scheme
+               (sauf data-theme="light") ou data-theme="dark" sur <html>.
+   2. --hz-*  : la bibliothèque de l'utilisateur, Kit Horizon (@horizon/ui).
+               Sert uniquement à dessiner SES composants (canvas, playground).
+               Indépendante du thème du studio : son mode se règle avec
+               data-hz-theme="light|dark" et ses préréglages avec
+               data-hz-preset="…" sur le conteneur d'aperçu.
+   Architecture : primitives -> sémantiques -> composants.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. STUDIO · valeurs indépendantes du thème
+   -------------------------------------------------------------------------- */
+:root {
+  /* Typographie */
+  --ui-font-sans: "Instrument Sans", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --ui-font-mono: "Geist Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+  --ui-text-xs: 11px;   /* micro-libellés, kbd, badges, barre d'état */
+  --ui-text-sm: 12px;   /* texte par défaut des panneaux et contrôles */
+  --ui-text-md: 13px;   /* menus, chat, corps de dialogue */
+  --ui-text-lg: 15px;   /* titres de section */
+  --ui-text-xl: 18px;   /* titres de dialogue */
+  --ui-text-2xl: 24px;  /* titres de page (index) */
+  --ui-text-3xl: 32px;  /* titre d'accueil (index uniquement) */
+
+  --ui-lh-xs: 16px;
+  --ui-lh-sm: 16px;
+  --ui-lh-md: 20px;
+  --ui-lh-lg: 22px;
+  --ui-lh-xl: 26px;
+  --ui-lh-2xl: 30px;
+  --ui-lh-3xl: 38px;
+
+  --ui-weight-regular: 400;
+  --ui-weight-medium: 500;
+  --ui-weight-semibold: 600;
+
+  --ui-tracking-tight: -0.02em;  /* tailles >= 24px */
+  --ui-tracking-snug: -0.01em;   /* 15 à 18px */
+  --ui-tracking-normal: 0;
+  --ui-tracking-caps: 0.04em;    /* badges en capitales */
+
+  /* Espacement : grille de 4 px */
+  --ui-space-0: 0;
+  --ui-space-0-5: 2px;
+  --ui-space-1: 4px;
+  --ui-space-1-5: 6px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-5: 20px;
+  --ui-space-6: 24px;
+  --ui-space-8: 32px;
+  --ui-space-10: 40px;
+  --ui-space-12: 48px;
+  --ui-space-16: 64px;
+  --ui-space-20: 80px;
+
+  /* Rayons : nets. Pilule réservée aux badges, interrupteurs et avatars. */
+  --ui-radius-xs: 3px;   /* cases à cocher, kbd */
+  --ui-radius-sm: 4px;   /* boutons, champs, lignes d'arbre */
+  --ui-radius-md: 6px;   /* menus, popovers, contrôle segmenté, toasts */
+  --ui-radius-lg: 8px;   /* dialogues, cartes */
+  --ui-radius-full: 999px;
+
+  /* Bordures */
+  --ui-border-width: 1px;
+
+  /* Dimensions des contrôles (cible minimale 24 px, WCAG 2.5.8) */
+  --ui-control-h-sm: 24px;
+  --ui-control-h: 28px;
+  --ui-control-h-lg: 32px;
+  --ui-row-h: 28px;
+  --ui-icon-sm: 14px;
+  --ui-icon: 16px;
+  --ui-icon-lg: 20px;
+
+  /* Structure de l'application */
+  --ui-topbar-h: 44px;
+  --ui-panel-header-h: 36px;
+  --ui-statusbar-h: 24px;
+  --ui-panel-left-w: 248px;
+  --ui-panel-right-w: 288px;
+  --ui-content-max: 1120px;
+
+  /* Mouvement (miroir des valeurs de shared/motion.js) */
+  --ui-dur-instant: 80ms;   /* appui */
+  --ui-dur-fast: 140ms;     /* survol, sorties */
+  --ui-dur-base: 200ms;     /* onglets, interrupteurs, menus */
+  --ui-dur-slow: 280ms;     /* tiroirs, toasts, dialogues */
+  --ui-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ui-ease-in: cubic-bezier(0.55, 0, 0.75, 0.2);
+  --ui-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* Empilement */
+  --ui-z-base: 0;
+  --ui-z-canvas-overlay: 5;
+  --ui-z-panel: 10;
+  --ui-z-topbar: 20;
+  --ui-z-drawer: 40;
+  --ui-z-popover: 50;
+  --ui-z-dialog: 60;
+  --ui-z-toast: 70;
+  --ui-z-tooltip: 80;
+
+  /* -----------------------------------------------------------------------
+     Primitives de couleur du studio
+     Neutres chauds très légèrement teintés (teinte ~60°), cobalt pour l'accent.
+     ----------------------------------------------------------------------- */
+  --ui-n-0: #FFFFFF;
+  --ui-n-25: #FBFBFA;
+  --ui-n-50: #F6F6F4;
+  --ui-n-100: #F1F1EE;
+  --ui-n-150: #EAEAE6;
+  --ui-n-200: #DEDDD8;
+  --ui-n-250: #CFCEC7;
+  --ui-n-300: #C8C7C0;
+  --ui-n-400: #A8A79F;
+  --ui-n-500: #8C8B83;
+  --ui-n-600: #6E6D66;
+  --ui-n-700: #57564F;
+  --ui-n-800: #3A3935;
+  --ui-n-900: #262623;
+  --ui-n-950: #1C1C1A;
+
+  --ui-d-1000: #0F0F0E;
+  --ui-d-950: #121211;
+  --ui-d-925: #151514;
+  --ui-d-900: #181817;
+  --ui-d-850: #1F1F1D;
+  --ui-d-800: #262624;
+  --ui-d-700: #2E2E2B;
+  --ui-d-650: #393936;
+  --ui-d-600: #45443F;
+  --ui-d-500: #6A6964;
+  --ui-d-450: #5A5955;
+  --ui-d-400: #8E8D86;
+  --ui-d-300: #A9A8A1;
+  --ui-d-200: #C8C7C0;
+  --ui-d-100: #ECECE8;
+
+  --ui-cobalt-300: #A9BDF8;
+  --ui-cobalt-350: #96AEF7;
+  --ui-cobalt-400: #7F9CF5;
+  --ui-cobalt-600: #2B5BD7;
+  --ui-cobalt-700: #2450C2;
+  --ui-cobalt-800: #1F45A8;
+}
+
+/* --------------------------------------------------------------------------
+   2. STUDIO · thème clair (défaut)
+   -------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --ui-surface-canvas: var(--ui-n-100);   /* fond du canvas et de l'app */
+  --ui-surface-panel: var(--ui-n-25);     /* panneaux, barre du haut */
+  --ui-surface-raised: var(--ui-n-0);     /* champs, menus, dialogues, cartes */
+  --ui-surface-sunken: var(--ui-n-50);    /* puits, gouttière de code, kbd */
+  --ui-surface-hover: rgba(28, 28, 26, 0.05);
+  --ui-surface-active: rgba(28, 28, 26, 0.09);
+  --ui-surface-inverse: var(--ui-n-950);  /* bouton primaire, infobulle */
+
+  /* Texte */
+  --ui-text: var(--ui-n-950);
+  --ui-text-2: var(--ui-n-700);
+  --ui-text-3: var(--ui-n-600);
+  --ui-text-disabled: var(--ui-n-400);
+  --ui-text-inverse: var(--ui-n-25);
+  --ui-text-on-accent: #FFFFFF;
+
+  /* Bordures */
+  --ui-border: var(--ui-n-150);           /* filets structurels */
+  --ui-border-strong: var(--ui-n-200);    /* séparation forte, bouton secondaire */
+  --ui-border-input: var(--ui-n-250);     /* contour des champs au repos */
+  --ui-border-control: var(--ui-n-500);   /* cases, interrupteurs : 3:1 */
+
+  /* Accent unique : cobalt */
+  --ui-accent: var(--ui-cobalt-600);
+  --ui-accent-hover: var(--ui-cobalt-700);
+  --ui-accent-active: var(--ui-cobalt-800);
+  --ui-accent-soft: rgba(43, 91, 215, 0.10);
+  --ui-accent-soft-hover: rgba(43, 91, 215, 0.16);
+  --ui-accent-text: var(--ui-cobalt-600);
+  --ui-focus: var(--ui-cobalt-600);
+  --ui-selection: var(--ui-cobalt-600);
+
+  /* États sémantiques (pastels désaturés) */
+  --ui-success: #2F6A3B;
+  --ui-success-soft: #EBF2E9;
+  --ui-warning: #8A5A00;
+  --ui-warning-soft: #FAF2DA;
+  --ui-danger: #A12E2A;
+  --ui-danger-soft: #FCEBEB;
+  --ui-danger-solid: #C7372F;
+  --ui-info: var(--ui-accent-text);
+  --ui-info-soft: var(--ui-accent-soft);
+
+  /* Diagnostics dans le code */
+  --ui-diag-error: #D93A31;
+  --ui-diag-warning: #B07800;
+
+  /* Vue de code */
+  --ui-code-bg: var(--ui-n-0);
+  --ui-code-gutter: var(--ui-n-25);
+  --ui-code-line-active: rgba(43, 91, 215, 0.05);
+  --ui-code-line-target: rgba(43, 91, 215, 0.08);
+  --ui-code-selection: rgba(43, 91, 215, 0.16);
+  --ui-syn-keyword: #B4371F;
+  --ui-syn-string: #2F6A3B;
+  --ui-syn-number: #8A5A00;
+  --ui-syn-tag: #0E6B6B;
+  --ui-syn-attr: #8A5A00;
+  --ui-syn-function: var(--ui-n-950);
+  --ui-syn-property: #4F4E48;
+  --ui-syn-type: #0E6B6B;
+  --ui-syn-decorator: #A3366B;
+  --ui-syn-comment: var(--ui-n-600);
+  --ui-syn-punctuation: var(--ui-n-600);
+
+  /* Canvas */
+  --ui-canvas-dot: rgba(28, 28, 26, 0.10);
+  --ui-canvas-frame-label: var(--ui-n-600);
+
+  /* Profondeur : quasi absente */
+  --ui-shadow-none: none;
+  --ui-shadow-pop: 0 1px 2px rgba(28, 28, 26, 0.04), 0 8px 24px rgba(28, 28, 26, 0.05);
+  --ui-shadow-thumb: 0 1px 2px rgba(28, 28, 26, 0.12);
+  --ui-scrim: rgba(20, 20, 18, 0.40);
+}
+
+/* --------------------------------------------------------------------------
+   3. STUDIO · thème sombre (préférence système, sauf choix explicite clair)
+   -------------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --ui-surface-canvas: var(--ui-d-950);
+    --ui-surface-panel: var(--ui-d-900);
+    --ui-surface-raised: var(--ui-d-850);
+    --ui-surface-sunken: var(--ui-d-925);
+    --ui-surface-hover: rgba(236, 236, 232, 0.06);
+    --ui-surface-active: rgba(236, 236, 232, 0.10);
+    --ui-surface-inverse: var(--ui-d-100);
+
+    --ui-text: var(--ui-d-100);
+    --ui-text-2: var(--ui-d-300);
+    --ui-text-3: var(--ui-d-400);
+    --ui-text-disabled: var(--ui-d-450);
+    --ui-text-inverse: var(--ui-d-900);
+    --ui-text-on-accent: #10131C;
+
+    --ui-border: var(--ui-d-700);
+    --ui-border-strong: var(--ui-d-650);
+    --ui-border-input: var(--ui-d-600);
+    --ui-border-control: var(--ui-d-500);
+
+    --ui-accent: var(--ui-cobalt-400);
+    --ui-accent-hover: var(--ui-cobalt-350);
+    --ui-accent-active: var(--ui-cobalt-300);
+    --ui-accent-soft: rgba(127, 156, 245, 0.16);
+    --ui-accent-soft-hover: rgba(127, 156, 245, 0.22);
+    --ui-accent-text: #9DB3F7;
+    --ui-focus: var(--ui-cobalt-400);
+    --ui-selection: var(--ui-cobalt-400);
+
+    --ui-success: #82C08E;
+    --ui-success-soft: rgba(95, 163, 108, 0.16);
+    --ui-warning: #E2B65E;
+    --ui-warning-soft: rgba(217, 164, 65, 0.14);
+    --ui-danger: #F2918A;
+    --ui-danger-soft: rgba(229, 101, 91, 0.16);
+    --ui-danger-solid: #E5655B;
+
+    --ui-diag-error: #F2776E;
+    --ui-diag-warning: #E2B65E;
+
+    --ui-code-bg: var(--ui-d-925);
+    --ui-code-gutter: var(--ui-d-925);
+    --ui-code-line-active: rgba(127, 156, 245, 0.06);
+    --ui-code-line-target: rgba(127, 156, 245, 0.10);
+    --ui-code-selection: rgba(127, 156, 245, 0.22);
+    --ui-syn-keyword: #F08C74;
+    --ui-syn-string: #8CC796;
+    --ui-syn-number: #E2B65E;
+    --ui-syn-tag: #6CC3C3;
+    --ui-syn-attr: #E2B65E;
+    --ui-syn-function: var(--ui-d-100);
+    --ui-syn-property: var(--ui-d-200);
+    --ui-syn-type: #6CC3C3;
+    --ui-syn-decorator: #E68DB5;
+    --ui-syn-comment: var(--ui-d-400);
+    --ui-syn-punctuation: var(--ui-d-400);
+
+    --ui-canvas-dot: rgba(236, 236, 232, 0.10);
+    --ui-canvas-frame-label: var(--ui-d-400);
+
+    --ui-shadow-pop: 0 1px 2px rgba(0, 0, 0, 0.30), 0 12px 32px rgba(0, 0, 0, 0.35);
+    --ui-shadow-thumb: 0 1px 2px rgba(0, 0, 0, 0.45);
+    --ui-scrim: rgba(0, 0, 0, 0.55);
+  }
+}
+
+/* Choix explicite du thème sombre (bouton de la barre du haut) */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ui-surface-canvas: var(--ui-d-950);
+  --ui-surface-panel: var(--ui-d-900);
+  --ui-surface-raised: var(--ui-d-850);
+  --ui-surface-sunken: var(--ui-d-925);
+  --ui-surface-hover: rgba(236, 236, 232, 0.06);
+  --ui-surface-active: rgba(236, 236, 232, 0.10);
+  --ui-surface-inverse: var(--ui-d-100);
+
+  --ui-text: var(--ui-d-100);
+  --ui-text-2: var(--ui-d-300);
+  --ui-text-3: var(--ui-d-400);
+  --ui-text-disabled: var(--ui-d-450);
+  --ui-text-inverse: var(--ui-d-900);
+  --ui-text-on-accent: #10131C;
+
+  --ui-border: var(--ui-d-700);
+  --ui-border-strong: var(--ui-d-650);
+  --ui-border-input: var(--ui-d-600);
+  --ui-border-control: var(--ui-d-500);
+
+  --ui-accent: var(--ui-cobalt-400);
+  --ui-accent-hover: var(--ui-cobalt-350);
+  --ui-accent-active: var(--ui-cobalt-300);
+  --ui-accent-soft: rgba(127, 156, 245, 0.16);
+  --ui-accent-soft-hover: rgba(127, 156, 245, 0.22);
+  --ui-accent-text: #9DB3F7;
+  --ui-focus: var(--ui-cobalt-400);
+  --ui-selection: var(--ui-cobalt-400);
+
+  --ui-success: #82C08E;
+  --ui-success-soft: rgba(95, 163, 108, 0.16);
+  --ui-warning: #E2B65E;
+  --ui-warning-soft: rgba(217, 164, 65, 0.14);
+  --ui-danger: #F2918A;
+  --ui-danger-soft: rgba(229, 101, 91, 0.16);
+  --ui-danger-solid: #E5655B;
+
+  --ui-diag-error: #F2776E;
+  --ui-diag-warning: #E2B65E;
+
+  --ui-code-bg: var(--ui-d-925);
+  --ui-code-gutter: var(--ui-d-925);
+  --ui-code-line-active: rgba(127, 156, 245, 0.06);
+  --ui-code-line-target: rgba(127, 156, 245, 0.10);
+  --ui-code-selection: rgba(127, 156, 245, 0.22);
+  --ui-syn-keyword: #F08C74;
+  --ui-syn-string: #8CC796;
+  --ui-syn-number: #E2B65E;
+  --ui-syn-tag: #6CC3C3;
+  --ui-syn-attr: #E2B65E;
+  --ui-syn-function: var(--ui-d-100);
+  --ui-syn-property: var(--ui-d-200);
+  --ui-syn-type: #6CC3C3;
+  --ui-syn-decorator: #E68DB5;
+  --ui-syn-comment: var(--ui-d-400);
+  --ui-syn-punctuation: var(--ui-d-400);
+
+  --ui-canvas-dot: rgba(236, 236, 232, 0.10);
+  --ui-canvas-frame-label: var(--ui-d-400);
+
+  --ui-shadow-pop: 0 1px 2px rgba(0, 0, 0, 0.30), 0 12px 32px rgba(0, 0, 0, 0.35);
+  --ui-shadow-thumb: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --ui-scrim: rgba(0, 0, 0, 0.55);
+}
+
+/* ==========================================================================
+   KIT HORIZON · tokens par défaut de la lib de l'utilisateur (--hz-)
+   --------------------------------------------------------------------------
+   Couche 1 : primitives de préréglage (--hz-p-*), une valeur claire et une
+              sombre par rôle. Les neutres sont calculés en OKLCH à partir
+              de --hz-gray-hue et --hz-gray-chroma : le réglage « teinte des
+              gris » du playground ne change que ces deux nombres.
+   Couche 2 : sémantiques (--hz-color-*, --hz-radius-*, --hz-font-*), seules
+              utilisées par les composants hz-.
+   Règle : data-hz-preset et data-hz-theme se posent sur le MÊME conteneur.
+   ========================================================================== */
+:root,
+[data-hz-preset],
+[data-hz-theme] {
+  /* Primitives : préréglage « Horizon » (défaut de la lib) */
+  --hz-gray-hue: 250;
+  --hz-gray-chroma: 0.008;
+  --hz-p-accent: #C2410C;
+  --hz-p-accent-hover: #A8380A;
+  --hz-p-on-accent: #FFFFFF;
+  --hz-p-accent-dark: #F07B4F;
+  --hz-p-accent-hover-dark: #F49470;
+  --hz-p-on-accent-dark: #1C1007;
+  --hz-p-font: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --hz-p-radius: 8px;
+  --hz-p-radius-field: 8px;
+}
+
+/* Préréglages du playground (inspirés de theme-factory, recalibrés AA) */
+[data-hz-preset="arctique"] {
+  --hz-gray-hue: 245;
+  --hz-gray-chroma: 0.02;
+  --hz-p-accent: #3F6399;
+  --hz-p-accent-hover: #355584;
+  --hz-p-on-accent: #FFFFFF;
+  --hz-p-accent-dark: #8FB0DE;
+  --hz-p-accent-hover-dark: #A6C1E6;
+  --hz-p-on-accent-dark: #0E1622;
+  --hz-p-font: "Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
+  --hz-p-radius: 6px;
+  --hz-p-radius-field: 6px;
+}
+[data-hz-preset="foret"] {
+  --hz-gray-hue: 120;
+  --hz-gray-chroma: 0.012;
+  --hz-p-accent: #2D4A2B;
+  --hz-p-accent-hover: #243C22;
+  --hz-p-on-accent: #FFFFFF;
+  --hz-p-accent-dark: #9DBF8E;
+  --hz-p-accent-hover-dark: #B1CDA4;
+  --hz-p-on-accent-dark: #10180F;
+  --hz-p-font: "Onest", "Segoe UI", system-ui, sans-serif;
+  --hz-p-radius: 4px;
+  --hz-p-radius-field: 4px;
+}
+[data-hz-preset="ocean"] {
+  --hz-gray-hue: 255;
+  --hz-gray-chroma: 0.03;
+  --hz-p-accent: #237373;
+  --hz-p-accent-hover: #1C5F5F;
+  --hz-p-on-accent: #FFFFFF;
+  --hz-p-accent-dark: #4FB3B3;
+  --hz-p-accent-hover-dark: #6CC3C3;
+  --hz-p-on-accent-dark: #0F1A20;
+  --hz-p-font: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --hz-p-radius: 10px;
+  --hz-p-radius-field: 8px;
+}
+[data-hz-preset="desert"] {
+  --hz-gray-hue: 40;
+  --hz-gray-chroma: 0.014;
+  --hz-p-accent: #5D2E46;
+  --hz-p-accent-hover: #4C2539;
+  --hz-p-on-accent: #FFFFFF;
+  --hz-p-accent-dark: #D4A5A5;
+  --hz-p-accent-hover-dark: #DDB7B7;
+  --hz-p-on-accent-dark: #2A1720;
+  --hz-p-font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --hz-p-radius: 12px;
+  --hz-p-radius-field: 10px;
+}
+[data-hz-preset="graphite"] {
+  --hz-gray-hue: 230;
+  --hz-gray-chroma: 0.004;
+  --hz-p-accent: #36454F;
+  --hz-p-accent-hover: #2B373F;
+  --hz-p-on-accent: #FFFFFF;
+  --hz-p-accent-dark: #B7C2CA;
+  --hz-p-accent-hover-dark: #C9D2D8;
+  --hz-p-on-accent-dark: #151B1F;
+  --hz-p-font: "Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
+  --hz-p-radius: 2px;
+  --hz-p-radius-field: 2px;
+}
+
+/* Sémantiques Kit Horizon · mode clair (défaut) */
+:root,
+[data-hz-preset],
+[data-hz-theme] {
+  --hz-color-accent: var(--hz-p-accent);
+  --hz-color-accent-hover: var(--hz-p-accent-hover);
+  --hz-color-on-accent: var(--hz-p-on-accent);
+  --hz-color-accent-soft: color-mix(in oklab, var(--hz-p-accent) 12%, transparent);
+  --hz-color-bg: oklch(99.4% calc(var(--hz-gray-chroma) * 0.5) var(--hz-gray-hue));
+  --hz-color-surface: oklch(97.6% var(--hz-gray-chroma) var(--hz-gray-hue));
+  --hz-color-surface-2: oklch(95.2% var(--hz-gray-chroma) var(--hz-gray-hue));
+  --hz-color-raised: oklch(99.4% calc(var(--hz-gray-chroma) * 0.5) var(--hz-gray-hue));
+  --hz-color-border: oklch(90.5% var(--hz-gray-chroma) var(--hz-gray-hue));
+  --hz-color-border-strong: oklch(80% var(--hz-gray-chroma) var(--hz-gray-hue));
+  --hz-color-text: oklch(22% var(--hz-gray-chroma) var(--hz-gray-hue));
+  --hz-color-muted: oklch(50% var(--hz-gray-chroma) var(--hz-gray-hue));
+  --hz-color-success: #1F7A4D;
+  --hz-color-success-soft: #E5F3EB;
+  --hz-color-warning: #9A5B00;
+  --hz-color-warning-soft: #FCF1DC;
+  --hz-color-danger: #C0352B;
+  --hz-color-danger-soft: #FCE9E7;
+  --hz-color-focus: var(--hz-p-accent);
+  --hz-color-scrim: rgba(15, 20, 25, 0.45);
+
+  --hz-font-sans: var(--hz-p-font);
+  --hz-font-mono: "Geist Mono", "Cascadia Mono", Consolas, monospace;
+  --hz-text-xs: 12px;
+  --hz-text-sm: 13px;
+  --hz-text-md: 14px;
+  --hz-text-lg: 16px;
+  --hz-text-xl: 20px;
+  --hz-text-2xl: 28px;
+  --hz-weight-regular: 400;
+  --hz-weight-medium: 500;
+  --hz-weight-bold: 650;
+
+  --hz-space-1: 4px;
+  --hz-space-2: 8px;
+  --hz-space-3: 12px;
+  --hz-space-4: 16px;
+  --hz-space-5: 20px;
+  --hz-space-6: 24px;
+  --hz-space-8: 32px;
+
+  --hz-radius-sm: calc(var(--hz-p-radius) * 0.5);
+  --hz-radius-md: var(--hz-p-radius);
+  --hz-radius-lg: calc(var(--hz-p-radius) * 1.5);
+  --hz-radius-field: var(--hz-p-radius-field);
+  --hz-radius-full: 999px;
+
+  --hz-shadow-sm: 0 1px 2px oklch(20% 0.02 var(--hz-gray-hue) / 0.06);
+  --hz-shadow-md: 0 4px 14px oklch(20% 0.02 var(--hz-gray-hue) / 0.08);
+
+  --hz-control-h-sm: 32px;
+  --hz-control-h: 40px;
+  --hz-control-h-lg: 48px;
+}
+
+/* Sémantiques Kit Horizon · mode sombre (aperçu uniquement) */
+[data-hz-theme="dark"] {
+  --hz-color-accent: var(--hz-p-accent-dark);
+  --hz-color-accent-hover: var(--hz-p-accent-hover-dark);
+  --hz-color-on-accent: var(--hz-p-on-accent-dark);
+  --hz-color-accent-soft: color-mix(in oklab, var(--hz-p-accent-dark) 16%, transparent);
+  --hz-color-bg: oklch(17% calc(var(--hz-gray-chroma) * 1.2) var(--hz-gray-hue));
+  --hz-color-surface: oklch(21% calc(var(--hz-gray-chroma) * 1.2) var(--hz-gray-hue));
+  --hz-color-surface-2: oklch(25% calc(var(--hz-gray-chroma) * 1.2) var(--hz-gray-hue));
+  --hz-color-raised: oklch(30% calc(var(--hz-gray-chroma) * 1.2) var(--hz-gray-hue));
+  --hz-color-border: oklch(31% calc(var(--hz-gray-chroma) * 1.2) var(--hz-gray-hue));
+  --hz-color-border-strong: oklch(42% calc(var(--hz-gray-chroma) * 1.2) var(--hz-gray-hue));
+  --hz-color-text: oklch(95% calc(var(--hz-gray-chroma) * 0.6) var(--hz-gray-hue));
+  --hz-color-muted: oklch(72% var(--hz-gray-chroma) var(--hz-gray-hue));
+  --hz-color-success: #6CC895;
+  --hz-color-success-soft: rgba(108, 200, 149, 0.14);
+  --hz-color-warning: #E8B45A;
+  --hz-color-warning-soft: rgba(232, 180, 90, 0.14);
+  --hz-color-danger: #F08A80;
+  --hz-color-danger-soft: rgba(240, 138, 128, 0.14);
+  --hz-color-focus: var(--hz-p-accent-dark);
+  --hz-color-scrim: rgba(0, 0, 0, 0.6);
+  --hz-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --hz-shadow-md: 0 6px 18px rgba(0, 0, 0, 0.40);
+}

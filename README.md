@@ -43,11 +43,12 @@ The output is in `out/` (`main/`, `preload/`, `renderer/`).
 | `npm run test:e2e` | builds the app, then runs the Playwright tests from `tests/e2e/` on Electron |
 | `npm run test:mutation` | StrykerJS mutation tests on `domain/` and `application/` (report in `reports/`) |
 | `npm run check-structure` | at most 5 files per folder of `src/` and `tests/`, import direction |
+| `npm run check-studio-styles` | `src/renderer/styles/tokens.css` and `studio.css` are byte-for-byte copies of the mockup stylesheets |
 | `npm run check-fct` | every `FCT-NNNN` criterion is cited by a test (`// covers: FCT-NNNN`), and the other way round |
 | `npm run adr-lint` | ADR format |
 
-The last three commands run the scripts of the parent folder (`../scripts/`), which read the
-functional documentation and the ADRs kept outside this repository.
+The last four commands run the scripts of the parent folder (`../scripts/`), which read the
+functional documentation, the ADRs and the mockups kept outside this repository.
 
 ## SonarQube analysis
 

@@ -20,7 +20,8 @@
     "sonar:down": "docker compose -f docker/compose.yaml down",
     "check-fct": "node ../scripts/check-fct.mjs",
     "adr-lint": "node ../scripts/adr-lint.mjs",
-    "check-structure": "node ../scripts/check-structure.mjs"
+    "check-structure": "node ../scripts/check-structure.mjs",
+    "check-studio-styles": "node ../scripts/check-studio-styles.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist-mono": "5.3.0",
