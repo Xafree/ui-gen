@@ -76,6 +76,22 @@ function screensMenuLink(label: string): Locator {
   return page.getByRole('link', { name: label, exact: true });
 }
 
+function menuItemIn(zone: string, selector: string, label: string): Element | undefined {
+  return deepQueryAll(`${zone} ${selector}`).find((item) => visibleText(item) === label);
+}
+
+function screensMenuItem(label: string): Element | undefined {
+  return menuItemIn('.ui-topbar__screens', 'a', label);
+}
+
+function projectMenuItem(label: string): Element | undefined {
+  return menuItemIn('.ui-topbar__project-menu', 'button', label);
+}
+
+function isShownNow(element: Element | undefined): boolean {
+  return element?.checkVisibility() ?? false;
+}
+
 function chatButton(): Locator {
   return page.getByRole('button', { name: /^Chat IA/ });
 }
@@ -258,10 +274,11 @@ describe('<ui-shell> screen navigation', () => {
     await screensButton().click();
     await expect.element(page.getByText('Écrans du studio', { exact: true })).toBeVisible();
     await expect.element(screensMenuLink('Éditeur')).toHaveAttribute('aria-current', 'page');
+    expect(isShownNow(screensMenuItem('Import de tokens'))).toBe(true);
     await screensMenuLink('Import de tokens').click();
 
     await expectScreenShown(TOKEN_IMPORT);
-    await expect.element(screensMenuLink('Import de tokens')).not.toBeVisible();
+    await expect.poll(() => isShownNow(screensMenuItem('Import de tokens'))).toBe(false);
     await expect.poll(() => isFocused(screensButton())).toBe(true);
     await expect.element(screensButton()).toHaveAttribute('aria-expanded', 'false');
   });
@@ -274,12 +291,15 @@ describe('<ui-shell> screen navigation', () => {
     focusOn(screensButton());
     await userEvent.keyboard('{Enter}');
     await expect.element(screensMenuLink('Playground')).toBeVisible();
+    expect(isShownNow(screensMenuItem('Playground'))).toBe(true);
     focusOn(screensMenuLink('Playground'));
     await userEvent.keyboard('{Enter}');
 
     await expectScreenShown(PLAYGROUND);
-    await expect.element(screensMenuLink('Playground')).not.toBeVisible();
+    await expect.poll(() => isShownNow(screensMenuItem('Playground'))).toBe(false);
     await expect.poll(() => isFocused(screensButton())).toBe(true);
+
+    await screensButton().click();
     await expect.element(screensMenuLink('Playground')).toHaveAttribute('aria-current', 'page');
   });
 });
@@ -336,10 +356,11 @@ describe('<ui-shell> project menu', () => {
     await expect.poll(() => isFocused(closeProjectItem())).toBe(true);
     await userEvent.keyboard('{ArrowUp}');
     await expect.poll(() => isFocused(changeProjectItem())).toBe(true);
+    expect(isShownNow(projectMenuItem('Changer de projet'))).toBe(true);
 
     await userEvent.keyboard('{Escape}');
     await expect.element(projectButton()).toHaveAttribute('aria-expanded', 'false');
-    await expect.element(changeProjectItem()).not.toBeVisible();
+    await expect.poll(() => isShownNow(projectMenuItem('Changer de projet'))).toBe(false);
     await expect.poll(() => isFocused(projectButton())).toBe(true);
   });
 
@@ -362,11 +383,12 @@ describe('<ui-shell> project menu', () => {
     await expect.poll(() => isFocused(changeProjectItem())).toBe(true);
     await userEvent.keyboard('{ArrowDown}');
     await expect.poll(() => isFocused(closeProjectItem())).toBe(true);
+    expect(isShownNow(projectMenuItem('Fermer le projet'))).toBe(true);
 
     await userEvent.tab();
 
     await expect.element(projectButton()).toHaveAttribute('aria-expanded', 'false');
-    await expect.element(closeProjectItem()).not.toBeVisible();
+    await expect.poll(() => isShownNow(projectMenuItem('Fermer le projet'))).toBe(false);
   });
 
   // covers: FCT-0019
@@ -375,11 +397,12 @@ describe('<ui-shell> project menu', () => {
     const closed = recordClosed(shell);
     await projectButton().click();
     await expect.element(changeProjectItem()).toBeVisible();
+    expect(isShownNow(projectMenuItem('Changer de projet'))).toBe(true);
 
     await page.getByText('Disponible dans un prochain lot', { exact: true }).click();
 
     await expect.element(projectButton()).toHaveAttribute('aria-expanded', 'false');
-    await expect.element(changeProjectItem()).not.toBeVisible();
+    await expect.poll(() => isShownNow(projectMenuItem('Changer de projet'))).toBe(false);
     expect(closed).toEqual([]);
   });
 
