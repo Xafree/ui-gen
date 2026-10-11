@@ -1,9 +1,9 @@
 export default {
-  testRunner: 'vitest',
-  vitest: {
-    configFile: 'vitest.config.ts',
-    dir: 'tests/modules',
+  testRunner: 'command',
+  commandRunner: {
+    command: 'npx --no-install vitest run --project node tests/modules',
   },
+  coverageAnalysis: 'off',
   mutate: ['src/modules/*/domain/**/*.ts', 'src/modules/*/application/**/*.ts'],
   incremental: true,
   incrementalFile: 'reports/stryker-incremental.json',
