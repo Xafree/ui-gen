@@ -18,7 +18,7 @@ export class CanvasView {
     this.iframe = document.createElement('iframe');
     this.iframe.setAttribute('sandbox', 'allow-scripts');
     this.iframe.title = 'Rendu du composant';
-    this.iframe.addEventListener('load', this.#connect);
+    window.addEventListener('message', this.#accept);
     this.iframe.setAttribute('src', url);
   }
 
@@ -42,22 +42,26 @@ export class CanvasView {
   }
 
   dispose(): void {
-    this.iframe.removeEventListener('load', this.#connect);
+    window.removeEventListener('message', this.#accept);
     this.#port?.close();
     this.#port = null;
     for (const waiter of this.#hitWaiters.splice(0)) waiter(null);
     this.iframe.remove();
   }
 
-  readonly #connect = (): void => {
-    if (this.#port !== null) return;
-    const channel = new MessageChannel();
-    this.#port = channel.port1;
-    channel.port1.onmessage = (event: MessageEvent<unknown>) => {
-      const message = readHarnessMessage(event.data, this.#knownIds);
+  readonly #accept = (event: MessageEvent<unknown>): void => {
+    if (this.#port !== null || event.source !== this.iframe.contentWindow) return;
+    const [received, ...extra] = event.ports;
+    if (received === undefined || extra.length > 0 || !isConnectMessage(event.data)) return;
+    this.#port = received;
+    received.onmessage = (portEvent: MessageEvent<unknown>) => {
+      const message = readHarnessMessage(portEvent.data, this.#knownIds);
       if (message === null) console.warn('The canvas sent an unreadable message');
       else this.#listener(this, message);
     };
-    this.iframe.contentWindow?.postMessage('connect', '*', [channel.port2]);
   };
+}
+
+function isConnectMessage(data: unknown): boolean {
+  return typeof data === 'object' && data !== null && Reflect.get(data, 'type') === 'connect';
 }

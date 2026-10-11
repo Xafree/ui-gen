@@ -13,8 +13,6 @@ interface RenderRequest {
 
 const DARK_THEME_ATTRIBUTE = 'data-hz-theme';
 const NODE_MARK_DATASET_KEY = 'nodeMark';
-const FILE_ORIGIN = 'file://';
-const OPAQUE_ORIGIN = 'null';
 
 let port: MessagePort | null = null;
 interface HiddenStyle {
@@ -249,22 +247,24 @@ function observeLayout(): void {
   for (const instance of instances) observer.observe(instance);
 }
 
-function connect(rendering: Promise<void>, received: MessagePort): void {
-  port = received;
+function connect(rendering: Promise<void>): void {
+  const studioOrigin = location.ancestorOrigins[0];
+  if (studioOrigin === undefined) {
+    console.error('The canvas has no studio to connect to');
+    return;
+  }
+  const channel = new MessageChannel();
+  port = channel.port1;
   port.onmessage = (event: MessageEvent<unknown>) => {
     handleCommand(event.data);
   };
+  window.parent.postMessage({ type: 'connect' }, studioOrigin, [channel.port2]);
   const announce = (): void => {
     post({ type: 'ready' });
     postRects();
     observeLayout();
   };
   rendering.then(announce, () => undefined);
-}
-
-function studioMessageOrigin(): string | undefined {
-  const origin = location.ancestorOrigins[0];
-  return origin === FILE_ORIGIN ? OPAQUE_ORIGIN : origin;
 }
 
 function start(): void {
@@ -277,11 +277,7 @@ function start(): void {
   rendering.catch((error: unknown) => {
     console.error('The component could not be rendered', error);
   });
-  window.addEventListener('message', (event: MessageEvent<unknown>) => {
-    const [received] = event.ports;
-    if (port !== null || received === undefined) return;
-    if (event.origin === studioMessageOrigin() && event.source === window.parent) connect(rendering, received);
-  });
+  connect(rendering);
 }
 
 start();
