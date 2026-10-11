@@ -37,7 +37,7 @@ The output is in `out/` (`main/`, `preload/`, `renderer/`).
 |---|---|
 | `npm run typecheck` | checks types (TypeScript `strict`) |
 | `npm run lint` | ESLint, typescript-eslint `strictTypeChecked` and `stylisticTypeChecked`, eslint-plugin-lit |
-| `npm run test` | Vitest unit tests from `tests/`, with coverage (lcov report in `coverage/`) |
+| `npm run test` | Vitest: `node` project (`tests/modules/`, `tests/main/`) and `browser` project (`tests/renderer/`, Lit components in headless Chromium from Playwright), merged coverage with the thresholds of `vitest.config.ts` (lcov report in `coverage/`) |
 | `npm run test:e2e` | builds the app, then runs the Playwright tests from `tests/e2e/` on Electron |
 | `npm run test:mutation` | StrykerJS mutation tests on `domain/` and `application/` (report in `reports/`) |
 | `npm run check-structure` | at most 5 files per folder of `src/` and `tests/`, import direction |

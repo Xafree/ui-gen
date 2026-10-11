@@ -11,5 +11,14 @@ export default defineConfig({
       },
     },
   },
-  renderer: {},
+  renderer: {
+    esbuild: {
+      tsconfigRaw: {
+        compilerOptions: {
+          experimentalDecorators: true,
+          useDefineForClassFields: false,
+        },
+      },
+    },
+  },
 });

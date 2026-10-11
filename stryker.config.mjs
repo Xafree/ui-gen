@@ -2,6 +2,7 @@ export default {
   testRunner: 'vitest',
   vitest: {
     configFile: 'vitest.config.ts',
+    dir: 'tests/modules',
   },
   mutate: ['src/modules/*/domain/**/*.ts', 'src/modules/*/application/**/*.ts'],
   incremental: true,

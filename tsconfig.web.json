@@ -2,9 +2,14 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
-    "types": [],
+    "types": ["vite/client"],
     "experimentalDecorators": true,
     "useDefineForClassFields": false
   },
-  "include": ["src/renderer/**/*.ts", "src/modules/**/*.ts", "src/preload/ui-gen-api.ts"]
+  "include": [
+    "src/renderer/**/*.ts",
+    "src/modules/**/*.ts",
+    "src/preload/ui-gen-api.ts",
+    "tests/renderer/**/*.ts"
+  ]
 }

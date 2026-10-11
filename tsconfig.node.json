@@ -8,7 +8,9 @@
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
     "src/modules/**/*.ts",
-    "tests/**/*.ts",
+    "tests/modules/**/*.ts",
+    "tests/main/**/*.ts",
+    "tests/e2e/**/*.ts",
     "electron.vite.config.ts",
     "vitest.config.ts",
     "playwright.config.ts"
