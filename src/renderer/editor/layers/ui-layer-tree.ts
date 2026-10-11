@@ -82,6 +82,9 @@ export class UiLayerTree extends LitElement {
   }
 
   protected override updated(changed: PropertyValues<this>): void {
+    for (const row of this.renderRoot.querySelectorAll<HTMLElement>('.ui-tree__row')) {
+      row.style.setProperty('--level', row.dataset['level'] ?? String(ROOT_LEVEL));
+    }
     if (changed.has('selectedId') && this.selectedId !== null) this.revealSelection(this.selectedId);
   }
 
@@ -92,7 +95,7 @@ export class UiLayerTree extends LitElement {
     const expanded = !this.collapsed.has(layer.id);
     return html`
       <li role="treeitem" data-id=${layer.id} aria-label=${layerLabel(layer.name, hidden, locked)} aria-selected=${String(layer.id === this.selectedId)} aria-expanded=${expandable ? String(expanded) : nothing} tabindex=${layer.id === tabStop ? '0' : '-1'}>
-        <div class="ui-tree__row ${hidden ? 'is-muted' : ''}" style=${`--level:${String(level)}`}>
+        <div class="ui-tree__row ${hidden ? 'is-muted' : ''}" data-level=${String(level)}>
           ${expandable
             ? html`<button class="ui-tree__toggle" type="button" tabindex="-1" aria-hidden="true">${icon('chevron-droite')}</button>`
             : html`<span class="ui-tree__spacer"></span>`}
