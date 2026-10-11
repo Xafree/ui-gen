@@ -93,11 +93,19 @@ async function expectHomeWithMockupRecents(window: Page): Promise<void> {
   await expect(window.locator(RECENT_PATHS)).toHaveCount(4);
 }
 
-async function openKitHorizonShell(window: Page): Promise<void> {
+const PENDING_PLAYGROUND = "L'écran Playground arrive avec le lot 3.";
+
+async function showPlayground(page: Page): Promise<void> {
+  await page.getByRole('navigation', { name: 'Écrans du studio' }).getByRole('link', { name: 'Playground', exact: true }).click();
+  await expect(page.getByText('Disponible dans un prochain lot', { exact: true })).toBeVisible();
+  await expect(page.getByText(PENDING_PLAYGROUND, { exact: true })).toBeVisible();
+  await page.mouse.move(1430, 890);
+}
+
+async function openKitHorizonPlayground(window: Page): Promise<void> {
   await window.getByRole('region', { name: 'Projets récents' }).getByRole('link').filter({ hasText: 'Kit Horizon' }).click();
   await expect(window.locator('ui-shell')).toHaveCount(1);
-  await expect(window.getByText('Disponible dans un prochain lot', { exact: true })).toBeVisible();
-  await window.mouse.move(1430, 890);
+  await showPlayground(window);
 }
 
 async function captureMockupHome(app: ElectronApplication, theme: Theme): Promise<Buffer> {
@@ -119,7 +127,7 @@ async function captureMockupShell(app: ElectronApplication, theme: Theme): Promi
   try {
     await showMockup(app, reference, 'a-venir.html', theme);
     await expect(reference.page.locator('.ui-topbar__project')).toHaveText('Kit Horizon');
-    await expect(reference.page.getByText('Disponible dans un prochain lot', { exact: true })).toBeVisible();
+    await showPlayground(reference.page);
     await expectFontsLoaded(reference.page);
     return await settledCapture(reference.page, reference.page.locator(RECENT_PATHS));
   } finally {
@@ -148,7 +156,7 @@ test('shows the home screen pixel for pixel like accueil.html, in light then dar
 });
 
 // covers: FCT-0018
-test('shows the shell of an opened project pixel for pixel like a-venir.html, in light then dark theme', async () => {
+test('shows the shell of an opened project on a screen still to come pixel for pixel like a-venir.html, in light then dark theme', async () => {
   await withStudio(async ({ window }) => {
     await chooseStudioTheme(window, THEMES[0] ?? 'light');
   });
@@ -157,7 +165,7 @@ test('shows the shell of an opened project pixel for pixel like a-venir.html, in
     await withStudio(async ({ app, window }) => {
       await expect(window.locator('html')).toHaveAttribute('data-theme', theme);
       await expectHomeWithMockupRecents(window);
-      await openKitHorizonShell(window);
+      await openKitHorizonPlayground(window);
       await expect(window.getByRole('button', { name: /^Projet :/ })).toContainText('Kit Horizon');
       await expect(window.getByRole('button', { name: /^Projet :/ })).toContainText('@horizon/ui 0.4.0');
       await expect(window.locator('.ui-toast')).toHaveCount(0);
