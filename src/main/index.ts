@@ -113,7 +113,8 @@ async function createWindow(url: string): Promise<void> {
 
   studioWindow = mainWindow;
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+    if (process.env['UIGEN_SHOW_INACTIVE'] === '1') mainWindow.showInactive();
+    else mainWindow.show();
   });
   guardCanvasFrames(mainWindow.webContents);
   denyCanvasPermissions(mainWindow.webContents.session);
