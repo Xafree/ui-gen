@@ -28,7 +28,13 @@ export interface CreateFormView {
 
 const FALLBACK_PACKAGE = '@kit-horizon/ui';
 const FALLBACK_PREFIX = 'kh-';
-const TRAILING_SEPARATORS = /[\\/]+$/;
+const PATH_SEPARATORS: ReadonlySet<string> = new Set(['\\', '/']);
+
+function withoutTrailingSeparators(path: string): string {
+  let end = path.length;
+  while (end > 0 && PATH_SEPARATORS.has(path.charAt(end - 1))) end -= 1;
+  return path.slice(0, end);
+}
 
 export function tagPrefixMessage(error: TagPrefixError, value: string, suggestion: string): string {
   const example = suggestion !== '' && validateTagPrefix(suggestion) === null ? suggestion : FALLBACK_PREFIX;
@@ -77,7 +83,7 @@ export function deriveCreateForm(input: CreateFormInput): CreateFormView {
   const prefixError = prefixCode === null ? null : tagPrefixMessage(prefixCode, tagPrefix, suggestedPrefix);
   const previewPath =
     packageName !== '' && packageError === null
-      ? `${input.location.replace(TRAILING_SEPARATORS, '')}\\${projectFolderName(packageName)}`
+      ? `${withoutTrailingSeparators(input.location)}\\${projectFolderName(packageName)}`
       : null;
   return {
     packageName,
