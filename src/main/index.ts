@@ -1,8 +1,8 @@
 import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
 
-function creerFenetre(): void {
-  const fenetre = new BrowserWindow({
+async function createWindow(): Promise<void> {
+  const mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     show: false,
@@ -14,33 +14,35 @@ function creerFenetre(): void {
     },
   });
 
-  fenetre.once('ready-to-show', () => {
-    fenetre.show();
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
   });
-  fenetre.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  fenetre.webContents.on('will-navigate', (evenement) => {
-    evenement.preventDefault();
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-navigate', (event) => {
+    event.preventDefault();
   });
 
-  const urlDeDeveloppement = process.env['ELECTRON_RENDERER_URL'];
-  const chargement =
-    !app.isPackaged && urlDeDeveloppement !== undefined
-      ? fenetre.loadURL(urlDeDeveloppement)
-      : fenetre.loadFile(join(import.meta.dirname, '../renderer/index.html'));
-  chargement.catch((erreur: unknown) => {
-    console.error('Chargement de la fenêtre impossible', erreur);
-    app.exit(1);
-  });
+  const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
+  if (!app.isPackaged && devServerUrl !== undefined) {
+    await mainWindow.loadURL(devServerUrl);
+  } else {
+    await mainWindow.loadFile(join(import.meta.dirname, '../renderer/index.html'));
+  }
 }
 
 app.on('window-all-closed', () => {
   app.quit();
 });
 
-app
-  .whenReady()
-  .then(creerFenetre)
-  .catch((erreur: unknown) => {
-    console.error('Démarrage du studio impossible', erreur);
+async function startStudio(): Promise<void> {
+  try {
+    await createWindow();
+  } catch (error) {
+    console.error('Failed to start the studio', error);
     app.exit(1);
-  });
+  }
+}
+
+app.once('ready', () => {
+  void startStudio();
+});

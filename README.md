@@ -1,69 +1,69 @@
 # UI-GEN
 
-Studio de bureau (Windows) pour concevoir des composants d'interface Lit, avec leur code synchronisé
-dans les deux sens avec le canvas. Electron, Lit et TypeScript.
+Desktop studio (Windows) for designing Lit UI components, with their code kept in two-way sync with
+the canvas. Electron, Lit and TypeScript.
 
-## Prérequis
+## Prerequisites
 
-- Node.js 22.12 ou plus récent
-- Docker Desktop, pour l'analyse SonarQube seulement
+- Node.js 22.12 or later
+- Docker Desktop, for the SonarQube analysis only
 
-## Installer
+## Install
 
 ```sh
 npm install
 ```
 
-Le binaire d'Electron se télécharge au premier lancement ; pour le télécharger tout de suite :
+The Electron binary is downloaded on first launch; to download it right away:
 `npx install-electron --no`.
 
-## Lancer
+## Run
 
 ```sh
 npm run dev
 ```
 
-## Construire
+## Build
 
 ```sh
 npm run build
 ```
 
-Le résultat est dans `out/` (`main/`, `preload/`, `renderer/`).
+The output is in `out/` (`main/`, `preload/`, `renderer/`).
 
-## Tester
+## Test
 
-| Commande | Ce qu'elle fait |
+| Command | What it does |
 |---|---|
-| `npm run typecheck` | vérifie les types (TypeScript `strict`) |
-| `npm run lint` | ESLint, typescript-eslint `strictTypeChecked` et `stylisticTypeChecked`, eslint-plugin-lit |
-| `npm run test` | tests unitaires Vitest de `tests/`, avec couverture (rapport lcov dans `coverage/`) |
-| `npm run test:e2e` | construit l'application puis lance les tests Playwright de `tests/e2e/` sur Electron |
-| `npm run test:mutation` | tests de mutation StrykerJS sur `domaine/` et `application/` (rapport dans `reports/`) |
-| `npm run verifier-structure` | 5 fichiers au plus par dossier de `src/` et `tests/`, sens des imports |
-| `npm run verifier-fct` | chaque critère `FCT-NNNN` est cité par un test, et inversement |
-| `npm run adr-lint` | forme des ADR |
+| `npm run typecheck` | checks types (TypeScript `strict`) |
+| `npm run lint` | ESLint, typescript-eslint `strictTypeChecked` and `stylisticTypeChecked`, eslint-plugin-lit |
+| `npm run test` | Vitest unit tests from `tests/`, with coverage (lcov report in `coverage/`) |
+| `npm run test:e2e` | builds the app, then runs the Playwright tests from `tests/e2e/` on Electron |
+| `npm run test:mutation` | StrykerJS mutation tests on `domain/` and `application/` (report in `reports/`) |
+| `npm run check-structure` | at most 5 files per folder of `src/` and `tests/`, import direction |
+| `npm run check-fct` | every `FCT-NNNN` criterion is cited by a test (`// covers: FCT-NNNN`), and the other way round |
+| `npm run adr-lint` | ADR format |
 
-Les trois dernières commandes lancent les scripts du dossier parent (`../scripts/`), qui lisent
-la documentation fonctionnelle et les ADR rangés hors de ce dépôt.
+The last three commands run the scripts of the parent folder (`../scripts/`), which read the
+functional documentation and the ADRs kept outside this repository.
 
-## Analyse SonarQube
+## SonarQube analysis
 
 ```sh
-npm run sonar:up      # démarre SonarQube sur http://127.0.0.1:9100
-npm run test          # produit coverage/lcov.info
-npm run sonar         # analyse ; le jeton est lu dans la variable d'environnement SONAR_TOKEN
-npm run sonar:down    # arrête le conteneur, les données restent dans les volumes Docker
+npm run sonar:up      # starts SonarQube on http://127.0.0.1:9100
+npm run test          # produces coverage/lcov.info
+npm run sonar         # analysis; the token is read from the SONAR_TOKEN environment variable
+npm run sonar:down    # stops the container; data stays in the Docker volumes
 ```
 
-## Organisation
+## Layout
 
-| Chemin | Contenu |
+| Path | Content |
 |---|---|
-| `src/main/` | processus main d'Electron |
-| `src/preload/` | preload : API exposée au renderer par `contextBridge` |
-| `src/renderer/` | interface du studio en Lit |
-| `src/modules/<module>/` | code métier en architecture hexagonale : `domaine/`, `application/`, `ports/`, `adaptateurs/` |
-| `tests/` | tests unitaires, même arborescence que `src/` |
-| `tests/e2e/` | tests de bout en bout Playwright |
-| `docker/compose.yaml` | services de développement (SonarQube) |
+| `src/main/` | Electron main process |
+| `src/preload/` | preload: API exposed to the renderer through `contextBridge` |
+| `src/renderer/` | studio UI in Lit |
+| `src/modules/<module>/` | business code in hexagonal architecture: `domain/`, `application/`, `ports/`, `adapters/` |
+| `tests/` | unit tests, same tree as `src/` |
+| `tests/e2e/` | Playwright end-to-end tests |
+| `docker/compose.yaml` | development services (SonarQube) |

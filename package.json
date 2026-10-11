@@ -18,9 +18,9 @@
     "sonar": "sonar-scanner-npm",
     "sonar:up": "docker compose -f docker/compose.yaml up -d sonarqube",
     "sonar:down": "docker compose -f docker/compose.yaml down",
-    "verifier-fct": "node ../scripts/verifier-fct.mjs",
+    "check-fct": "node ../scripts/check-fct.mjs",
     "adr-lint": "node ../scripts/adr-lint.mjs",
-    "verifier-structure": "node ../scripts/verifier-structure.mjs"
+    "check-structure": "node ../scripts/check-structure.mjs"
   },
   "dependencies": {
     "lit": "3.3.3"

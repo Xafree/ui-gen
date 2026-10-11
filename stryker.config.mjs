@@ -3,7 +3,7 @@ export default {
   vitest: {
     configFile: 'vitest.config.ts',
   },
-  mutate: ['src/modules/*/domaine/**/*.ts', 'src/modules/*/application/**/*.ts'],
+  mutate: ['src/modules/*/domain/**/*.ts', 'src/modules/*/application/**/*.ts'],
   incremental: true,
   incrementalFile: 'reports/stryker-incremental.json',
   reporters: ['clear-text', 'progress', 'html'],

@@ -1,8 +1,8 @@
 import { contextBridge } from 'electron';
-import type { ApiUiGen } from './api-ui-gen.js';
+import type { UiGenApi } from './ui-gen-api.js';
 
-const api: ApiUiGen = Object.freeze({
-  plateforme: process.platform,
+const api: UiGenApi = Object.freeze({
+  platform: process.platform,
 });
 
 contextBridge.exposeInMainWorld('uiGen', api);
