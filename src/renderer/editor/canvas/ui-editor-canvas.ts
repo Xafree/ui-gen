@@ -45,9 +45,10 @@ declare global {
   }
 }
 
-export type CanvasPhase = 'loading' | 'empty' | 'ready';
+export type CanvasPhase = 'loading' | 'empty' | 'error' | 'ready';
 
 export const CANVAS_SELECT = 'canvas-select';
+export const LIBRARY_RETRY = 'library-retry';
 
 export interface CanvasSelectDetail {
   readonly id: string | null;
@@ -59,6 +60,8 @@ const NO_BREAK_SPACE = String.fromCodePoint(0xa0);
 const DEFAULT_FRAME_HEIGHT = 320;
 const FRAME_BOTTOM_MARGIN = 16;
 const MAX_FRAME_HEIGHT = 4000;
+const LIBRARY_FAILED_TITLE = 'Bibliothèque illisible';
+const LIBRARY_FAILED_TEXT = "Les composants n'ont pas pu être lus.";
 const RENDER_FAILED_TITLE = "Ce composant ne s'affiche pas";
 const RENDER_FAILED_TEXT = "Son code a levé une erreur au rendu. Le fichier n'a pas été modifié.";
 const ARROW_STEP = 24;
@@ -189,6 +192,7 @@ export class UiEditorCanvas extends LitElement {
 
   private renderPhase(): TemplateResult | typeof nothing {
     if (this.phase === 'loading') return nothing;
+    if (this.phase === 'error') return this.renderLibraryFailed();
     return html`
       <div class="ed-canvas-empty" id="canvas-empty">
         <div class="ui-empty">
@@ -197,6 +201,21 @@ export class UiEditorCanvas extends LitElement {
           <p class="ui-empty__text">${IMPORT_HINT}</p>
           <div class="ui-empty__actions">
             <a class="ui-btn ui-btn--secondary ui-btn--sm" href=${IMPORT_SCREEN}>Importer un composant</a>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderLibraryFailed(): TemplateResult {
+    return html`
+      <div class="ed-canvas-empty" id="library-failed" role="alert">
+        <div class="ui-empty">
+          <span class="ui-empty__icon">${icon('erreur')}</span>
+          <p class="ui-empty__title">${LIBRARY_FAILED_TITLE}</p>
+          <p class="ui-empty__text">${LIBRARY_FAILED_TEXT}</p>
+          <div class="ui-empty__actions">
+            <button class="ui-btn ui-btn--secondary ui-btn--sm" type="button" id="library-retry" @click=${this.onLibraryRetry}>Réessayer</button>
           </div>
         </div>
       </div>
@@ -368,6 +387,10 @@ export class UiEditorCanvas extends LitElement {
     const chosen = SCREEN_SIZES.find((option) => option.id === target.value);
     if (chosen === undefined) return;
     this.screenSize = chosen.id;
+  };
+
+  private readonly onLibraryRetry = (): void => {
+    this.dispatchEvent(new CustomEvent(LIBRARY_RETRY, { bubbles: true, composed: true }));
   };
 
   private readonly onRects = (event: CustomEvent<CanvasRectsDetail>): void => {

@@ -112,6 +112,7 @@ export class UiEditor extends LitElement {
   @property({ attribute: false }) projectPath = '';
 
   @state() private library: readonly ComponentSummary[] | null = null;
+  @state() private libraryFailed = false;
   @state() private opened: OpenedComponent | null = null;
   @state() private restarting = false;
   @state() private leftTab: LeftTab = 'layers';
@@ -171,6 +172,7 @@ export class UiEditor extends LitElement {
   }
 
   private get phase(): CanvasPhase {
+    if (this.libraryFailed) return 'error';
     if (this.library === null) return 'loading';
     return this.library.length === 0 ? 'empty' : 'ready';
   }
@@ -236,7 +238,7 @@ export class UiEditor extends LitElement {
     return html`
       <main class="ui-stage ed-stage" id="main" tabindex="-1">
         <h1 class="sr-only" id="page-title">${this.opened === null ? 'Éditeur' : `Éditeur du composant ${this.tag}`}</h1>
-        <ui-editor-canvas .phase=${this.phase} .component=${this.opened} .tag=${this.tag} .projectPath=${this.projectPath} .layers=${this.layers} .selectedId=${this.selectedId} .hoverId=${this.hoverId} .hiddenLayers=${this.hiddenLayers} .lockedLayers=${this.lockedLayers} @canvas-select=${this.onCanvasSelect}></ui-editor-canvas>
+        <ui-editor-canvas .phase=${this.phase} .component=${this.opened} .tag=${this.tag} .projectPath=${this.projectPath} .layers=${this.layers} .selectedId=${this.selectedId} .hoverId=${this.hoverId} .hiddenLayers=${this.hiddenLayers} .lockedLayers=${this.lockedLayers} @canvas-select=${this.onCanvasSelect} @library-retry=${this.onLibraryRetry}></ui-editor-canvas>
         <ui-code-panel .component=${this.opened} .displayPath=${this.opened === null ? '' : projectRelative(this.projectPath, this.opened.path)} .restarting=${this.restarting} .diagnostics=${this.diagnostics} .targetRange=${this.targetRange} @code-line-select=${this.onCodeLineSelect} @code-cursor=${this.onCodeCursor}></ui-code-panel>
       </main>
     `;
@@ -337,8 +339,15 @@ export class UiEditor extends LitElement {
       if (path !== undefined) await this.openComponent(path);
     } catch (error) {
       console.warn('The component library could not be read', error);
+      this.libraryFailed = true;
     }
   }
+
+  private readonly onLibraryRetry = (): void => {
+    this.libraryFailed = false;
+    this.library = null;
+    void this.load();
+  };
 
   private async openComponent(path: string): Promise<void> {
     const request = ++this.openRequest;
