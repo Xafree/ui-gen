@@ -1,6 +1,6 @@
-import type { ComponentModel } from '../../sync/application/component-model.js';
+import type { InstrumentableModel } from '../domain/model/instrumentable-model.js';
 
 export interface CanvasCompute {
-  readModel(text: string): Promise<ComponentModel>;
+  readModel(text: string): Promise<InstrumentableModel>;
   transpile(source: string, tsconfigText: string | null, fileName: string): Promise<string>;
 }

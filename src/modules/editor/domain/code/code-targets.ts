@@ -1,11 +1,8 @@
-import { instanceNodeId, renderedVariants } from '../../../canvas/application/instance-node-id.js';
-import type { ComponentModel, TemplateNode } from '../../../sync/application/component-model.js';
+import { instanceNodeId, renderedVariants } from '../layers/instance-id.js';
 import type { LayerNode } from '../layers/layer-tree.js';
+import type { EditedComponent, TemplateNode, TextRange } from '../model/edited-component.js';
 
-export interface TextRange {
-  readonly start: number;
-  readonly end: number;
-}
+export type { TextRange };
 
 interface PlacedNode {
   readonly node: Exclude<TemplateNode, { kind: 'text' }>;
@@ -49,7 +46,7 @@ export function variantOf(layer: LayerNode): string | null {
   return layer.id.slice(0, layer.id.length - layer.nodeId.length - 1);
 }
 
-export function layerIdForNode(model: ComponentModel, selected: LayerNode | undefined, nodeId: string): string {
+export function layerIdForNode(model: EditedComponent, selected: LayerNode | undefined, nodeId: string): string {
   const variant = selected === undefined ? null : variantOf(selected);
   return instanceNodeId(variant ?? renderedVariants(model)[0] ?? null, nodeId);
 }

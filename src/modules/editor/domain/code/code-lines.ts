@@ -1,11 +1,8 @@
-import type { OpenedComponent } from '../../../sync/application/components/component-views.js';
-
-type HighlightToken = OpenedComponent['highlight'][number];
-type HighlightClassName = HighlightToken['className'];
+import type { HighlightToken } from '../model/edited-component.js';
 
 export interface CodeSegment {
   readonly text: string;
-  readonly className: HighlightClassName | null;
+  readonly className: string | null;
 }
 
 export interface CodeLine {

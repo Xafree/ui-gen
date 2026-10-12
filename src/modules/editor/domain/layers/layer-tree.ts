@@ -1,5 +1,5 @@
-import { instanceNodeId, renderedVariants } from '../../../canvas/application/instance-node-id.js';
-import type { ComponentModel, ElementNode, TemplateNode } from '../../../sync/application/component-model.js';
+import type { EditedComponent, ElementNode, TemplateNode } from '../model/edited-component.js';
+import { instanceNodeId, renderedVariants } from './instance-id.js';
 
 export type LayerKind = 'set' | 'variant' | 'container' | 'instance' | 'text' | 'binding' | 'conditional' | 'opaque';
 
@@ -55,7 +55,7 @@ function layersOf(nodes: readonly TemplateNode[], variant: string | null): Layer
   });
 }
 
-export function buildLayerTree(model: ComponentModel): LayerNode[] {
+export function buildLayerTree(model: EditedComponent): LayerNode[] {
   const branches = renderedVariants(model).map((variant): LayerNode[] => {
     const layers = layersOf(model.template, variant);
     return variant === null ? layers : [{ id: variant, nodeId: null, name: variant, kind: 'variant', meta: variant, children: layers }];

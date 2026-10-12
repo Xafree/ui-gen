@@ -1,7 +1,7 @@
-import type { ComponentChange, OpenedComponent } from '../../../sync/application/components/component-views.js';
+import type { ChangedComponent, DiagnosedComponent, Diagnostic } from '../model/edited-component.js';
 import type { CodeLine, CodeSegment } from './code-lines.js';
 
-export type Diagnostic = ComponentChange['diagnostics'][number];
+export type { Diagnostic };
 export type DiagnosticSeverity = Diagnostic['severity'];
 
 export interface LineFragment {
@@ -25,7 +25,7 @@ interface IndexedDiagnostic {
   readonly diagnostic: Diagnostic;
 }
 
-function isChange(component: OpenedComponent): component is ComponentChange {
+function isChange(component: DiagnosedComponent): component is ChangedComponent {
   return 'diagnostics' in component;
 }
 
@@ -33,7 +33,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
 }
 
-export function displayedDiagnostics(component: OpenedComponent | null): Diagnostic[] {
+export function displayedDiagnostics(component: DiagnosedComponent | null): Diagnostic[] {
   if (component === null) return [];
   const diagnostics = isChange(component) ? component.diagnostics : component.model.diagnostics;
   return [...diagnostics].sort((a, b) => a.range.start - b.range.start);

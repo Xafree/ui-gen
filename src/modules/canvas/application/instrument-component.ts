@@ -1,8 +1,8 @@
 import type {
-  ComponentModel,
-  ElementNode,
-  TemplateNode,
-} from '../../sync/application/component-model.js';
+  InstrumentableElement,
+  InstrumentableModel,
+  InstrumentableNode,
+} from '../domain/model/instrumentable-model.js';
 import { NODE_MARK_ATTRIBUTE } from '../domain/node-mark.js';
 
 interface NodeMark {
@@ -12,12 +12,12 @@ interface NodeMark {
 
 const START_TAG_OPENING = /^<[^\t\n\f\r />]+/;
 
-function markOfElement(text: string, element: ElementNode): NodeMark[] {
+function markOfElement(text: string, element: InstrumentableElement): NodeMark[] {
   const opening = START_TAG_OPENING.exec(text.slice(element.range.start, element.range.end));
   return opening === null ? [] : [{ offset: element.range.start + opening[0].length, id: element.id }];
 }
 
-function marksOf(text: string, nodes: readonly TemplateNode[]): NodeMark[] {
+function marksOf(text: string, nodes: readonly InstrumentableNode[]): NodeMark[] {
   return nodes.flatMap((node) => {
     switch (node.kind) {
       case 'element':
@@ -32,7 +32,7 @@ function marksOf(text: string, nodes: readonly TemplateNode[]): NodeMark[] {
   });
 }
 
-export function instrumentComponentSource(text: string, model: ComponentModel): string {
+export function instrumentComponentSource(text: string, model: InstrumentableModel): string {
   const marks = marksOf(text, model.template).toSorted((first, second) => first.offset - second.offset);
   const pieces: string[] = [];
   let cursor = 0;
