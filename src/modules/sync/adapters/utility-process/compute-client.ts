@@ -1,6 +1,6 @@
 import type { AnalyzerStatus, ComponentAnalysis, ComponentAnalyzer } from '../../ports/component-analyzer.js';
 import type { ComponentModel } from '../../domain/model/component-model.js';
-import { readComputeMessage, type ComputeReply, type ComputeRequest } from './compute-protocol.js';
+import { readComputeMessage, readComputeRequest, type ComputeReply, type ComputeRequest } from './compute-protocol.js';
 
 type DistributiveOmit<Union, Key extends PropertyKey> = Union extends unknown ? Omit<Union, Key> : never;
 
@@ -184,6 +184,7 @@ export class ComputeClient implements ComponentAnalyzer {
   }
 
   async #request(content: RequestContent): Promise<ComputeReply> {
+    if (readComputeRequest({ id: 0, ...content }) === null) throw new ComputeUnavailableError('request out of bounds');
     const process = await this.#whenReady();
     const id = ++this.#lastId;
     const timeoutMs = this.#options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;

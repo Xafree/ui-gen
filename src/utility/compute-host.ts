@@ -1,6 +1,6 @@
 import { transpileProjectModule } from '../modules/canvas/adapters/typescript/typescript-transpiler.js';
 import { readComponent } from '../modules/sync/application/read-component.js';
-import { readComputeRequest } from '../modules/sync/adapters/utility-process/compute-protocol.js';
+import { readComputeRequest, refusalOf } from '../modules/sync/adapters/utility-process/compute-protocol.js';
 import {
   createComputeServer,
   createTranspileServer,
@@ -23,6 +23,8 @@ parentPort.on('message', ({ data }) => {
   const request = readComputeRequest(data);
   if (request === null) {
     console.warn('The analysis process refused an unreadable request');
+    const refusal = refusalOf(data);
+    if (refusal !== null) parentPort.postMessage(refusal);
     return;
   }
   parentPort.postMessage(serve(request));

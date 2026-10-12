@@ -84,6 +84,10 @@ export function readComputeRequest(value: unknown): ComputeRequest | null {
   return isId(id) && isOperation && isText ? { id, operation, text } : null;
 }
 
+export function refusalOf(value: unknown): ComputeReply | null {
+  return isRecord(value) && isId(value['id']) ? { outcome: 'failed', id: value['id'] } : null;
+}
+
 export function readComputeMessage(value: unknown): ComputeMessage | null {
   if (!isRecord(value)) return null;
   const { outcome, id, model, highlight, code } = value;

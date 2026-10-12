@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { prepareComponentModule } from '../../modules/canvas/application/prepare-component-module.js';
 import {
@@ -14,6 +14,10 @@ import {
 } from '../../modules/canvas/domain/canvas-address.js';
 import { contentTypeOf, extensionOf } from '../../modules/canvas/domain/content-type.js';
 import type { CanvasCompute } from '../../modules/canvas/ports/canvas-compute.js';
+import {
+  MAX_COMPUTE_TEXT_LENGTH,
+  MAX_TSCONFIG_LENGTH,
+} from '../../modules/sync/adapters/utility-process/compute-protocol.js';
 import { resolveConfinedFile } from './confined-file.js';
 import { buildHarnessPage } from './harness-page.js';
 
@@ -55,6 +59,10 @@ function parseCanvasUrl(value: string): URL | null {
   } catch {
     return null;
   }
+}
+
+async function fitsWithin(path: string, maxBytes: number): Promise<boolean> {
+  return (await stat(path)).size <= maxBytes;
 }
 
 async function readOptionalText(path: string | null): Promise<string | null> {
@@ -99,7 +107,10 @@ export function createCanvasHandler({ projectRoot, compute, studio }: CanvasHand
   }
 
   async function serveModule(root: string, file: string, opened: boolean): Promise<Response> {
-    const tsconfig = await readOptionalText(await resolveConfinedFile(root, [TSCONFIG_FILE]));
+    const tsconfigFile = await resolveConfinedFile(root, [TSCONFIG_FILE]);
+    if (!(await fitsWithin(file, MAX_COMPUTE_TEXT_LENGTH))) return refuse(413);
+    if (tsconfigFile !== null && !(await fitsWithin(tsconfigFile, MAX_TSCONFIG_LENGTH))) return refuse(413);
+    const tsconfig = await readOptionalText(tsconfigFile);
     const source = await readFile(file, 'utf8');
     const code = opened
       ? await prepareComponentModule(compute, source, tsconfig, basename(file))
