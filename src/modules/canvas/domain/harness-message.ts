@@ -9,11 +9,14 @@ export interface NodeRect {
 export type HarnessMessage =
   | { readonly type: 'ready' }
   | { readonly type: 'rects'; readonly rects: readonly NodeRect[] }
-  | { readonly type: 'hit'; readonly id: string | null };
+  | { readonly type: 'hit'; readonly id: string | null }
+  | { readonly type: 'error' };
+
+export const MAX_RECT_VALUE = 100_000;
 
 type UnknownRecord = Readonly<Record<string, unknown>>;
 
-const READY_KEYS = ['type'] as const;
+const TYPE_ONLY_KEYS = ['type'] as const;
 const RECTS_KEYS = ['type', 'rects'] as const;
 const HIT_KEYS = ['type', 'id'] as const;
 const RECT_KEYS = ['id', 'x', 'y', 'width', 'height'] as const;
@@ -35,12 +38,18 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+function clamped(value: number): number {
+  return Math.min(Math.max(value, -MAX_RECT_VALUE), MAX_RECT_VALUE);
+}
+
 function readRect(value: unknown, knownIds: ReadonlySet<string>): NodeRect | null {
   if (!isRecord(value) || !hasExactKeys(value, RECT_KEYS)) return null;
   const { id, x, y, width, height } = value;
   if (!isKnownId(id, knownIds)) return null;
   const isFiniteBox = isFiniteNumber(x) && isFiniteNumber(y) && isFiniteNumber(width) && isFiniteNumber(height);
-  return isFiniteBox ? { id, x, y, width, height } : null;
+  return isFiniteBox
+    ? { id, x: clamped(x), y: clamped(y), width: clamped(width), height: clamped(height) }
+    : null;
 }
 
 function readRects(value: unknown, knownIds: ReadonlySet<string>): NodeRect[] | null {
@@ -71,11 +80,13 @@ export function readHarnessMessage(data: unknown, knownIds: ReadonlySet<string>)
   if (!isRecord(data)) return null;
   switch (data['type']) {
     case 'ready':
-      return hasExactKeys(data, READY_KEYS) ? { type: 'ready' } : null;
+      return hasExactKeys(data, TYPE_ONLY_KEYS) ? { type: 'ready' } : null;
     case 'rects':
       return readRectsMessage(data, knownIds);
     case 'hit':
       return readHitMessage(data, knownIds);
+    case 'error':
+      return hasExactKeys(data, TYPE_ONLY_KEYS) ? { type: 'error' } : null;
     default:
       return null;
   }

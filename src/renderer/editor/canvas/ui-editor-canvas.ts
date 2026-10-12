@@ -36,7 +36,7 @@ import { editorStyles } from '../editor-styles.js';
 import { EMPTY_LIBRARY_TITLE, IMPORT_HINT, IMPORT_SCREEN } from '../library/ui-component-library.js';
 import '../selection/ui-selection-overlay.js';
 import type { UiSelectionOverlay } from '../selection/ui-selection-overlay.js';
-import type { CanvasRectsDetail, UiCanvasFrame } from './ui-canvas-frame.js';
+import type { CanvasFailedDetail, CanvasRectsDetail, UiCanvasFrame } from './ui-canvas-frame.js';
 import './ui-canvas-frame.js';
 
 declare global {
@@ -58,6 +58,9 @@ type Tool = 'select' | 'frame' | 'text' | 'hand';
 const NO_BREAK_SPACE = String.fromCodePoint(0xa0);
 const DEFAULT_FRAME_HEIGHT = 320;
 const FRAME_BOTTOM_MARGIN = 16;
+const MAX_FRAME_HEIGHT = 4000;
+const RENDER_FAILED_TITLE = "Ce composant ne s'affiche pas";
+const RENDER_FAILED_TEXT = "Son code a levé une erreur au rendu. Le fichier n'a pas été modifié.";
 const ARROW_STEP = 24;
 const ARROW_STEP_FAST = 80;
 const LINE_HEIGHT_PX = 16;
@@ -134,6 +137,7 @@ export class UiEditorCanvas extends LitElement {
   @state() private darkPreview = false;
   @state() private tool: Tool = 'select';
   @state() private frameHeight = DEFAULT_FRAME_HEIGHT;
+  @state() private renderFailed = false;
   @state() private viewportWidth = 0;
   @state() private viewportHeight = 0;
   @state() private spaceDown = false;
@@ -170,8 +174,11 @@ export class UiEditorCanvas extends LitElement {
     return html`<div class="ui-canvas ed-canvas" id="canvas-area">${this.phase === 'ready' ? this.renderReady() : this.renderPhase()}</div>`;
   }
 
-  protected override willUpdate(changed: PropertyValues): void {
-    if (changed.has('component')) this.frameHeight = DEFAULT_FRAME_HEIGHT;
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has('component')) {
+      this.frameHeight = DEFAULT_FRAME_HEIGHT;
+      if (changed.get('component')?.path !== this.component?.path) this.renderFailed = false;
+    }
   }
 
   protected override updated(changed: PropertyValues): void {
@@ -196,9 +203,22 @@ export class UiEditorCanvas extends LitElement {
     `;
   }
 
+  private renderRenderFailed(): TemplateResult {
+    return html`
+      <div class="ed-canvas-empty" id="render-failed" role="alert">
+        <div class="ui-empty">
+          <span class="ui-empty__icon">${icon('erreur')}</span>
+          <p class="ui-empty__title">${RENDER_FAILED_TITLE}</p>
+          <p class="ui-empty__text">${RENDER_FAILED_TEXT}</p>
+        </div>
+      </div>
+    `;
+  }
+
   private renderReady(): TemplateResult {
     const hint = TOOL_HINTS[this.tool];
     return html`
+      ${this.renderFailed ? this.renderRenderFailed() : nothing}
       <div class="ed-ruler-corner" aria-hidden="true"></div>
       ${this.renderRuler('x', this.viewportWidth, this.view.x)}${this.renderRuler('y', this.viewportHeight, this.view.y)}
       <div class="ed-viewport ${this.spaceDown ? 'is-space' : ''} ${this.panning ? 'is-panning' : ''}" id="viewport" tabindex="0" role="group" aria-roledescription="canvas" aria-label=${this.viewportLabel()} aria-describedby="viewport-help" data-tool=${this.tool} @wheel=${{ handleEvent: this.onWheel, passive: false }} @keydown=${this.onViewportKeydown} @pointerdown=${this.onPointerDown} @pointermove=${this.onPointerMove} @pointerup=${this.endDrag} @pointercancel=${this.endDrag} @click=${this.onViewportClick}>
@@ -233,7 +253,7 @@ export class UiEditorCanvas extends LitElement {
       <div class="ui-frame ed-frame" id="frame">
         <div class="ui-frame__label"><span id="frame-name">${this.tag}</span><span class="ui-mono" id="frame-meta">${variantsLabel(variants)} · ${size.label}</span></div>
         <div class="ui-frame__body ed-frame__body" id="frame-body" data-screen=${size.id} aria-hidden="true" style=${styleMap({ width: `${String(size.width)}px`, height: `${String(this.frameHeight)}px` })}>
-          <ui-canvas-frame .component=${component} .projectPath=${this.projectPath} ?darkPreview=${this.darkPreview} .hiddenLayers=${this.hiddenLayers} .lockedLayers=${this.lockedLayers} @canvas-rects=${this.onRects}></ui-canvas-frame>
+          <ui-canvas-frame .component=${component} .projectPath=${this.projectPath} ?darkPreview=${this.darkPreview} .hiddenLayers=${this.hiddenLayers} .lockedLayers=${this.lockedLayers} @canvas-rects=${this.onRects} @canvas-ready=${this.onRendered} @canvas-failed=${this.onRenderFailed}></ui-canvas-frame>
         </div>
       </div>
     `;
@@ -354,7 +374,15 @@ export class UiEditorCanvas extends LitElement {
     const { rects } = event.detail;
     this.rects = new Map(rects.map((rect) => [rect.id, rect]));
     const bottom = Math.max(0, ...rects.map((rect) => rect.y + rect.height));
-    if (bottom > 0) this.frameHeight = Math.ceil(bottom) + FRAME_BOTTOM_MARGIN;
+    if (bottom > 0) this.frameHeight = Math.min(Math.ceil(bottom) + FRAME_BOTTOM_MARGIN, MAX_FRAME_HEIGHT);
+  };
+
+  private readonly onRendered = (): void => {
+    this.renderFailed = false;
+  };
+
+  private readonly onRenderFailed = (event: CustomEvent<CanvasFailedDetail>): void => {
+    this.renderFailed = !event.detail.kept;
   };
 
   private frameOrigin(): Point | null {

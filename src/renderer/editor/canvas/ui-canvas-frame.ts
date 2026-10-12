@@ -14,10 +14,15 @@ declare global {
 
 export const CANVAS_READY = 'canvas-ready';
 export const CANVAS_RECTS = 'canvas-rects';
+export const CANVAS_FAILED = 'canvas-failed';
 export const RENDER_TIMEOUT_MS = 10_000;
 
 export interface CanvasRectsDetail {
   readonly rects: readonly NodeRect[];
+}
+
+export interface CanvasFailedDetail {
+  readonly kept: boolean;
 }
 
 @customElement('ui-canvas-frame')
@@ -150,8 +155,18 @@ export class UiCanvasFrame extends LitElement {
       case 'hit':
         view.settleHit(message.id);
         break;
+      case 'error':
+        this.#fail(view);
+        break;
     }
   };
+
+  #fail(view: CanvasView): void {
+    if (view !== this.#pending) return;
+    this.#discard(view);
+    this.#pending = null;
+    this.dispatchEvent(new CustomEvent<CanvasFailedDetail>(CANVAS_FAILED, { detail: { kept: this.#front !== null } }));
+  }
 
   #promote(view: CanvasView): void {
     if (view !== this.#pending) return;
