@@ -28,20 +28,33 @@ export class ComponentChangeFeed {
   #followed: FollowedComponent | null = null;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #generation = 0;
+  #watching = true;
 
   constructor(deps: ChangeFeedDependencies, componentsDir: string) {
     this.#deps = deps;
-    this.#stopWatching = deps.library.watch(componentsDir, (path) => {
-      this.#schedule(path);
-    });
+    this.#stopWatching = deps.library.watch(
+      componentsDir,
+      (path) => {
+        this.#schedule(path);
+      },
+      () => {
+        this.#watching = false;
+      },
+    );
+  }
+
+  get isWatching(): boolean {
+    return this.#watching;
   }
 
   follow(path: string, text: string, model: ComponentModel): void {
     this.#cancelPending();
     this.#followed = { path, text, lastReadable: isReadable(model) ? model : null };
+    void this.#refresh(this.#generation);
   }
 
   stop(): void {
+    this.#watching = false;
     this.#stopWatching();
     this.#cancelPending();
     this.#followed = null;

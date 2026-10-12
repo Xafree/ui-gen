@@ -27,6 +27,9 @@ export class ComponentSession {
 
   constructor(deps: ComponentSessionDependencies) {
     this.#deps = deps;
+    deps.project.onClosed(() => {
+      this.dispose();
+    });
   }
 
   async list(): Promise<ComponentSummary[]> {
@@ -66,7 +69,7 @@ export class ComponentSession {
 
   #feedFor(location: LibraryLocation): ComponentChangeFeed {
     const watched = this.#watched;
-    if (watched?.location.componentsDir === location.componentsDir) return watched.feed;
+    if (watched?.location.componentsDir === location.componentsDir && watched.feed.isWatching) return watched.feed;
     watched?.feed.stop();
     const feed = new ComponentChangeFeed(
       {

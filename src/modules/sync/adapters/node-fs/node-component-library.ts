@@ -58,7 +58,7 @@ export class NodeComponentLibrary implements ComponentLibrary {
     return readFile(path, 'utf8');
   }
 
-  watch(componentsDir: string, onChange: (path: string) => void): StopWatching {
+  watch(componentsDir: string, onChange: (path: string) => void, onStopped: () => void = () => undefined): StopWatching {
     try {
       const watcher = watch(componentsDir, { recursive: true, persistent: false }, (_event, filename) => {
         if (filename !== null) onChange(join(componentsDir, filename));
@@ -66,12 +66,14 @@ export class NodeComponentLibrary implements ComponentLibrary {
       watcher.on('error', (error) => {
         console.warn(`Watching ${componentsDir} stopped`, error);
         watcher.close();
+        onStopped();
       });
       return () => {
         watcher.close();
       };
     } catch (error) {
       console.warn(`Cannot watch ${componentsDir}`, error);
+      onStopped();
       return () => undefined;
     }
   }

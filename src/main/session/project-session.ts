@@ -9,6 +9,7 @@ export class ProjectSession {
   readonly #grantedLocations: Set<string>;
   #pendingAdoption: string | null = null;
   #currentProject: OpenedProject | null = null;
+  readonly #closeListeners: (() => void)[] = [];
 
   constructor(defaultLocation: string) {
     this.defaultLocation = defaultLocation;
@@ -40,7 +41,12 @@ export class ProjectSession {
     this.#pendingAdoption = null;
   }
 
+  onClosed(listener: () => void): void {
+    this.#closeListeners.push(listener);
+  }
+
   closeProject(): void {
     this.#currentProject = null;
+    for (const listener of this.#closeListeners) listener();
   }
 }
