@@ -1,5 +1,6 @@
 import { instanceNodeId } from '../modules/canvas/application/instance-node-id.js';
 import { readHarnessCommand, type HarnessCommand } from '../modules/canvas/domain/harness-command.js';
+import { markedElementsIn } from './marked-elements.js';
 import type { HarnessMessage, NodeRect } from '../modules/canvas/domain/harness-message.js';
 
 interface RenderRequest {
@@ -20,6 +21,7 @@ interface HiddenStyle {
   readonly priority: string;
 }
 
+let instanceTag = '';
 let instances: readonly HTMLElement[] = [];
 let instanceVariants: readonly (string | null)[] = [];
 let hiddenIds: ReadonlySet<string> = new Set();
@@ -92,6 +94,7 @@ function layOutCanvas(): void {
 }
 
 async function render(request: RenderRequest): Promise<void> {
+  instanceTag = request.tag;
   if (request.dark) enableDarkPreview();
   await import(moduleUrl(request));
   if (customElements.get(request.tag) === undefined) throw new Error('The component did not define its element');
@@ -101,14 +104,6 @@ async function render(request: RenderRequest): Promise<void> {
   layOutCanvas();
   document.body.replaceChildren(...instances);
   await Promise.all(instances.map(settled));
-}
-
-function markedElementsIn(root: Element | ShadowRoot): Element[] {
-  const marked = [...root.querySelectorAll(`[${markAttribute()}]`)];
-  const nested = [...root.querySelectorAll('*')].flatMap((element) =>
-    element.shadowRoot === null ? [] : markedElementsIn(element.shadowRoot),
-  );
-  return [...marked, ...nested];
 }
 
 function instanceRoot(instance: HTMLElement): Element | ShadowRoot {
@@ -122,7 +117,7 @@ function layerIdOf(element: Element, variant: string | null): string | null {
 
 function measure(): NodeRect[] {
   return instances.flatMap((instance, index) =>
-    markedElementsIn(instanceRoot(instance)).flatMap((element) => {
+    markedElementsIn(instanceRoot(instance), markAttribute(), instanceTag).flatMap((element) => {
       const id = layerIdOf(element, instanceVariants[index] ?? null);
       if (id === null) return [];
       const { x, y, width, height } = element.getBoundingClientRect();
@@ -199,7 +194,7 @@ function reveal(element: Element, previous: HiddenStyle): void {
 function hiddenTargets(): Element[] {
   const branches = instances.filter((_instance, index) => hiddenIds.has(instanceVariants[index] ?? ''));
   const layers = instances.flatMap((instance, index) =>
-    markedElementsIn(instanceRoot(instance)).filter((element) => {
+    markedElementsIn(instanceRoot(instance), markAttribute(), instanceTag).filter((element) => {
       const id = layerIdOf(element, instanceVariants[index] ?? null);
       return id !== null && hiddenIds.has(id);
     }),
@@ -264,7 +259,9 @@ function connect(rendering: Promise<void>): void {
     postRects();
     observeLayout();
   };
-  rendering.then(announce, () => undefined);
+  rendering.then(announce, () => {
+    post({ type: 'error' });
+  });
 }
 
 function start(): void {

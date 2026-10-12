@@ -30,6 +30,7 @@ export interface CanvasHandlerDependencies {
 
 const MODULE_CONTENT_TYPE = 'text/javascript; charset=utf-8';
 const TSCONFIG_FILE = 'tsconfig.json';
+const OPENED_COMPONENT_PARAMETER = 'v';
 const TOKENS_SEGMENTS = PROJECT_TOKENS_FILE.split('/');
 
 const COMMON_HEADERS: Readonly<Record<string, string>> = {
@@ -97,16 +98,19 @@ export function createCanvasHandler({ projectRoot, compute, studio }: CanvasHand
     return respond(await readFile(file), 200, { 'Content-Type': contentType });
   }
 
-  async function serveModule(root: string, file: string): Promise<Response> {
+  async function serveModule(root: string, file: string, opened: boolean): Promise<Response> {
     const tsconfig = await readOptionalText(await resolveConfinedFile(root, [TSCONFIG_FILE]));
-    const code = await prepareComponentModule(compute, await readFile(file, 'utf8'), tsconfig, basename(file));
+    const source = await readFile(file, 'utf8');
+    const code = opened
+      ? await prepareComponentModule(compute, source, tsconfig, basename(file))
+      : await compute.transpile(source, tsconfig, basename(file));
     return respond(code, 200, { 'Content-Type': MODULE_CONTENT_TYPE });
   }
 
-  async function serveProjectFile(root: string, segments: readonly string[]): Promise<Response> {
+  async function serveProjectFile(root: string, segments: readonly string[], opened: boolean): Promise<Response> {
     const file = (await resolveConfinedFile(root, segments)) ?? (await typeScriptFallback(root, segments));
     if (file === null) return refuse(404);
-    if (extensionOf(file) === '.ts') return serveModule(root, file);
+    if (extensionOf(file) === '.ts') return serveModule(root, file, opened);
     const contentType = contentTypeOf(file);
     if (contentType === null) return refuse(415);
     return respond(await readFile(file), 200, { 'Content-Type': contentType });
@@ -123,7 +127,7 @@ export function createCanvasHandler({ projectRoot, compute, studio }: CanvasHand
     try {
       return segments[0] === STUDIO_ASSETS_SEGMENT
         ? await serveStudioAsset(root, segments.slice(1))
-        : await serveProjectFile(root, segments);
+        : await serveProjectFile(root, segments, url.searchParams.has(OPENED_COMPONENT_PARAMETER));
     } catch (cause) {
       console.error('A canvas request failed', cause);
       return refuse(500);

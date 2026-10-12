@@ -42,7 +42,7 @@ export default defineConfig({
         },
         test: {
           name: 'browser',
-          include: ['tests/renderer/**/*.test.ts'],
+          include: ['tests/renderer/**/*.test.ts', 'tests/harness/**/*.test.ts'],
           setupFiles: ['tests/renderer/setup.ts'],
           browser: {
             enabled: true,
