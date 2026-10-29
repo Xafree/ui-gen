@@ -1699,6 +1699,7 @@ dependencies = [
  "figcraft-color",
  "figcraft-doc",
  "figcraft-svg",
+ "figcraft-text",
  "serde",
  "serde_json",
  "thiserror 2.0.21",

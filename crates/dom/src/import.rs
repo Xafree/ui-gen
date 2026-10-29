@@ -11,6 +11,8 @@ mod text;
 #[cfg(test)]
 mod css_tests;
 #[cfg(test)]
+mod fidelity_tests;
+#[cfg(test)]
 mod frame_tests;
 #[cfg(test)]
 mod shadow_tests;
