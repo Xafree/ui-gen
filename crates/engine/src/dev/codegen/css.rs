@@ -23,6 +23,16 @@ pub(crate) struct Tokens {
     lit_names: Option<LitNames>,
     /// Lit: the Web code syntaxes that were ignored.
     pub ignored: Vec<IgnoredSyntax>,
+    /// Lit: what the component can't reproduce in CSS.
+    pub unreproducible: Vec<Unreproducible>,
+}
+
+/// A look the Lit output leaves out: its note code, the layer and what happens instead.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Unreproducible {
+    pub code: &'static str,
+    pub layer: Option<String>,
+    pub message: String,
 }
 
 /// A variable with a Web code syntax a Lit component does not follow.
@@ -93,6 +103,18 @@ impl Tokens {
         out
     }
 
+    /// Remembers something the Lit output can't reproduce (once per code, layer and message).
+    pub fn note(&mut self, code: &'static str, layer: Option<&str>, message: &str) {
+        let note = Unreproducible { code, layer: layer.map(str::to_string), message: message.to_string() };
+        if !self.unreproducible.contains(&note) {
+            self.unreproducible.push(note);
+        }
+    }
+
+    pub fn is_lit(&self) -> bool {
+        self.lit_prefix.is_some()
+    }
+
     /// The custom properties used so far, in first-use order.
     pub fn names(&self) -> impl Iterator<Item = &str> {
         self.vars.iter().map(|(n, _)| n.as_str())
@@ -108,6 +130,11 @@ impl Tokens {
         for ignored in other.ignored {
             if !self.ignored.contains(&ignored) {
                 self.ignored.push(ignored);
+            }
+        }
+        for note in other.unreproducible {
+            if !self.unreproducible.contains(&note) {
+                self.unreproducible.push(note);
             }
         }
     }
@@ -219,6 +246,9 @@ pub(crate) fn css_decls(doc: &Document, n: &Node, t: &mut Tokens, hug: (bool, bo
                 put(key, if i == 0 { tok(doc, n, &["fill"], c, t) } else { c });
             }
             PaintKind::Gradient(g) => put("background", css_gradient(g, n.width, n.height)),
+            PaintKind::Image(_) | PaintKind::Pattern(_) if t.is_lit() => {
+                t.note("image-fill", Some(&n.name), "image and pattern fills are not exported: the layer is drawn without them");
+            }
             PaintKind::Image(_) => put("background", "url(image.png) center / cover".into()),
             PaintKind::Pattern(_) => put("background", "url(pattern.png) repeat".into()),
         }
@@ -226,7 +256,7 @@ pub(crate) fn css_decls(doc: &Document, n: &Node, t: &mut Tokens, hug: (bool, bo
     for (key, value) in css_borders(doc, n, t) {
         put(&key, value);
     }
-    effect_decls(n, &mut put);
+    effect_decls(n, t, &mut put);
     if let NodeKind::Text(tx) = &n.kind {
         text_decls(doc, n, tx, t, &mut put);
     }
@@ -284,7 +314,7 @@ fn layout_decls(doc: &Document, n: &Node, l: &figcraft_doc::AutoLayout, t: &mut 
 }
 
 /// Shadows and blurs of `n`.
-fn effect_decls(n: &Node, put: &mut impl FnMut(&str, String)) {
+fn effect_decls(n: &Node, t: &mut Tokens, put: &mut impl FnMut(&str, String)) {
     let shadows: Vec<String> = n
         .effects
         .iter()
@@ -307,6 +337,9 @@ fn effect_decls(n: &Node, put: &mut impl FnMut(&str, String)) {
             // CSS blurs are uniform: a progressive blur has no CSS equivalent and is left out.
             EffectKind::LayerBlur(ref b) if !b.is_progressive() => put("filter", format!("blur({}px)", num(b.radius / 2.0))),
             EffectKind::BackgroundBlur(ref b) if !b.is_progressive() => put("backdrop-filter", format!("blur({}px)", num(b.radius / 2.0))),
+            EffectKind::LayerBlur(ref b) | EffectKind::BackgroundBlur(ref b) if b.is_progressive() && t.is_lit() => {
+                t.note("unsupported-effect", Some(&n.name), "a progressive blur has no CSS equivalent: the layer is drawn without it");
+            }
             // CSS has no refraction: the frost is the nearest.
             EffectKind::Glass(ref g) => put("backdrop-filter", format!("blur({}px)", num(g.sanitized().frost / 2.0))),
             _ => {}

@@ -8,6 +8,7 @@
 //! real snippet instead.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 
 use figcraft_doc::{Document, NodeId, NodeKind, PropDef};
 use serde_json::{Value, json};
@@ -840,27 +841,40 @@ pub(crate) fn web_tokens(doc: &Document, c: &Component, lang: CodeLang, lit: &Li
         variant_tokens.borrow_mut().absorb(tokens);
         rules
     };
-    let mut m = Markup::new(&ctx, lang);
-    m.use_lit(lit);
-    m.root_class = Some(root_class.clone());
-    m.root_attrs = if lit_lang {
-        " part=\"root\"".to_string()
-    } else {
-        variants
-            .iter()
-            .zip(&attr_names)
-            .map(|(p, attr)| match lang {
-                CodeLang::Leptos => format!(" {attr}={{{}.as_str()}}", rust_ident(&p.ident)),
-                CodeLang::Vue => format!(" :{attr}=\"{}\"", p.ident),
-                _ => format!(" {attr}={{{}}}", p.ident),
-            })
-            .collect()
+    let main = |motion: &BTreeMap<String, String>| {
+        let mut m = Markup::new(&ctx, lang);
+        m.use_lit(lit);
+        m.root_class = Some(root_class.clone());
+        m.lit_motion.clone_from(motion);
+        m.root_attrs = if lit_lang {
+            " part=\"root\"".to_string()
+        } else {
+            variants
+                .iter()
+                .zip(&attr_names)
+                .map(|(p, attr)| match lang {
+                    CodeLang::Leptos => format!(" {attr}={{{}.as_str()}}", rust_ident(&p.ident)),
+                    CodeLang::Vue => format!(" :{attr}=\"{}\"", p.ident),
+                    _ => format!(" {attr}={{{}}}", p.ident),
+                })
+                .collect()
+        };
+        m.node(c.comp, None, start, "");
+        m
     };
-    m.node(c.comp, None, start, "");
+    let mut m = main(&BTreeMap::new());
+    let mut motion = crate::lit::Motion::default();
     // Other variants: what differs from this one, layer by layer.
     let mut variant_rules = String::new();
     if lit_lang {
-        variant_rules = crate::lit::variant_rules(doc, c, &m.rules, &pass);
+        motion = crate::lit::plan_motion(doc, c, lit, &m.rules, &m.ids, &pass);
+        if !motion.base.is_empty() {
+            m = main(&motion.base);
+        }
+        for note in &motion.notes {
+            m.tokens.note(note.code, note.layer.as_deref(), &note.message);
+        }
+        variant_rules = crate::lit::variant_rules(doc, c, &m.rules, &pass, &motion);
     }
     let others: Vec<NodeId> = c.set.and_then(|s| doc.node(s)).map(|s| s.children.clone()).unwrap_or_default();
     for v in others.into_iter().filter(|v| !lit_lang && *v != c.comp && is_component(doc, *v)).take(64) {
@@ -883,7 +897,7 @@ pub(crate) fn web_tokens(doc: &Document, c: &Component, lang: CodeLang, lit: &Li
         }
     }
     let tokens = if lit_lang { String::new() } else { m.tokens.root_rule() };
-    let css = format!("{tokens}{}{variant_rules}", m.styles);
+    let css = format!("{tokens}{}{variant_rules}{}", m.styles, motion.tail);
     m.tokens.absorb(variant_tokens.into_inner());
     (root_class, m.markup, css, m.tokens)
 }

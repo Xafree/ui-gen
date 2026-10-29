@@ -27,7 +27,7 @@ pub(crate) use arkui::arkui;
 pub(crate) use compose::{compose, kotlin_color};
 #[cfg(test)]
 pub(crate) use css::css_decls;
-pub(crate) use css::{LitNames, Tokens};
+pub(crate) use css::{LitNames, Tokens, Unreproducible};
 use css::{css, tok};
 pub use css::{css_var_name, css_var_of};
 use html::html;

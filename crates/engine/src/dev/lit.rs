@@ -19,6 +19,11 @@ use crate::component_codegen::{Component, Param, ParamKind, js_string, web_token
 use crate::components::{slots_of, variant_props, variant_set};
 use crate::params::id_of;
 
+mod motion;
+
+pub use motion::easing_css;
+pub(crate) use motion::{Motion, plan as plan_motion};
+
 /// Longest custom element name (chars).
 const MAX_TAG: usize = 64;
 
@@ -477,7 +482,7 @@ fn field_param(lay: &Layout, i: usize, p: &Param) -> Param {
 /// The rules of the other variants of a set, on the host: what differs from the default variant,
 /// or, for a pseudo-class state or an unrecognised one, from the variant with the same other values
 /// at rest. `main` are the default variant's rules, `pass` those of a variant.
-pub(crate) fn variant_rules(doc: &Document, c: &Component, main: &[Rule], pass: &dyn Fn(NodeId) -> Vec<Rule>) -> String {
+pub(crate) fn variant_rules(doc: &Document, c: &Component, main: &[Rule], pass: &dyn Fn(NodeId) -> Vec<Rule>, motion: &Motion) -> String {
     let lay = layout(c);
     let children = c.set.and_then(|s| doc.node(s)).map(|s| s.children.clone()).unwrap_or_default();
     let siblings: Vec<(NodeId, BTreeMap<String, String>)> = children
@@ -545,7 +550,9 @@ pub(crate) fn variant_rules(doc: &Document, c: &Component, main: &[Rule], pass: 
                 continue;
             }
             written.push((selector.clone(), class.clone()));
-            out.push_str(&format!("{selector} .{class} {{\n{}}}\n", diff.iter().map(|l| format!("  {l}\n")).collect::<String>()));
+            let transition = motion.state(*v, &path).into_iter();
+            let lines = diff.iter().copied().chain(transition);
+            out.push_str(&format!("{selector} .{class} {{\n{}}}\n", lines.map(|l| format!("  {l}\n")).collect::<String>()));
         }
     }
     out
@@ -687,6 +694,12 @@ pub fn definition(doc: &Document, c: &Component, opts: &LitOptions) -> LitOutput
     out.push_str(&format!("declare global {{\n  interface HTMLElementTagNameMap {{\n    \"{tag}\": {class};\n  }}\n}}\n"));
     let mut notes = state_notes(c, &lay);
     notes.extend(syntax_notes(c, &tokens));
+    notes.extend(tokens.unreproducible.iter().map(|u| Note {
+        code: u.code,
+        component: c.type_name.clone(),
+        layer: u.layer.clone(),
+        message: u.message.clone(),
+    }));
     LitOutput { tag, class_name: class, ts: out, notes, tokens: tokens.names().map(str::to_string).collect() }
 }
 

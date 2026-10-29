@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::css::{Tokens, css_decls};
 use super::{CodeLang, Ctx, Document, LayoutMode, Node, NodeId, NodeKind, Param, Sizing, indent, num, with_v_if};
 use crate::lit::LitOptions;
@@ -130,6 +132,10 @@ pub(crate) struct Markup<'c, 'a> {
     pub lit: LitOptions,
     /// Lit: the markup is plain HTML, not the content of a `html` template literal.
     pub lit_plain: bool,
+    /// Each layer's class, in the order they are written.
+    pub ids: Vec<(NodeId, String)>,
+    /// Lit: declarations added to the rule of the layer at a path (transitions, effects).
+    pub lit_motion: BTreeMap<String, String>,
 }
 
 /// How `n` sits in its parent: in the flex flow, or placed at its position.
@@ -182,6 +188,8 @@ impl<'c, 'a> Markup<'c, 'a> {
             fluid_leaves: f64::INFINITY,
             lit,
             lit_plain: false,
+            ids: Vec::new(),
+            lit_motion: BTreeMap::new(),
         }
     }
 
@@ -241,6 +249,10 @@ impl<'c, 'a> Markup<'c, 'a> {
     }
 
     fn rule(&mut self, path: &str, class: &str, decls: String) {
+        let decls = match self.lit_motion.get(path) {
+            Some(extra) => merge_decls(&decls, extra),
+            None => decls,
+        };
         self.styles.push_str(&format!(".{class} {{\n"));
         for line in decls.lines() {
             self.styles.push_str(&format!("  {line}\n"));
@@ -284,6 +296,28 @@ impl<'c, 'a> Markup<'c, 'a> {
         false
     }
 
+    /// Lit: a vector layer as the inline `<svg>` of its export, placed by its own rule; false for
+    /// any other layer, or a vector that doesn't export (it stays a box, with a note).
+    fn inline_vector(&mut self, n: &Node, depth: usize, path: &str, class: &str, placement: &str) -> bool {
+        if self.lang != CodeLang::Lit || !matches!(n.kind, NodeKind::Vector { .. }) {
+            return false;
+        }
+        let doc = self.ctx.doc;
+        let Ok(svg) = figcraft_svg::try_export_svg(&doc.in_srgb(), &[n.id], &figcraft_svg::SvgOptions::default()) else {
+            self.tokens.note("vector-fallback", Some(&n.name), "the vector could not be exported as SVG: the layer is drawn as a plain box");
+            return false;
+        };
+        let own = css_decls(doc, n, &mut Tokens::default(), (false, false));
+        let kept = own.lines().filter(|l| l.starts_with("opacity:") || l.starts_with("mix-blend-mode:"));
+        let placed = placement.lines().filter(|l| !l.starts_with("transform"));
+        let decls: String = placed.chain(kept).map(|l| format!("{l}\n")).collect();
+        self.rule(path, class, decls);
+        let svg = svg.trim_end().replacen("<svg ", &format!("<svg class=\"{class}\" "), 1);
+        let svg = if self.lit_plain { svg } else { crate::lit::template_text(&svg) };
+        self.markup.push_str(&format!("{}{svg}\n", self.pad(depth)));
+        true
+    }
+
     fn text_body(&self, n: &Node, t: &figcraft_doc::TextData) -> String {
         match (self.ctx.param(n, "characters").filter(|_| self.code()), self.lang) {
             (Some(p), CodeLang::Leptos) => format!("{{{}.clone()}}", self.ident(p)),
@@ -319,6 +353,7 @@ impl<'c, 'a> Markup<'c, 'a> {
                 }
             }
         };
+        self.ids.push((n.id, class.clone()));
         let pad = self.pad(depth);
         let attr = if self.lang == CodeLang::React { "className" } else { "class" };
         // How it sits in its parent: in the flex flow, or placed at its position.
@@ -327,7 +362,7 @@ impl<'c, 'a> Markup<'c, 'a> {
         // Nested instances are calls (component code), in a wrapper that places them when needed.
         // Page code inlines instances, except those connected to code (codeConnect.set): their
         // snippet, e.g. a design-system `<Button>`.
-        if self.instance_call(n, depth, path, &class, &decls, root) {
+        if self.instance_call(n, depth, path, &class, &decls, root) || self.inline_vector(n, depth, path, &class, &decls) {
             return;
         }
         let hugs = n.layout.is_some() || matches!(n.kind, NodeKind::Text(_));
@@ -424,6 +459,14 @@ impl<'c, 'a> Markup<'c, 'a> {
             }
         }
     }
+}
+
+/// `decls` without the declarations `extra` sets again, then `extra`.
+fn merge_decls(decls: &str, extra: &str) -> String {
+    let property = |line: &str| line.split_once(':').map(|(p, _)| p.to_string());
+    let replaced: Vec<String> = extra.lines().filter_map(property).collect();
+    let kept = decls.lines().filter(|l| !property(l).is_some_and(|p| replaced.contains(&p)));
+    kept.chain(extra.lines()).map(|l| format!("{l}\n")).collect()
 }
 
 /// `decls` for a box that follows the page: a fixed width becomes `width: 100%` capped at that
