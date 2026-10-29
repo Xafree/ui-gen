@@ -176,7 +176,7 @@ pub fn tag_name(name: &str, prefix: &str) -> Result<String, TagIssue> {
 }
 
 /// The class a custom element is declared with: `ui-button` → `UiButton`.
-fn class_of(tag: &str) -> String {
+pub(crate) fn class_of(tag: &str) -> String {
     tag.split('-')
         .filter(|w| !w.is_empty())
         .map(|w| {
