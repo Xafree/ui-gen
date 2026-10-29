@@ -379,7 +379,11 @@ pub(crate) fn pages_have_keyboard(app: &FigApp) -> bool {
 /// Delete `page` (no confirmation: Undo brings it back) and say so.
 pub(crate) fn delete_page(app: &mut FigApp, page: NodeId) {
     if app.run("page.delete", json!({"id": page})).is_some() {
-        app.toast(tr("Page deleted"));
+        if app.session.in_lib_project() {
+            app.toast_with_action(tr("Component deleted"), tr("Undo"), "edit.undo", json!({}));
+        } else {
+            app.toast(tr("Page deleted"));
+        }
     }
 }
 

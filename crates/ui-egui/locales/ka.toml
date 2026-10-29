@@ -224,6 +224,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Code or invite link" = "კოდი ან მოსაწვევი ბმული"
 "Color profile: {name}" = "ფერის პროფილი: {name}"
 "Colour and text styles, Light and Dark variables, buttons, inputs and cards" = "სტილები, ღია და მუქი ცვლადები, ღილაკები და ბარათები"
+"Component deleted" = "კომპონენტი წაშლილია"
 "Component {n}" = "კომპონენტი {n}"
 "Connector" = "შემაერთებელი"
 "Convert to frame" = "ჩარჩოდ გარდაქმნა"
