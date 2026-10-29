@@ -1,0 +1,17 @@
+[package]
+name = "figcraft-dom"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "FigCraft DOM snapshot: the validated model and parser of a rendered component's DOM, boxes and computed styles"
+
+[lints]
+workspace = true
+
+[dependencies]
+figcraft-doc = { workspace = true }
+figcraft-color = { workspace = true }
+figcraft-svg = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
