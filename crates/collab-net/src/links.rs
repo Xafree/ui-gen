@@ -1,7 +1,7 @@
 //! Making the desktop app the opener of `figcraft://` invite links (the engine's
 //! [`LinkRegistrar`]). On Windows that's a per-user URL scheme under
 //! `HKEY_CURRENT_USER\Software\Classes\figcraft` (no administrator rights; uninstalling the user's
-//! registration removes nothing else); the shell then starts `figcraft.exe "<link>"`, and the app
+//! registration removes nothing else); the shell then starts `figcraft.exe -- "<link>"`, and the app
 //! joins the session it names. macOS and Linux declare the scheme in their packages
 //! (`CFBundleURLTypes`, the desktop entry's `x-scheme-handler/figcraft`), so there is nothing to
 //! register at run time.
@@ -40,9 +40,10 @@ impl<R: Registry> UrlScheme<R> {
         Self { reg, exe, installed }
     }
 
-    /// The command the shell runs for a link.
+    /// The command the shell runs for a link. The link follows a bare `--`: a link holding a quote
+    /// can break out of `"%1"` and add arguments, which must never be read as options.
     pub fn command(&self) -> String {
-        format!("\"{}\" \"%1\"", self.exe.display())
+        format!("\"{}\" -- \"%1\"", self.exe.display())
     }
 
     fn values(&self) -> [(String, &'static str, String); 4] {

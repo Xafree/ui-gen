@@ -3,6 +3,8 @@
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod agent_tasks;
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod attach_auth;
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod attached;
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::disallowed_methods)]
 mod automation_roots;

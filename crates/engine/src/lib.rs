@@ -33,6 +33,7 @@ pub use assets::playground;
 pub use assets::style_vars;
 pub use assets::token_roles;
 pub use automation::batch;
+pub use automation::control_token;
 pub use automation::doc_urls;
 pub use automation::file_access;
 pub use automation::inspect;
@@ -103,6 +104,7 @@ mod derived;
 mod doc_state;
 mod error;
 mod prefs;
+pub mod project;
 mod session;
 mod view_state;
 
@@ -553,3 +555,18 @@ mod widgets_tests;
 mod selection_reorder_tests;
 #[cfg(test)]
 mod selection_spacing_tests;
+
+#[cfg(test)]
+mod project_tests;
+
+#[cfg(test)]
+mod project_pages_tests;
+
+#[cfg(test)]
+mod project_review_tests;
+
+#[cfg(test)]
+mod project_ui_requests_tests;
+
+#[cfg(test)]
+mod project_save_as_tests;

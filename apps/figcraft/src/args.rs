@@ -4,7 +4,10 @@
 //! is up; everything else that isn't a flag is a file to open, as a path or a `file://` URL (the
 //! Linux desktop entry passes URLs, `%U`, so that it can also hand over invite links). Any other
 //! `--flag` is unknown and stops the app at startup (#836): a mistyped root flag must never leave
-//! the app running unconfined. After a bare `--`, every argument is a file.
+//! the app running unconfined. After a bare `--` (how the Windows URL handler passes the link, so a
+//! link holding a quote can never add an option) nothing is an option. An invite link there stands
+//! alone: it joins and every other argument is dropped (`ignored`), since a launcher that does not
+//! escape a quote can split one link into a link and a file; without a link every argument is a file.
 
 /// What the app was started with.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -21,6 +24,8 @@ pub struct Args {
     pub write_roots: Vec<String>,
     /// `--flags` the app doesn't know, as given.
     pub unknown: Vec<String>,
+    /// What came after `--` next to an invite link and was dropped: an invite link stands alone.
+    pub ignored: Vec<String>,
 }
 
 /// An invite link rather than a file (`figcraft:` links, in any case).
@@ -54,13 +59,34 @@ pub fn file_url_path(arg: &str) -> Option<String> {
     Some(if cfg!(windows) && drive { path.get(1..).unwrap_or_default().to_string() } else { path })
 }
 
+/// The control port: the `--control` flag, else `FIGCRAFT_CONTROL_PORT` (`env`) when it is a port.
+pub fn control_port(args: &Args, env: Option<&str>) -> Option<u16> {
+    args.control.or_else(|| env.and_then(|p| p.parse().ok()))
+}
+
+/// The control channel runs commands for any client that has its token, so it never starts
+/// without folders to confine their file access to.
+pub fn require_roots_for_control(port: Option<u16>, args: &Args) -> Result<(), String> {
+    if port.is_some() && args.read_roots.is_empty() && args.write_roots.is_empty() {
+        return Err("UIGEN: --control needs at least one of --automation-read-root DIR or --automation-write-root DIR: the control channel must not read or write files anywhere on the disk".into());
+    }
+    Ok(())
+}
+
 /// Read the arguments after the program name.
 pub fn parse(args: &[String]) -> Args {
     let mut out = Args::default();
     let mut it = args.iter();
     while let Some(a) = it.next() {
         if a == "--" {
-            out.files.extend(it.by_ref().cloned());
+            let rest: Vec<String> = it.by_ref().cloned().collect();
+            match rest.iter().rposition(|a| is_invite(a)) {
+                Some(link) => {
+                    out.ignored = rest.iter().enumerate().filter(|(i, _)| *i != link).map(|(_, a)| a.clone()).collect();
+                    out.join = rest.into_iter().nth(link);
+                }
+                None => out.files.extend(rest),
+            }
             break;
         }
         let (flag, inline) = a.split_once('=').map_or((a.as_str(), None), |(f, v)| (f, Some(v.to_string())));

@@ -1,5 +1,6 @@
 use super::view_state::ViewState;
 use super::{Arc, BTreeSet, Deserialize, Document, NodeId, Serialize, cmd, components, file_access, guides, library, rotation_origin, vectoredit};
+use crate::project::ProjectBinding;
 
 /// One undo step.
 #[derive(Clone, Debug)]
@@ -107,6 +108,8 @@ pub struct DocState {
     /// The file on disk as this tab last read or wrote it: a save refuses to replace what another
     /// app (figcraft-cli, say) wrote to it since (#1330).
     pub(crate) on_disk: Option<library::Stamp>,
+    /// The library project this tab belongs to (not saved, not an undo step).
+    pub project: Option<Arc<ProjectBinding>>,
 }
 
 /// A version shown on the canvas in place of the document: read-only until it's restored or the
@@ -171,6 +174,7 @@ impl DocState {
             last_duplicate: None,
             images_left_in_file: None,
             on_disk: None,
+            project: None,
         };
         st.zoom_to_fit();
         st
