@@ -7,6 +7,7 @@ use std::fmt;
 use serde_json::Value;
 
 use crate::Session;
+use crate::uigen_import::{self, PendingImport};
 
 pub type JobId = u64;
 
@@ -105,13 +106,21 @@ impl CaptureJob {
 pub(crate) struct Capture {
     backend: Option<Box<dyn CaptureBackend>>,
     jobs: Vec<JobRecord>,
+    pub(crate) imports: Vec<PendingImport>,
 }
 
 impl Capture {
     fn stop(&mut self) {
+        self.imports.clear();
         self.jobs.retain(|record| record.finished.is_some());
         if let Some(mut backend) = self.backend.take() {
             backend.shutdown();
+        }
+    }
+
+    pub(crate) fn finish(&mut self, job: JobId, result: Result<(), String>) {
+        if let Some(record) = self.jobs.iter_mut().find(|record| record.id == job && record.finished.is_none()) {
+            record.finished = Some(result);
         }
     }
 
@@ -162,12 +171,17 @@ impl Session {
             };
             let Some(record) = self.capture.jobs.get(position) else { continue };
             let (command, package, root) = (record.command.clone(), record.package.clone(), record.root.clone());
+            if command == uigen_import::COMMAND {
+                events.extend(uigen_import::advance(self, job, outcome));
+                continue;
+            }
             let outcome = outcome.and_then(|value| crate::cmd::project_sources::apply(self, &command, &package, &root, &value).map(|()| value));
             if let Some(record) = self.capture.jobs.get_mut(position) {
                 record.finished = Some(outcome.as_ref().map(|_| ()).map_err(|e| e.message.clone()));
             }
             events.push(CaptureEvent { job, command, package, outcome });
         }
+        events.extend(uigen_import::resume(self));
         self.capture.forget_oldest_finished();
         events
     }

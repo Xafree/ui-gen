@@ -3,6 +3,12 @@ export const LIMITS = Object.freeze({
   maxNodes: 5000,
   maxDepth: 64,
   maxMarkupBytes: 1024 * 1024,
+  maxClassNameLength: 256,
+  maxVars: 64,
+  maxAnimations: 16,
+  maxAnimationText: 256,
+  maxAnimationProperties: 64,
+  maxPropertyLength: 128,
 });
 
 function walkInPage({ rootSelector, limits }) {
@@ -16,7 +22,20 @@ function walkInPage({ rootSelector, limits }) {
     'color', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing',
     'textTransform', 'textAlign',
     'transitionProperty', 'transitionDuration', 'transitionTimingFunction', 'transitionDelay',
+    'flexDirection', 'flexWrap', 'justifyContent', 'alignItems', 'alignContent', 'alignSelf',
+    'flexGrow', 'flexShrink', 'flexBasis', 'rowGap', 'columnGap',
+    'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+    'position', 'boxSizing', 'gridTemplateColumns',
   ];
+  const SHORTHANDS = new Map([
+    ['padding', ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft']],
+    ['gap', ['rowGap', 'columnGap']],
+    ['border-color', ['borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor']],
+    ['border-width', ['borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth']],
+    ['border-radius', ['borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomRightRadius', 'borderBottomLeftRadius']],
+  ]);
+  const BARE_VAR = /^var\(\s*(--[A-Za-z0-9_-]{1,128})\s*(?:,[\s\S]*)?\)$/;
+  const NO_SPECIFICITY = [0, 0, 0];
   const TEXT_KEYS = [
     'color', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing',
     'textTransform', 'textAlign',
@@ -46,6 +65,196 @@ function walkInPage({ rootSelector, limits }) {
     }
     return style;
   };
+
+  const kebab = (key) => key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+
+  const compareRanks = (left, right) => {
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) {
+        return left[index] - right[index];
+      }
+    }
+    return 0;
+  };
+
+  const strongest = (items, rankOf) =>
+    items.reduce((best, item) => (best === undefined || compareRanks(rankOf(item), rankOf(best)) > 0 ? item : best), undefined);
+
+  const splitSelectors = (selectors) => {
+    const parts = [];
+    let depth = 0;
+    let start = 0;
+    for (let index = 0; index < selectors.length; index += 1) {
+      const character = selectors[index];
+      if (character === '(' || character === '[') {
+        depth += 1;
+      } else if (character === ')' || character === ']') {
+        depth -= 1;
+      } else if (character === ',' && depth === 0) {
+        parts.push(selectors.slice(start, index));
+        start = index + 1;
+      }
+    }
+    parts.push(selectors.slice(start));
+    return parts.map((part) => part.trim()).filter(Boolean);
+  };
+
+  const specificityOf = (selector) => {
+    const total = [0, 0, 0];
+    const count = (slot) => () => {
+      total[slot] += 1;
+      return ' ';
+    };
+    selector
+      .replace(/\\./g, 'x')
+      .replace(/"[^"]*"|'[^']*'/g, '')
+      .replace(/:where\((?:[^()]|\([^()]*\))*\)/g, '')
+      .replace(/:(?:is|not|has|matches)\(((?:[^()]|\([^()]*\))*)\)/g, (_, args) => {
+        const inner = strongest(splitSelectors(args).map(specificityOf), (value) => value) ?? NO_SPECIFICITY;
+        inner.forEach((value, slot) => {
+          total[slot] += value;
+        });
+        return ' ';
+      })
+      .replace(/\[[^\]]*\]/g, count(1))
+      .replace(/#[\w-]+/g, count(0))
+      .replace(/::[\w-]+|:(?:before|after|first-line|first-letter)\b/g, count(2))
+      .replace(/:[\w-]+(?:\([^)]*\))?/g, count(1))
+      .replace(/\.[\w-]+/g, count(1))
+      .replace(/(^|[\s>+~])[a-zA-Z][\w-]*/g, (_, lead) => {
+        total[2] += 1;
+        return lead;
+      });
+    return total;
+  };
+
+  const declarationsOf = (declaration) => {
+    const found = [];
+    const add = (key, name, value) =>
+      found.push({ key, value, name: BARE_VAR.exec(value)?.[1], important: declaration.getPropertyPriority(name) === 'important' });
+    const longhands = new Set();
+    for (const key of ELEMENT_KEYS) {
+      const value = declaration.getPropertyValue(kebab(key)).trim();
+      if (value) {
+        longhands.add(key);
+        add(key, kebab(key), value);
+      }
+    }
+    for (const [shorthand, keys] of SHORTHANDS) {
+      const value = declaration.getPropertyValue(shorthand).trim();
+      if (value.includes('var(')) {
+        keys.filter((key) => !longhands.has(key)).forEach((key) => add(key, shorthand, value));
+      }
+    }
+    return found;
+  };
+
+  const mediaApplies = (media) => media.length === 0 || matchMedia(media.mediaText).matches;
+
+  const styleRulesOf = (sheet) => {
+    let rules;
+    try {
+      rules = [...sheet.cssRules];
+    } catch {
+      return [];
+    }
+    if (sheet.disabled || (sheet.media && !mediaApplies(sheet.media))) {
+      return [];
+    }
+    return rules.flatMap((rule) => {
+      if (rule instanceof CSSStyleRule) {
+        return [rule];
+      }
+      if (rule instanceof CSSImportRule) {
+        return rule.styleSheet && mediaApplies(rule.media) ? styleRulesOf(rule.styleSheet) : [];
+      }
+      if (rule instanceof CSSMediaRule && !mediaApplies(rule.media)) {
+        return [];
+      }
+      if (rule instanceof CSSSupportsRule && !CSS.supports(rule.conditionText)) {
+        return [];
+      }
+      return rule.cssRules && !(rule instanceof CSSKeyframesRule) ? styleRulesOf({ cssRules: rule.cssRules }) : [];
+    });
+  };
+
+  const buildDeclarationIndex = () => {
+    const index = new Map();
+    [...document.styleSheets, ...document.adoptedStyleSheets].flatMap(styleRulesOf).forEach((rule, order) => {
+      const selectors = splitSelectors(rule.selectorText).map((text) => ({ text, specificity: specificityOf(text) }));
+      for (const declaration of declarationsOf(rule.style)) {
+        const entries = index.get(declaration.key) ?? { all: [], named: [] };
+        const entry = { selectors, order, ...declaration };
+        entries.all.push(entry);
+        if (entry.name !== undefined) {
+          entries.named.push(entry);
+        }
+        index.set(declaration.key, entries);
+      }
+    });
+    return index;
+  };
+
+  const declarationIndex = buildDeclarationIndex();
+
+  const matches = (element, selector) => {
+    try {
+      return element.matches(selector);
+    } catch {
+      return false;
+    }
+  };
+
+  const rankOf = (element, entry) => {
+    const ranks = entry.selectors
+      .filter((selector) => matches(element, selector.text))
+      .map((selector) => [entry.important ? 2 : 0, ...selector.specificity, entry.order]);
+    return strongest(ranks, (rank) => rank);
+  };
+
+  const varsOf = (element) => {
+    const inline = declarationsOf(element.style);
+    const keys = new Set(inline.filter((declaration) => declaration.name !== undefined).map((declaration) => declaration.key));
+    for (const [key, { named }] of declarationIndex) {
+      if (named.some((entry) => rankOf(element, entry) !== undefined)) {
+        keys.add(key);
+      }
+    }
+    const vars = [];
+    for (const key of keys) {
+      const candidates = (declarationIndex.get(key)?.all ?? []).map((entry) => ({ rank: rankOf(element, entry), name: entry.name }));
+      for (const declaration of inline.filter((other) => other.key === key)) {
+        candidates.push({ rank: [declaration.important ? 3 : 1, 0, 0, 0, 0], name: declaration.name });
+      }
+      const winner = strongest(candidates.filter((candidate) => candidate.rank !== undefined), (candidate) => candidate.rank);
+      if (winner?.name !== undefined) {
+        vars.push([key, winner.name]);
+      }
+    }
+    return Object.fromEntries(vars.slice(0, limits.maxVars));
+  };
+
+  const animatedPropertiesOf = (animation) =>
+    [...new Set(animation.effect.getKeyframes().flatMap((keyframe) => Object.keys(keyframe)))]
+      .filter((key) => !['offset', 'computedOffset', 'easing', 'composite'].includes(key))
+      .map((key) => kebab(key).replace(/^css-/, '').slice(0, limits.maxPropertyLength))
+      .slice(0, limits.maxAnimationProperties);
+
+  const animationsOf = (element) =>
+    element
+      .getAnimations()
+      .filter((animation) => (animation instanceof CSSAnimation || animation instanceof CSSTransition) && animation.effect)
+      .slice(0, limits.maxAnimations)
+      .map((animation) => {
+        const timing = animation.effect.getComputedTiming();
+        return {
+          name: (animation instanceof CSSAnimation ? animation.animationName : animation.transitionProperty).slice(0, limits.maxAnimationText),
+          durationMs: Number.isFinite(Number(timing.duration)) ? Number(timing.duration) : 0,
+          easing: animation.effect.getTiming().easing.slice(0, limits.maxAnimationText),
+          iterations: Number.isFinite(timing.iterations) ? timing.iterations : 'infinite',
+          properties: animatedPropertiesOf(animation),
+        };
+      });
 
   const boxOf = (rect) => ({
     x: rect.x + window.scrollX,
@@ -92,7 +301,12 @@ function walkInPage({ rootSelector, limits }) {
     if (encoder.encode(markup).length > limits.maxMarkupBytes) {
       fail(`snapshot refused: svg markup larger than ${limits.maxMarkupBytes} bytes`);
     }
-    return { type: 'svg', markup, box: boxOf(svg.getBoundingClientRect()) };
+    const node = { type: 'svg', markup, box: boxOf(svg.getBoundingClientRect()) };
+    const animations = animationsOf(svg);
+    if (animations.length > 0) {
+      node.animations = animations;
+    }
+    return node;
   };
 
   const normalLineHeight = (parent) => {
@@ -163,6 +377,18 @@ function walkInPage({ rootSelector, limits }) {
     const label = labelOf(element);
     if (label) {
       node.label = label;
+    }
+    const className = element.getAttribute('class');
+    if (className) {
+      node.className = className.slice(0, limits.maxClassNameLength);
+    }
+    const vars = varsOf(element);
+    if (Object.keys(vars).length > 0) {
+      node.vars = vars;
+    }
+    const animations = animationsOf(element);
+    if (animations.length > 0) {
+      node.animations = animations;
     }
     for (const child of element.childNodes) {
       if (child.nodeType === Node.TEXT_NODE) {

@@ -1,0 +1,7 @@
+{
+  "name": "synthetic-base-types",
+  "version": "1.0.0",
+  "description": "Synthetic fixture: attribute types declared outside the components package",
+  "license": "MIT",
+  "types": "index.d.ts"
+}

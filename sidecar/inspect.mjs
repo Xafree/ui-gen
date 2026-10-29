@@ -1,10 +1,13 @@
 import { loadBundle, withPage } from './browser.mjs';
 import { IS_COMPONENT, bundleEntry } from './bundle.mjs';
 import { readInstalledPackage } from './installed-package.mjs';
+import { readProps } from './props.mjs';
 import { ServiceError } from './protocol.mjs';
 
 const INSPECT_TIMEOUT_MS = 55_000;
 const EMPTY_PAGE = '<!doctype html><meta charset="utf-8"><body></body>';
+
+const PROP_LIMITS = { budgetMs: 20_000, maxFiles: 4_000, maxBytes: 64 * 1024 * 1024 };
 
 const MAX_EXPORTS = 10_000;
 const MAX_EXPORT_NAME_LENGTH = 128;
@@ -43,10 +46,12 @@ export async function inspect(params) {
   const installed = await readInstalledPackage(params.dir, params.package);
   const exported = installed.framework === 'react' ? await listReactExports(installed) : [];
   const names = [...new Set([...exported, ...installed.tags.keys()])];
+  const { components, notes } = await readProps(installed, PROP_LIMITS);
   return {
     package: installed.name,
     version: installed.version,
     framework: installed.framework,
-    components: names.map((name) => ({ name, props: [] })).sort(byName),
+    components: names.map((name) => ({ name, props: components.get(name) ?? [] })).sort(byName),
+    notes,
   };
 }

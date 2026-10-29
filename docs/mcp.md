@@ -78,7 +78,7 @@ Each may be given more than once, as `--flag DIR` or `--flag=DIR`:
   every command that names a file: `file.open`, `file.openRecent` (recent files outside the roots
   are never listed, opened, removed or named: `index` counts the files listed), `file.import`,
   `file.placeImage`, `image.place`, `file.save`, `file.saveAs`, `file.revert`, `file.recover`,
-  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, `project.open`, `project.update` and the source commands (`project.addSource`, `project.setSourceVersion`, `project.removeSource`: the project folder and its `uigen.json`), the images and variables JSON read next to an imported REST API
+  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, `project.open`, `project.update` and the source commands (`project.addSource`, `project.setSourceVersion`, `project.removeSource`: the project folder and its `uigen.json`; `uigen.importComponent`: the project's `.uigen/captures` folder), the images and variables JSON read next to an imported REST API
   file, `library.add` and the library files open documents link to, `variable.import` /
   `variable.export`, `codeConnect.import` / `codeConnect.export`, `component.playground {path}`,
   `plugin.import {path}`, a development plugin's module read again from disk,
@@ -838,6 +838,64 @@ In a project every page is a component: `page.add {name?, template?}` names the 
 `Copy of …` name (then ` 2`, ` 3`…), `page.rename` and `page.add {name}` refuse a name another component has (case
 apart), and `page.delete` refuses the last component. A page whose name starts with `-` is a divider and never a
 component, whether or not it holds layers. Outside a project none of this applies.
+
+### Component import
+
+Two commands bring the output of the capture service into the document; both are undoable.
+
+- `uigen.importDom {snapshot, parent?, x?, y?, full?}`: translate one DOM snapshot (version 1, an object or its
+  JSON text, as the capture service's `render` writes it) into layers and return `{root, warnings}`. `parent`
+  is a frame or a page (default: the current page), `x` and `y` place the root. By default it is the lot 0
+  translation; `full: true` is the complete one: flex containers become auto layout where the browser's boxes can be
+  reproduced (within 1 px), wrappers that draw nothing are dropped, sibling names are made unique, and each
+  `warning` is also written on its layer as a Dev Mode annotation `UIGEN import: …`. A snapshot that fails
+  validation, a `parent` that is neither a frame nor a page and a `full` that isn't a boolean are refused naming
+  the cause.
+- `uigen.importComponent {package, component, styleProp?, sizeProp?, styles?, sizes?, states?, themes?, parent?,
+  x?, y?}`: render a component of an installed source library in every style, size, state and theme, and write the
+  result as one component set linked to a token theme. It asks the capture service to `inspect` the package and
+  returns `{job}` at once; `Session::pump_capture` (every frame in the app, a wait loop in the CLI) then submits
+  one `render` per variant and theme and, when all of them are back, writes the import in a single undo step
+  (`Import component`). `package` must be a source of the project that isn't removed. `styleProp` (default
+  `variant`) and `sizeProp` (default `size`) name the two props that make the Style and Size axes; their values
+  are the ones `inspect` reads from the package's types, or the ones given in `styles` and `sizes` (an axis
+  with no value is left out of the variant names, never invented). `states` is a subset of `Default`, `Hover`,
+  `Focus`, `Pressed`, `Disabled` and `Loading` (default: all but `Loading`, which exists only when the component has a
+  boolean `loading` prop and is rendered with `loading: true`); `themes` a subset of `light` and `dark` (default
+  both). The variants are named `Style=<v>, Size=<v>, State=<State>` and laid out as a grid, States across, then
+  Style, then Size down, with 20 px between cells and around them; the set is named after the component and carries
+  `plugin_data["uigen.source"]` = `{"package", "version", "component"}`. The layers come from the light render;
+  every colour, radius, padding, gap, stroke weight and opacity is bound to a variable of the collection
+  `<package> <version>` (modes `Light` and `Dark` for the themes asked for), named after the CSS variable the page
+  declared (`--syn-primary` → `syn-primary`), otherwise by role (`couleur/bouton/fond`). Importing the same package
+  at the same version again reuses the collection: it adds the missing variables and never changes an existing
+  value (a difference becomes a note on the layer). Each `Default` variant gets an `OnHover` and an `OnPress`
+  interaction `ChangeTo` the `Hover` and `Pressed` variant of the same style and size, `SmartAnimate` with the
+  duration and curve the arrival state's CSS transition declared (a delay becomes a note; no transition: `Instant`). A ripple layer
+  carries `plugin_data["uigen.effect"] = "ripple"` and a layer turning forever `"spinner"`. What cannot be
+  translated becomes an annotation `UIGEN import: …` on the layer, and `warnings` lists them.
+  - The `{job}` is the `inspect` job. The only event of the import (`CaptureEvent`, command
+    `uigen.importComponent`, that job) carries `{set (the component set, which is selected), collection (its
+    variable collection id), variants (the number written), warnings}`, or the failure `{kind, message}`.
+    `capture.status` shows that job `done` or `failed` (`error` = the message) when the import ends, and the renders
+    as jobs of their own. The app toasts the outcome.
+  - **Refused at once** (`bad`, nothing submitted): outside a library project; a `package` that is not an active
+    source (`package "X" is not a source of this project`); a `component`, `styleProp` or `sizeProp` that is blank,
+    over 128 characters or holds control characters, or the two props being the same; a value in `styles`,
+    `sizes`, `states` or `themes` that is unusable (1 to 64 characters, no comma, `=` or control character; a state
+    or theme must be one of those above); a `parent` that is neither a frame nor a page; a project whose
+    `.uigen/captures` folder may not be written; more than **128 renders** (variants times themes; the message cites
+    the number); no capture service (`capture service not available`, `capture service unavailable in the browser`
+    in the web build).
+  - **Fails after `inspect`** (the event is the failure, nothing is written): the component is not in the package
+    (`ComponentNotFound`, `inspect: component "Nope" not found in @mui/material`); a value of `styles` or `sizes` the
+    package does not have; `Loading` asked for a component with no boolean `loading` prop. The first job that fails
+    (`inspect`, or `render <Component> Style=…, Size=…, State=… <theme>`) ends the import with that step and the
+    service's message; the renders still running are ignored when they come back.
+  - **Where it lands**: the document of the tab that was active when the command ran (by its identifier, whichever tab is
+    in front later; if it was closed the import fails and writes nothing), in `parent` or on the current page of
+    that document, at `x`, `y` (default: 80 px right of the page's content and level with its top, or the origin of a `parent` frame). Nothing is added to the file before the last
+    render is back: no layer, no collection, no variable, no undo step.
 
 ### Local libraries
 

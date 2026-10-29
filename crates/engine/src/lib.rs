@@ -107,6 +107,7 @@ mod error;
 mod prefs;
 pub mod project;
 mod session;
+mod uigen_import;
 mod view_state;
 
 pub use derived::{changed_nodes, normalize};
@@ -522,9 +523,21 @@ mod tiff_tests;
 #[cfg(test)]
 mod transform_behaviour_tests;
 #[cfg(test)]
+mod uigen_import_component_tests;
+#[cfg(test)]
+mod uigen_import_dom_full_tests;
+#[cfg(test)]
 mod uigen_import_dom_parent_tests;
 #[cfg(test)]
 mod uigen_import_dom_tests;
+#[cfg(test)]
+mod uigen_import_motion_tests;
+#[cfg(test)]
+mod uigen_import_review_tests;
+#[cfg(test)]
+mod uigen_import_support;
+#[cfg(test)]
+mod uigen_import_tokens_tests;
 #[cfg(test)]
 mod variable_tests;
 #[cfg(test)]

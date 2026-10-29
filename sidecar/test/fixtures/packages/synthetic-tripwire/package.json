@@ -1,0 +1,18 @@
+{
+  "name": "synthetic-tripwire",
+  "version": "1.0.0",
+  "description": "Synthetic fixture: loading index.js in Node writes a witness file",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  }
+}
