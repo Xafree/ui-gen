@@ -17,9 +17,10 @@ the channel never reads or writes files anywhere on the disk. See
 At startup the app makes a random session token (32 bytes from the system's secure random numbers,
 64 hex digits), prints it on stderr and writes it, without a newline, to `control-token-<port>` in
 its configuration folder (`%APPDATA%\FigCraft`, `~/Library/Application Support/FigCraft`,
-`$XDG_CONFIG_HOME/FigCraft` or `~/.config/FigCraft`). On Unix the file is readable by its owner only.
-Starting again replaces the token. If the system has no secure random numbers the channel does not
-start.
+`$XDG_CONFIG_HOME/FigCraft` or `~/.config/FigCraft`). The file is written under a temporary name
+(`control-token-<port>.tmp`) and renamed, so a reader never sees a half-written token; on Unix it is
+readable by its owner only. Starting again replaces the token, and the app removes the file when it
+exits normally. If the system has no secure random numbers the channel does not start.
 
 The **first line** of every connection must be exactly `{"auth": "<token>"}`, and must arrive within
 **5 s** of the connection opening. When it matches, the app answers one acknowledgement line,
