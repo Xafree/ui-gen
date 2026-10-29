@@ -106,10 +106,11 @@ fn write_token_file(dir: &Path, port: u16, token: &str) -> std::io::Result<PathB
 
 /// Remove the token file when the app exits, so a stale token is not left for a client to try.
 pub fn remove_token_file(path: &Path) {
-    if let Err(e) = std::fs::remove_file(path) {
-        if e.kind() != std::io::ErrorKind::NotFound {
+    match std::fs::remove_file(path) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
             log::warn!("control server: can't remove the token file {}: {e}", path.display());
         }
+        _ => {}
     }
 }
 
