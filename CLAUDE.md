@@ -90,7 +90,7 @@ code.
 - **Programmatic calls never open dialogs.** Commands only *request* UI (`Session::request_ui`); the
   control channel drops dialog requests.
 - **Layering** is enforced by `cargo xtask layers`: geom/color (L0) → doc (L1) → layout/text/pathops/plugin/collab
-  (L2) → render/format/project (L3) → svg/pdf (L4) → engine (L5) → ui-egui/mcp (L6) → apps. Nothing below
+  (L2) → render/format/project (L3) → svg/pdf (L4) → engine (L5) → ui-egui/mcp/capture (L6) → apps. Nothing below
   L6 depends on egui/eframe/rfd/winit. **The UI crate is swappable.**
 - **The UI is thin**: panels read engine state and act through `app.run(id, params)` /
   `app.set_props(ids, props)`. Colours come from `theme::Tokens`.

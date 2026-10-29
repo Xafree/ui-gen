@@ -827,6 +827,9 @@ The manifest is read and written only through the automation roots, and the comm
   failed job. The service runs one job at a time. The last hundred finished jobs are kept.
 - `project.openFolder {}` and `project.newFolder {}`: ask the interface for a folder to open as a project, or to
   start one in (Home's "Open project" and "New library project"); a programmatic call opens no dialog.
+- `project.settings {}`: ask the interface to open the settings window of the current tab's library project, whose
+  "Source libraries" section adds, changes the version of and removes sources through the commands above. A file
+  outside a project is refused (`the current file is not in a library project`); a programmatic call opens no dialog.
 
 In a project every page is a component: `page.add {name?, template?}` names the new page `Component N` (or
 `template` with `{n}` for the counter), `page.rename` refuses a blank name, `page.duplicate` takes a free
