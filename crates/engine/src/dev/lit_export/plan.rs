@@ -9,7 +9,7 @@ use serde::Serialize;
 use super::{TokenOptions, package, tokens_css};
 use crate::component_codegen::{Component, ParamKind, describe, main_of};
 use crate::components::variant_set;
-use crate::lit::{self, LitOptions, Note, TagIssue};
+use crate::lit::{self, LitOptions, Note, StateRecipe, TagIssue};
 use crate::params::id_of;
 
 const MAX_VISITED: usize = 1_000_000;
@@ -71,6 +71,8 @@ pub struct PlannedComponent {
     pub file: Option<String>,
     pub status: Status,
     pub issues: Vec<Issue>,
+    /// One recipe per variant: how a harness puts the element in that variant's state.
+    pub states: Vec<StateRecipe>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -249,7 +251,8 @@ pub fn plan(doc: &Document, opts: &ExportOptions) -> ExportPlan {
             }
         }
         let class_name = tag.as_deref().map(lit::class_of);
-        components.push(PlannedComponent { id: c.id, name: c.name.clone(), tag, class_name, file, status, issues });
+        let states = lit::state_recipes(doc, &c.comp);
+        components.push(PlannedComponent { id: c.id, name: c.name.clone(), tag, class_name, file, status, issues, states });
     }
     sources.sort_by(|a, b| a.0.cmp(&b.0));
 

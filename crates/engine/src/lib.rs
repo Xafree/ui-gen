@@ -68,6 +68,7 @@ pub use dev::dev_resources;
 pub use dev::devcompare;
 pub use dev::devinspect;
 pub use dev::lit;
+pub use dev::lit_compare;
 pub use dev::lit_export;
 pub use dev::tailwind;
 pub use extensions::plugin_directory;

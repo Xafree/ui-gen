@@ -1528,7 +1528,7 @@ permissions: without it nothing is downloaded); `plugin.directory.publish {path 
   default, value? (instances)}], definition, usage? (instances)}`.
 - **Export as Lit:** `export.lit {ids?, prefix?, tokenPrefix?, collections?, lightMode?, darkMode?,
   packageName?, version?, path?, force?}` plans a Lit package without touching the document: `{ready, components: [{id, name, tag,
-  className, file, status: ok|empty|invalid|dependency, issues: [{code, message}]}], files: [{path, kind, bytes, text}],
+  className, file, status: ok|empty|invalid|dependency, issues: [{code, message}], states: [{id, props, attrs, pseudo}]}], files: [{path, kind, bytes, text}],
   notes}`. `ids` takes components and component sets (default: all of them); a component that draws another is
   exported with it (`dependency`, noted `dependency-added`), a component with nothing in it is `empty` and has no file. A name
   that makes no valid element name is an issue (`empty`, `leadingDigit`, `duplicate`, `reserved`, `noHyphen`,
@@ -1546,6 +1546,16 @@ permissions: without it nothing is downloaded); `plugin.directory.publish {path 
   list under a generated name is `skipped` as `not-generated`; `force: true` replaces both. A component that is
   gone leaves its file in place and it is `stale`; nothing is ever deleted. A manifest that is unreadable or of
   another version counts as absent: nothing existing is replaced without `force`, and a `manifest-ignored` note says so.
+  Each component has `states`, one recipe per variant (the component itself when it has none) for a harness that
+  renders the Lit element beside the design: `id` is the variant, `props` its variant property values as named in
+  the design (`{"Style": "Primary", "State": "Hover"}`), `attrs` the attributes to set on the element (the ones the
+  class declares, such as `style-variant`; `disabled` or `loading` for those states, with an empty value) and
+  `pseudo` the pseudo-class to force (`hover`, `focus-visible`, `active`) or null.
+  `export.litCompare {id, image, tolerance?: 0..255 = 8, scale?: 1}` renders the node `id` at `scale` and counts the
+  pixels that differ from the PNG at `image` by more than `tolerance` on a colour channel: `{width, height, total,
+  differing, ratio, sizeMismatch}` (the size of the rendering; an image of another size is a `sizeMismatch` and every
+  pixel differs). It reads the PNG through the automation read roots and writes nothing; a missing file, a file that is not
+  a PNG, a `tolerance` outside 0..255 or an id that is not a node is refused.
 - **Code connect:** link a component (a variant links its set) to the code component it is built
   as, per language (`react`, `leptos`, `vue`, `swiftui`, `compose`, `arkui`): `codeConnect.set {id?, language?, importPath?,
   name?, template?}` (undoable; fields left out keep their value; the defaults are the generated

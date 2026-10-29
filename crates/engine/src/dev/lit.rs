@@ -24,6 +24,9 @@ mod motion;
 pub use motion::easing_css;
 pub(crate) use motion::{Motion, plan as plan_motion};
 
+/// Most variants of a set that get rules and recipes.
+const MAX_VARIANTS: usize = 256;
+
 /// Longest custom element name (chars).
 const MAX_TAG: usize = 64;
 
@@ -479,6 +482,73 @@ fn field_param(lay: &Layout, i: usize, p: &Param) -> Param {
     Param { kind: ParamKind::Variant(kept), ..p.clone() }
 }
 
+fn state_kind_of(lay: &Layout, pairs: &BTreeMap<String, String>) -> StateKind {
+    match &lay.state {
+        Some(s) => pairs.get(&s.prop).map_or(StateKind::Rest, |v| s.kind(v)),
+        None => StateKind::Rest,
+    }
+}
+
+/// The variant attributes a variant with the property values `pairs` sets on the element, as
+/// (attribute, value): a state property made only of known states sets none.
+fn variant_attributes(c: &Component, lay: &Layout, pairs: &BTreeMap<String, String>) -> Vec<(String, String)> {
+    let kind = state_kind_of(lay, pairs);
+    c.params
+        .iter()
+        .zip(&lay.members)
+        .enumerate()
+        .filter(|(_, (p, _))| matches!(p.kind, ParamKind::Variant(_)))
+        .filter_map(|(i, (p, m))| {
+            let value = pairs.get(&p.prop)?;
+            if lay.state.as_ref().is_some_and(|s| s.index == i) && kind != StateKind::Other {
+                return None;
+            }
+            Some((m.attribute.clone()?, value.clone()))
+        })
+        .collect()
+}
+
+/// How to put the element in the state of one variant: its variant property values, the attributes
+/// to set (a boolean one has an empty value) and the pseudo-class to force, if any.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct StateRecipe {
+    pub id: NodeId,
+    pub props: BTreeMap<String, String>,
+    pub attrs: BTreeMap<String, String>,
+    pub pseudo: Option<&'static str>,
+}
+
+/// A recipe per variant of `c` (the component itself when it has none), in the set's order.
+pub fn state_recipes(doc: &Document, c: &Component) -> Vec<StateRecipe> {
+    let lay = layout(c);
+    let variants: Vec<(NodeId, BTreeMap<String, String>)> = match c.set.and_then(|s| doc.node(s)) {
+        Some(set) => set
+            .children
+            .iter()
+            .filter_map(|v| doc.node(*v).filter(|n| matches!(n.kind, NodeKind::Component { .. })).map(|n| (*v, variant_props(&n.name))))
+            .take(MAX_VARIANTS)
+            .collect(),
+        None => vec![(c.comp, BTreeMap::new())],
+    };
+    variants
+        .into_iter()
+        .map(|(id, props)| {
+            let kind = state_kind_of(&lay, &props);
+            let mut attrs: BTreeMap<String, String> = variant_attributes(c, &lay, &props).into_iter().collect();
+            if let Some((_, _, attribute)) = lay.state.as_ref().and_then(|s| s.boolean(kind)) {
+                attrs.insert(attribute.clone(), String::new());
+            }
+            let pseudo = match kind {
+                StateKind::Hover => Some("hover"),
+                StateKind::FocusVisible => Some("focus-visible"),
+                StateKind::Active => Some("active"),
+                _ => None,
+            };
+            StateRecipe { id, props, attrs, pseudo }
+        })
+        .collect()
+}
+
 /// The rules of the other variants of a set, on the host: what differs from the default variant,
 /// or, for a pseudo-class state or an unrecognised one, from the variant with the same other values
 /// at rest. `main` are the default variant's rules, `pass` those of a variant.
@@ -488,27 +558,12 @@ pub(crate) fn variant_rules(doc: &Document, c: &Component, main: &[Rule], pass: 
     let siblings: Vec<(NodeId, BTreeMap<String, String>)> = children
         .into_iter()
         .filter_map(|v| doc.node(v).filter(|n| matches!(n.kind, NodeKind::Component { .. })).map(|n| (v, variant_props(&n.name))))
-        .take(256)
+        .take(MAX_VARIANTS)
         .collect();
-    let kind_of = |pairs: &BTreeMap<String, String>| match &lay.state {
-        Some(s) => pairs.get(&s.prop).map_or(StateKind::Rest, |v| s.kind(v)),
-        None => StateKind::Rest,
-    };
+    let kind_of = |pairs: &BTreeMap<String, String>| state_kind_of(&lay, pairs);
     let is_state = |i: usize| lay.state.as_ref().is_some_and(|s| s.index == i);
     let attributes = |pairs: &BTreeMap<String, String>| -> String {
-        c.params
-            .iter()
-            .zip(&lay.members)
-            .enumerate()
-            .filter(|(_, (p, _))| matches!(p.kind, ParamKind::Variant(_)))
-            .filter_map(|(i, (p, m))| {
-                let value = pairs.get(&p.prop)?;
-                if is_state(i) && kind_of(pairs) != StateKind::Other {
-                    return None;
-                }
-                Some(format!("[{}=\"{}\"]", m.attribute.as_deref()?, css_string(value)))
-            })
-            .collect()
+        variant_attributes(c, &lay, pairs).iter().map(|(name, value)| format!("[{name}=\"{}\"]", css_string(value))).collect()
     };
     let same_axes = |a: &BTreeMap<String, String>, b: &BTreeMap<String, String>| {
         c.params
