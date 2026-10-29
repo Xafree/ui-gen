@@ -17,7 +17,7 @@ describe('inspect', () => {
   });
 
   // covers: E2-3.1
-  it('lists the React Button and the x-chip web component of an installed package', async () => {
+  it('lists the React Button and the x-chip web component of an installed package with their typed props', async () => {
     const response = await service.request('inspect', { dir: project.dir, package: 'synthetic-ui' });
 
     assert.equal(response.ok, true, JSON.stringify(response));
@@ -26,9 +26,13 @@ describe('inspect', () => {
     assert.equal(response.result.framework, 'react');
     const names = response.result.components.map((component) => component.name).sort();
     assert.deepEqual(names, ['Button', 'x-chip']);
-    for (const component of response.result.components) {
-      assert.deepEqual(component.props, []);
-    }
+    const props = Object.fromEntries(response.result.components.map((component) => [component.name, component.props]));
+    assert.deepEqual(props.Button, [
+      { name: 'variant', type: 'enum', values: ['solid', 'outline'] },
+      { name: 'size', type: 'enum', values: ['sm', 'md'] },
+      { name: 'disabled', type: 'boolean', values: null },
+    ]);
+    assert.deepEqual(props['x-chip'], [{ name: 'label', type: 'string', values: null }]);
   });
 
   // covers: E2-3.3
