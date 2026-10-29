@@ -38,8 +38,8 @@ struct Rendering {
     cells: Vec<Cell>,
     rows: usize,
     columns: usize,
-    waiting: BTreeMap<JobId, (usize, Theme)>,
-    snapshots: Vec<Option<Snapshot>>,
+    waiting: BTreeMap<JobId, (usize, usize)>,
+    snapshots: Vec<Vec<Option<Snapshot>>>,
 }
 
 enum Stage {
@@ -106,18 +106,17 @@ impl PendingImport {
                 Ok(None)
             }
             Stage::Rendering(rendering) => {
-                let Some((index, theme)) = rendering.waiting.remove(&job) else { return Ok(None) };
+                let Some((index, theme_index)) = rendering.waiting.remove(&job) else { return Ok(None) };
+                let Some(theme) = self.request.themes.get(theme_index) else { return Ok(None) };
                 let Some(cell) = rendering.cells.get(index) else { return Ok(None) };
                 let step = format!("render {} {} {}", self.request.component, cell.label, theme.render());
                 let rendered = outcome.map_err(|cause| failure(&step, cause))?;
                 let snapshot =
                     snapshot_of(&rendered).map_err(|cause| CaptureError { kind: CaptureErrorKind::Protocol, message: format!("{step}: {cause}") })?;
-                if self.request.themes.first() == Some(&theme)
-                    && let Some(slot) = rendering.snapshots.get_mut(index)
-                {
+                if let Some(slot) = rendering.snapshots.get_mut(index).and_then(|themed| themed.get_mut(theme_index)) {
                     *slot = Some(snapshot);
                 }
-                if rendering.waiting.is_empty() { rendering.finish().map(Some) } else { Ok(None) }
+                if rendering.waiting.is_empty() { rendering.finish(&self.request.themes).map(Some) } else { Ok(None) }
             }
         }
     }
@@ -125,7 +124,7 @@ impl PendingImport {
     fn submit_renders(&mut self, s: &mut Session, plan: Plan) -> Result<Rendering, CaptureError> {
         let mut waiting = BTreeMap::new();
         for (index, cell) in plan.cells.iter().enumerate() {
-            for theme in &self.request.themes {
+            for (theme_index, theme) in self.request.themes.iter().enumerate() {
                 let job = CaptureJob::Render {
                     root: self.request.root.clone(),
                     package: self.request.package.clone(),
@@ -136,25 +135,38 @@ impl PendingImport {
                 };
                 let id = s.submit_capture(COMMAND, &self.request.package, job)?;
                 self.jobs.push(id);
-                waiting.insert(id, (index, *theme));
+                waiting.insert(id, (index, theme_index));
             }
         }
-        let snapshots = plan.cells.iter().map(|_| None).collect();
+        let snapshots = plan.cells.iter().map(|_| self.request.themes.iter().map(|_| None).collect()).collect();
         Ok(Rendering { cells: plan.cells, rows: plan.rows, columns: plan.columns, waiting, snapshots })
     }
 }
 
 impl Rendering {
-    fn finish(&mut self) -> Result<Finished, CaptureError> {
+    fn finish(&mut self, themes: &[Theme]) -> Result<Finished, CaptureError> {
         let cells = std::mem::take(&mut self.cells);
         let snapshots = std::mem::take(&mut self.snapshots);
         let mut variants = Vec::with_capacity(cells.len());
-        for (cell, snapshot) in cells.into_iter().zip(snapshots) {
-            let snapshot = snapshot.ok_or_else(|| CaptureError {
+        for (cell, themed) in cells.into_iter().zip(snapshots) {
+            let missing = |theme: Option<&Theme>| CaptureError {
                 kind: CaptureErrorKind::Internal,
-                message: format!("{}: no render came back for the theme the layers are made from", cell.label),
-            })?;
-            variants.push(Variant { label: cell.label, row: cell.row, column: cell.column, snapshot });
+                message: format!("{}: no {} render came back", cell.label, theme.map_or("", |theme| theme.render())),
+            };
+            let mut renders = themed.into_iter();
+            let snapshot = renders.next().flatten().ok_or_else(|| missing(themes.first()))?;
+            let others =
+                renders.zip(themes.iter().skip(1)).map(|(render, theme)| render.ok_or_else(|| missing(Some(theme)))).collect::<Result<_, _>>()?;
+            variants.push(Variant {
+                label: cell.label,
+                style: cell.style,
+                size: cell.size,
+                state: cell.state,
+                row: cell.row,
+                column: cell.column,
+                snapshot,
+                others,
+            });
         }
         Ok(Finished { variants, rows: self.rows, columns: self.columns })
     }

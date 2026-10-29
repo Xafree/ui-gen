@@ -81,6 +81,8 @@ impl Theme {
 
 pub(super) struct Cell {
     pub label: String,
+    pub style: Option<String>,
+    pub size: Option<String>,
     pub row: usize,
     pub column: usize,
     pub state: State,
@@ -206,6 +208,8 @@ pub(super) fn plan(request: &Request, inspected: &Value) -> Result<Plan, Capture
                 let (style, size) = (style.as_ref(), size.as_ref());
                 cells.push(Cell {
                     label: label(style, size, *state),
+                    style: style.cloned(),
+                    size: size.cloned(),
                     row: style_index * sizes.len() + size_index,
                     column,
                     state: *state,

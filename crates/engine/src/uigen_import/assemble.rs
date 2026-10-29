@@ -2,11 +2,13 @@
 //! component set laid out as a grid, and the variable collection of the package, all in one undo step.
 
 use figcraft_doc::{Document, NodeId, NodeKind};
-use figcraft_dom::{Snapshot, TranslateOptions};
+use figcraft_dom::{ImportError, LayerFacts, Snapshot, TranslateOptions};
 use figcraft_geom::Affine;
 use serde_json::{Value, json};
 
 use super::pending::{COMMAND, Destination, Request};
+use super::plan::State;
+use super::tokens::{self, VariantTokens};
 use crate::capture::{CaptureError, CaptureErrorKind};
 use crate::params::id_of;
 use crate::{EngineError, Result, Session, bad};
@@ -18,9 +20,13 @@ const MAX_WARNINGS: usize = 200;
 
 pub(super) struct Variant {
     pub label: String,
+    pub style: Option<String>,
+    pub size: Option<String>,
+    pub state: State,
     pub row: usize,
     pub column: usize,
     pub snapshot: Snapshot,
+    pub others: Vec<Snapshot>,
 }
 
 pub(super) struct Finished {
@@ -61,6 +67,7 @@ fn build(s: &mut Session, request: &Request, destination: &Destination, finished
     let collection = collection(s, request)?;
     let mut warnings: Vec<String> = Vec::new();
     let mut placed: Vec<(NodeId, usize, usize)> = Vec::with_capacity(finished.variants.len());
+    let mut themed: Vec<VariantTokens> = Vec::with_capacity(finished.variants.len());
     for variant in &finished.variants {
         let translated = figcraft_dom::translate_snapshot(s.doc_mut()?, &variant.snapshot, parent, 0.0, 0.0, &TranslateOptions::default())
             .map_err(|e| bad(COMMAND, format!("{}: {e}", variant.label)))?;
@@ -69,6 +76,14 @@ fn build(s: &mut Session, request: &Request, destination: &Destination, finished
                 warnings.push(warning);
             }
         }
+        let others = variant
+            .others
+            .iter()
+            .map(scratch_facts)
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| bad(COMMAND, format!("{}: {e}", variant.label)))?;
+        let axes = [variant.style.clone(), variant.size.clone(), Some(variant.state.label().to_lowercase())];
+        themed.push(VariantTokens { axes, layers: translated.layers, others });
         let made = s.execute("component.create", &json!({"ids": [translated.root]}))?;
         let id = id_of(&made["id"]).ok_or_else(|| bad(COMMAND, format!("{}: the variant could not become a component", variant.label)))?;
         s.doc_mut()?.get_mut(id)?.name.clone_from(&variant.label);
@@ -82,8 +97,16 @@ fn build(s: &mut Session, request: &Request, destination: &Destination, finished
     node.name.clone_from(&request.component);
     let source = json!({"package": request.package, "version": request.version, "component": request.component});
     node.plugin_data.insert(SOURCE_KEY.to_string(), source.to_string());
+    tokens::apply(s, &collection, &request.themes, &themed)?;
     s.set_selection(vec![set]);
     Ok(json!({"set": set, "collection": collection, "variants": placed.len(), "warnings": warnings}))
+}
+
+/// The layer facts of another theme's render, translated in a scratch document: the document keeps only the layers of the first theme.
+fn scratch_facts(snapshot: &Snapshot) -> std::result::Result<Vec<LayerFacts>, ImportError> {
+    let mut scratch = Document::new("scratch");
+    let page = scratch.pages.first().copied().ok_or(ImportError::NothingToImport("the scratch document has no page"))?;
+    figcraft_dom::translate_snapshot(&mut scratch, snapshot, page, 0.0, 0.0, &TranslateOptions::default()).map(|translated| translated.layers)
 }
 
 fn origin(doc: &Document, parent: NodeId, page: NodeId, at: Option<(f64, f64)>) -> (f64, f64) {
