@@ -34,9 +34,15 @@ function cssWeight(value) {
   return Number.isFinite(weight) ? weight : Number.NaN;
 }
 
+function postScriptStyle(postScript) {
+  const dash = postScript.indexOf('-');
+  return dash === -1 ? '' : postScript.slice(dash + 1).replace(/MT$/, '');
+}
+
 function weightChromiumUsed(style) {
-  const face = style.platformFontPostScript?.split('-').at(-1);
-  if (face !== undefined && /^(?:regular|italic)$/i.test(face)) return REGULAR;
+  const postScript = style.platformFontPostScript;
+  const face = postScript ? postScriptStyle(postScript) : undefined;
+  if (face === '' || (face !== undefined && /^(?:regular|italic)$/i.test(face))) return REGULAR;
   return (face === undefined ? undefined : namedWeight(face)) ?? namedWeight(style.platformFont ?? '') ?? cssWeight(style.fontWeight);
 }
 
