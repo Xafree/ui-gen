@@ -6,6 +6,9 @@ export const LIMITS = Object.freeze({
   maxClassNameLength: 256,
   maxVars: 64,
   maxAnimations: 16,
+  maxAnimationText: 256,
+  maxAnimationProperties: 64,
+  maxPropertyLength: 128,
 });
 
 function walkInPage({ rootSelector, limits }) {
@@ -234,7 +237,8 @@ function walkInPage({ rootSelector, limits }) {
   const animatedPropertiesOf = (animation) =>
     [...new Set(animation.effect.getKeyframes().flatMap((keyframe) => Object.keys(keyframe)))]
       .filter((key) => !['offset', 'computedOffset', 'easing', 'composite'].includes(key))
-      .map((key) => kebab(key).replace(/^css-/, ''));
+      .map((key) => kebab(key).replace(/^css-/, '').slice(0, limits.maxPropertyLength))
+      .slice(0, limits.maxAnimationProperties);
 
   const animationsOf = (element) =>
     element
@@ -244,9 +248,9 @@ function walkInPage({ rootSelector, limits }) {
       .map((animation) => {
         const timing = animation.effect.getComputedTiming();
         return {
-          name: animation instanceof CSSAnimation ? animation.animationName : animation.transitionProperty,
+          name: (animation instanceof CSSAnimation ? animation.animationName : animation.transitionProperty).slice(0, limits.maxAnimationText),
           durationMs: Number.isFinite(Number(timing.duration)) ? Number(timing.duration) : 0,
-          easing: animation.effect.getTiming().easing,
+          easing: animation.effect.getTiming().easing.slice(0, limits.maxAnimationText),
           iterations: Number.isFinite(timing.iterations) ? timing.iterations : 'infinite',
           properties: animatedPropertiesOf(animation),
         };
@@ -297,7 +301,12 @@ function walkInPage({ rootSelector, limits }) {
     if (encoder.encode(markup).length > limits.maxMarkupBytes) {
       fail(`snapshot refused: svg markup larger than ${limits.maxMarkupBytes} bytes`);
     }
-    return { type: 'svg', markup, box: boxOf(svg.getBoundingClientRect()) };
+    const node = { type: 'svg', markup, box: boxOf(svg.getBoundingClientRect()) };
+    const animations = animationsOf(svg);
+    if (animations.length > 0) {
+      node.animations = animations;
+    }
+    return node;
   };
 
   const normalLineHeight = (parent) => {

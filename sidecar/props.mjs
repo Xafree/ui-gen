@@ -1,12 +1,17 @@
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { Worker } from 'node:worker_threads';
 import { insideRoot } from './installed-package.mjs';
 
 const MEBIBYTE = 1024 * 1024;
 const MAX_PROPS = 64;
 const MAX_VALUES = 64;
 const MAX_NOTE_LENGTH = 300;
+const MAX_MANIFEST_BYTES = MEBIBYTE;
+const WORKER_URL = new URL('./props-worker.mjs', import.meta.url);
+const WORKER_MEMORY_MB = 512;
+const WORKER_START_GRACE_MS = 1_000;
 const EXCLUDED_NAMES = new Set(['children', 'className', 'style', 'ref', 'key']);
 const HANDLER_NAME = /^on[A-Z]/;
 const COMPONENT_NAME = /^[A-Z]/;
@@ -34,7 +39,7 @@ const loadTypescript = async () => {
 
 const libraryCache = new Map();
 
-function startMeter({ budgetMs, maxFiles, maxBytes }) {
+export function startMeter({ budgetMs, maxFiles, maxBytes }) {
   const deadline = Date.now() + budgetMs;
   let files = 0;
   let bytes = 0;
@@ -59,50 +64,35 @@ function startMeter({ budgetMs, maxFiles, maxBytes }) {
 
 const isWithin = (root, target) => target === root || target.startsWith(`${root}${path.sep}`);
 
-function confinedReader(roots, meter) {
-  const realRoots = roots.map((root) => realpathSync.native(root));
+const nodeFileSystem = { realpath: realpathSync.native, stat: statSync, readFile: readFileSync };
+
+function locate(realRoots, file, fileSystem) {
+  try {
+    const real = fileSystem.realpath(file);
+    return realRoots.some((root) => isWithin(root, real)) ? { real, stats: fileSystem.stat(real) } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function confinedReader(roots, meter, fileSystem = nodeFileSystem) {
+  const realRoots = roots.map((root) => fileSystem.realpath(root));
   const lexicalRoots = roots.map(posix);
   const allowedLexically = (file) => lexicalRoots.some((root) => file === root || file.startsWith(`${root}/`));
-  const readable = (file) => {
-    if (!allowedLexically(file)) {
-      return null;
-    }
-    try {
-      const real = realpathSync.native(file);
-      return realRoots.some((root) => isWithin(root, real)) && statSync(real).isFile() ? real : null;
-    } catch {
-      return null;
-    }
+  const locateIf = (file, kind) => {
+    const found = allowedLexically(file) ? locate(realRoots, file, fileSystem) : null;
+    return found !== null && found.stats[kind]() ? found : null;
   };
   const read = (file) => {
-    const real = readable(file);
-    if (real === null) {
+    const found = locateIf(file, 'isFile');
+    if (found === null) {
       return undefined;
     }
-    const text = readFileSync(real, 'utf8');
-    meter.count(Buffer.byteLength(text));
-    return text;
+    meter.count(found.stats.size);
+    return fileSystem.readFile(found.real, 'utf8');
   };
-  const fileExists = (file) => {
-    if (!allowedLexically(file)) {
-      return false;
-    }
-    try {
-      return statSync(file).isFile();
-    } catch {
-      return false;
-    }
-  };
-  const directoryExists = (directory) => {
-    if (!allowedLexically(directory)) {
-      return false;
-    }
-    try {
-      return statSync(directory).isDirectory();
-    } catch {
-      return false;
-    }
-  };
+  const fileExists = (file) => locateIf(file, 'isFile') !== null;
+  const directoryExists = (directory) => locateIf(directory, 'isDirectory') !== null;
   return { read, fileExists, directoryExists };
 }
 
@@ -182,9 +172,22 @@ function typesEntry(manifest) {
   return typeof manifest.main === 'string' ? manifest.main.replace(/\.[cm]?js$/, '.d.ts') : null;
 }
 
-async function readManifest(root) {
+function packageFile(root, file) {
   try {
-    const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+    const found = locate([realpathSync.native(root)], file, nodeFileSystem);
+    return found !== null && found.stats.isFile() ? found : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readManifest(root) {
+  const found = packageFile(root, path.join(root, 'package.json'));
+  if (found === null || found.stats.size > MAX_MANIFEST_BYTES) {
+    return {};
+  }
+  try {
+    const manifest = JSON.parse(await readFile(found.real, 'utf8'));
     return isObject(manifest) ? manifest : {};
   } catch {
     return {};
@@ -235,11 +238,14 @@ async function readAttributes(installed, meter) {
   if (file === null) {
     return result;
   }
+  const found = packageFile(installed.root, file);
+  if (found === null) {
+    return result;
+  }
+  meter.count(found.stats.size);
   let customElements;
   try {
-    const text = await readFile(file, 'utf8');
-    meter.count(Buffer.byteLength(text));
-    customElements = JSON.parse(text);
+    customElements = JSON.parse(await readFile(found.real, 'utf8'));
   } catch (error) {
     if (error instanceof BoundError) {
       throw error;
@@ -391,7 +397,7 @@ function readReactProps(ts, installed, entry, meter) {
   return components;
 }
 
-export async function readProps(installed, limits) {
+export async function readPropsInline(installed, limits) {
   const meter = startMeter(limits);
   const notes = [];
   let components = new Map();
@@ -419,4 +425,32 @@ export async function readProps(installed, limits) {
     notes.push(clip(`${reason}: props not read`));
   }
   return { components, notes };
+}
+
+const notRead = (reason) => ({ components: new Map(), notes: [clip(`${reason}: props not read`)] });
+
+const failureNote = (error) =>
+  error?.code === 'ERR_WORKER_OUT_OF_MEMORY'
+    ? 'reading the type declarations used too much memory'
+    : `the type declarations cannot be read (${error instanceof Error ? error.message : 'unknown error'})`;
+
+export function readProps(installed, limits, { workerUrl = WORKER_URL, memoryMb = WORKER_MEMORY_MB } = {}) {
+  return new Promise((resolve) => {
+    const worker = new Worker(workerUrl, { workerData: { installed, limits }, resourceLimits: { maxOldGenerationSizeMb: memoryMb } });
+    let timer;
+    const finish = (outcome) => {
+      clearTimeout(timer);
+      worker.removeAllListeners();
+      worker.on('error', () => undefined);
+      void worker.terminate();
+      resolve(outcome);
+    };
+    timer = setTimeout(
+      () => finish(notRead(`reading the type declarations took more than ${limits.budgetMs / 1000} s`)),
+      limits.budgetMs + WORKER_START_GRACE_MS,
+    );
+    worker.once('message', ({ components, notes }) => finish({ components: new Map(components), notes }));
+    worker.once('error', (error) => finish(notRead(failureNote(error))));
+    worker.once('exit', () => finish(notRead('the type declarations reader stopped without an answer')));
+  });
 }
