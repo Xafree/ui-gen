@@ -46,7 +46,11 @@ job and error types in `crates/engine/src/capture.rs`. `project.addSource`, `pro
 `Session::pump_capture()` (every frame in the app, a wait loop in the CLI) applies the finished jobs, which writes
 `uigen.json` and raises an event for the toast. `capture.status` lists the jobs. The desktop app and the CLI install
 `figcraft_capture::CaptureService` into the `Session`; the browser build installs none and the commands answer
-`capture service unavailable in the browser`.
+`capture service unavailable in the browser`. A stuck service is killed with its whole tree (`taskkill /T`, `kill -KILL`
+on its process group). One that crashed alone leaves npm and Chromium behind: on Unix the process group still finds
+them; on Windows the orphans are found by the parent id the dead service had (a PowerShell query), which fails only if
+that id was reused first (a job object would need `unsafe`). A clean exit (code 0) is not swept: the service stops its
+own children.
 
 ## Data model
 
