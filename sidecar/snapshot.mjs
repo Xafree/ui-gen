@@ -168,6 +168,9 @@ function walkInPage({ rootSelector, limits }) {
       if (child.nodeType === Node.TEXT_NODE) {
         const text = textNode(child);
         if (text) {
+          if (depth + 1 > limits.maxDepth) {
+            fail(`snapshot refused: depth greater than ${limits.maxDepth}`);
+          }
           countNode();
           node.children.push(text);
         }
@@ -185,11 +188,11 @@ function walkInPage({ rootSelector, limits }) {
   if (!rootElement) {
     fail(`snapshot refused: no element matches "${rootSelector}"`);
   }
-  const root = elementNode(rootElement, 0);
+  const root = elementNode(rootElement, 1);
   if (!root) {
     fail(`snapshot refused: "${rootSelector}" is hidden (display:none or visibility:hidden)`);
   }
-  return { root, devicePixelRatio: window.devicePixelRatio, innerWidth: window.innerWidth, innerHeight: window.innerHeight };
+  return JSON.stringify({ root, devicePixelRatio: window.devicePixelRatio, innerWidth: window.innerWidth, innerHeight: window.innerHeight });
 }
 
 const MARK_ATTRIBUTE = 'data-uigen-text-id';
@@ -238,9 +241,11 @@ async function recordPlatformFonts(page, root) {
 }
 
 export async function captureSnapshot(page, rootSelector, source) {
-  const walked = await page.evaluate(walkInPage, { rootSelector, limits: LIMITS }).catch((error) => {
-    throw new Error(error.message.replace(/^page\.evaluate: (Error: )?/, ''), { cause: error });
-  });
+  const walked = JSON.parse(
+    await page.evaluate(walkInPage, { rootSelector, limits: LIMITS }).catch((error) => {
+      throw new Error(error.message.replace(/^page\.evaluate: (Error: )?/, ''), { cause: error });
+    }),
+  );
   try {
     await recordPlatformFonts(page, walked.root);
   } finally {
