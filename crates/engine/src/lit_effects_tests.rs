@@ -354,7 +354,7 @@ fn an_image_fill_is_noted_with_its_layer_and_not_declared() {
 }
 
 #[test]
-fn a_vector_layer_is_an_inline_svg_in_render_and_is_noted() {
+fn a_vector_layer_is_an_inline_svg_in_render_without_a_fallback_note() {
     // covers: E6-4.7
     // covers: E6-4.8
     let mut s = Session::new();
@@ -367,8 +367,7 @@ fn a_vector_layer_is_an_inline_svg_in_render_and_is_noted() {
     let svg = def.find("<svg").unwrap_or(0);
     assert!(render < svg, "an inline <svg in render():\n{def}");
     let notes = notes_of(&v);
-    let note = note_with(&notes, "vector-fallback");
-    assert!(note.is_some_and(|n| n["component"] == "Control" && n["layer"] == "Mark"), "{notes:?}");
+    assert!(note_with(&notes, "vector-fallback").is_none(), "an exported vector needs no fallback note: {notes:?}");
 }
 
 #[test]
