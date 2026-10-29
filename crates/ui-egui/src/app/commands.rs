@@ -189,6 +189,8 @@ impl FigApp {
                     self.services.save_prefs(&self.session.prefs);
                 }
                 "dialog.saveAs" => self.save_as_dialog(),
+                "dialog.projectOpen" => self.open_project_dialog(false),
+                "dialog.projectNew" => self.open_project_dialog(true),
                 "dialog.colorProfile" => self.ui.color_profile = self.session.doc().ok().map(|d| d.color_profile),
                 "present" => {
                     if let Some(start) = r.data.get("start").and_then(figcraft_engine::params::id_of) {

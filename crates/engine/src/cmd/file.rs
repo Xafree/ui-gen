@@ -37,6 +37,7 @@ pub use open::MAX_RECENT;
 #[cfg(test)]
 use open::append_pages;
 pub(crate) use open::read_tab;
+pub(super) use open::remember;
 use open::{import, open, open_recent};
 pub(crate) use save::save_ends_preview;
 pub use save::{FileSnapshot, file_bytes, thumbnail};

@@ -71,6 +71,27 @@ impl FigApp {
         });
     }
 
+    pub fn open_project_dialog(&mut self, create: bool) {
+        let title = if create { i18n::tr("New library project") } else { i18n::tr("Open project folder") };
+        self.pick_folder(title, move |app, dir| {
+            app.open_project_at(dir, create);
+        });
+    }
+
+    /// Open the library project in `dir` (with `create`, start one there if it has none); the
+    /// editor shows its first design file. False, with a toast saying why, when nothing opened.
+    pub(crate) fn open_project_at(&mut self, dir: PathBuf, create: bool) -> bool {
+        let first_component = i18n::trf("Component {n}", &[("n", &1)]);
+        let params = json!({"path": dir.to_string_lossy(), "create": create, "firstComponent": first_component});
+        let Some(result) = self.run("project.open", params) else { return false };
+        if result["opened"].as_bool() == Some(true) {
+            self.ui.home = false;
+            return true;
+        }
+        self.toast(i18n::tr("No uigen.json in this folder. Use New library project to start one."));
+        false
+    }
+
     pub fn import_dialog(&mut self, place: bool) {
         let exts: &[&str] = if place {
             &["png", "jpg", "jpeg", "webp", "gif", "tif", "tiff"]

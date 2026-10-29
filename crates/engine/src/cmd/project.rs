@@ -27,6 +27,20 @@ pub fn specs() -> Vec<CommandSpec> {
             open
         ),
         spec!(
+            "project.openFolder",
+            "Open project folder",
+            "{}  asks the interface for a folder to open as a library project (no dialog from a programmatic call)",
+            false,
+            |s, _| ask(s, "dialog.projectOpen")
+        ),
+        spec!(
+            "project.newFolder",
+            "New library project",
+            "{}  asks the interface for a folder to start a library project in (no dialog from a programmatic call)",
+            false,
+            |s, _| ask(s, "dialog.projectNew")
+        ),
+        spec!(
             "project.info",
             "Library project info",
             "{}  the library project of the current tab: {project: null | {root, name, designFiles, tagPrefix, litOutDir, appliedTheme, sources}, components: [{page, name, empty, layers}]}  (components: the pages that are no divider, in order; layers: top-level layers without a reference or note role; [] outside a project)",
@@ -41,6 +55,11 @@ pub fn specs() -> Vec<CommandSpec> {
             update
         ),
     ]
+}
+
+fn ask(s: &mut Session, dialog: &str) -> Result<Value> {
+    s.request_ui(dialog, json!({}));
+    super::ok()
 }
 
 fn text(cmd: &str, field: &str, value: &str) -> Result<String> {
@@ -99,6 +118,11 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
     let files = open_design_files(s, &binding)?;
     let index = files.first().map_or(s.active, |(_, i)| *i);
     s.active = index;
+    for (_, tab) in files.iter().rev() {
+        if let Some(path) = s.docs.get(*tab).and_then(|d| d.path.clone()) {
+            super::file::remember(s, &path);
+        }
+    }
     let files: Vec<Value> = files.iter().map(|(name, i)| json!({"name": name, "index": i})).collect();
     Ok(json!({"opened": true, "created": created, "root": root, "name": binding.config.name, "index": index, "files": files}))
 }

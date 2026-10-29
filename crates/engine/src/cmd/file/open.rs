@@ -7,7 +7,7 @@ use figcraft_project::FILE_NAME;
 pub const MAX_RECENT: usize = 20;
 
 /// Put `path` at the top of the recent files.
-pub(super) fn remember(s: &mut Session, path: &str) {
+pub(crate) fn remember(s: &mut Session, path: &str) {
     let r = &mut s.prefs.recent_files;
     r.retain(|p| p != path);
     r.insert(0, path.to_string());
