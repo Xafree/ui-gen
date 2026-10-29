@@ -12,6 +12,8 @@ const VIEWPORT = { width: 400, height: 200 };
 const TRANSITION_MARGIN_MS = 50;
 const READY_TIMEOUT_MS = 15000;
 
+// Theme variables copied from shadcn/ui (https://github.com/shadcn-ui/ui), MIT, Copyright (c) 2023 shadcn;
+// the licence text is in NOTICE and in fixtures-src/shadcn.jsx.
 const TAILWIND_SHADCN_THEME = `
 @import "tailwindcss";
 @theme inline {
