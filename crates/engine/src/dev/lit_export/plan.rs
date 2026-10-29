@@ -1,18 +1,16 @@
 //! The plan of a Lit export: which components become files, under which element names and with
 //! which problems, and the text of every file of the package. Nothing is written here.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
 use figcraft_doc::{Collection, Document, NodeId, NodeKind};
 use serde::Serialize;
 
 use super::{TokenOptions, package, tokens_css};
-use crate::component_codegen::{Component, ParamKind, describe, main_of};
+use crate::component_codegen::{Component, describe, main_of};
 use crate::components::variant_set;
 use crate::lit::{self, LitOptions, Note, StateRecipe, TagIssue};
-use crate::params::id_of;
 
-const MAX_VISITED: usize = 1_000_000;
 const MAX_SHOWN_NAME: usize = 60;
 
 /// What to export, and how the package is named.
@@ -130,15 +128,13 @@ fn tag_issue(why: TagIssue, name: &str) -> Issue {
         TagIssue::LeadingDigit => {
             issue("leadingDigit", format!("\"{name}\" gives an element name that starts with a digit: add a prefix or rename it"))
         }
-        TagIssue::Reserved => issue("reserved", format!("\"{name}\" gives an element name the HTML specification reserves: rename it")),
+        TagIssue::Reserved => issue(
+            "reserved",
+            format!("\"{name}\" gives an element name or a class that the HTML specification or the imports of the file reserve: rename it"),
+        ),
         TagIssue::NoHyphen => issue("noHyphen", format!("\"{name}\" gives an element name without a hyphen: add a prefix ending in one")),
         TagIssue::TooLong => issue("tooLong", format!("\"{name}\" gives an element name of more than 64 characters: shorten it")),
     }
-}
-
-fn entry_id(doc: &Document, id: NodeId) -> Option<NodeId> {
-    doc.node(id).filter(|n| matches!(n.kind, NodeKind::Component { .. } | NodeKind::ComponentSet { .. }))?;
-    Some(variant_set(doc, id).unwrap_or(id))
 }
 
 fn candidate(doc: &Document, id: NodeId, needed_by: Option<(String, String)>) -> Option<Candidate> {
@@ -159,27 +155,9 @@ fn all_entries(doc: &Document) -> Vec<NodeId> {
         .collect()
 }
 
-/// The components `c` draws as instances, and the ones its instance swaps default to.
-fn used_by(doc: &Document, c: &Component) -> Vec<NodeId> {
-    let mut stack = c.set.and_then(|s| doc.node(s)).map_or_else(|| vec![c.comp], |s| s.children.clone());
-    let mut out: Vec<NodeId> = c.params.iter().filter(|p| p.kind == ParamKind::InstanceSwap).filter_map(|p| id_of(&p.default)).collect();
-    let mut seen = HashSet::new();
-    while let Some(id) = stack.pop() {
-        if !seen.insert(id) || seen.len() > MAX_VISITED {
-            continue;
-        }
-        let Some(n) = doc.node(id) else { continue };
-        if let NodeKind::Instance { component, .. } = &n.kind {
-            out.push(*component);
-        }
-        stack.extend(n.children.iter().rev().copied());
-    }
-    out.into_iter().filter_map(|id| entry_id(doc, id)).collect()
-}
-
 fn candidates(doc: &Document, ids: Option<&[NodeId]>) -> Vec<Candidate> {
     let roots: Vec<NodeId> = match ids {
-        Some(ids) => ids.iter().filter_map(|id| entry_id(doc, *id)).collect(),
+        Some(ids) => ids.iter().filter_map(|id| lit::entry_of(doc, *id)).collect(),
         None => all_entries(doc),
     };
     let mut found: Vec<Candidate> = Vec::new();
@@ -193,7 +171,7 @@ fn candidates(doc: &Document, ids: Option<&[NodeId]>) -> Vec<Candidate> {
     let mut next = 0;
     while let Some(c) = found.get(next) {
         let (name, class) = (c.name.clone(), c.comp.type_name.clone());
-        for id in used_by(doc, &c.comp) {
+        for id in lit::dependencies(doc, &c.comp) {
             if !found.iter().any(|f| f.id == id)
                 && let Some(d) = candidate(doc, id, Some((name.clone(), class.clone())))
             {
@@ -215,6 +193,12 @@ pub fn plan(doc: &Document, opts: &ExportOptions) -> ExportPlan {
             *taken.entry(tag.as_str()).or_default() += 1;
         }
     }
+    let mut classes: BTreeMap<String, usize> = BTreeMap::new();
+    for (c, tag) in found.iter().zip(&tags) {
+        if let (false, Ok(tag)) = (c.empty, tag) {
+            *classes.entry(lit::class_of(tag)).or_default() += 1;
+        }
+    }
     let (mut components, mut notes, mut sources) = (Vec::new(), Vec::new(), Vec::new());
     let mut reads: Vec<(String, Vec<String>)> = Vec::new();
     for (c, tag) in found.iter().zip(&tags) {
@@ -224,6 +208,10 @@ pub fn plan(doc: &Document, opts: &ExportOptions) -> ExportPlan {
             Ok(tag) if !c.empty && taken.get(tag.as_str()).is_some_and(|n| *n > 1) => issues.push(issue(
                 "duplicate",
                 format!("\"{}\" gives the element name <{tag}>, which another component has too: rename one of them", shown(&c.name)),
+            )),
+            Ok(tag) if !c.empty && classes.get(&lit::class_of(tag)).is_some_and(|n| *n > 1) => issues.push(issue(
+                "duplicate",
+                format!("\"{}\" gives the class {}, which another component has too: rename one of them", shown(&c.name), lit::class_of(tag)),
             )),
             _ => {}
         }

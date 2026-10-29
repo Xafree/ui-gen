@@ -339,6 +339,8 @@ mod lit_export_disk_tests;
 #[cfg(test)]
 mod lit_export_tests;
 #[cfg(test)]
+mod lit_review_tests;
+#[cfg(test)]
 mod lit_states_extra_tests;
 #[cfg(test)]
 mod lit_states_tests;

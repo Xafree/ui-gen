@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use figcraft_color::{Paint, PaintKind};
+
 use super::css::{Tokens, css_decls};
 use super::{CodeLang, Ctx, Document, LayoutMode, Node, NodeId, NodeKind, Param, Sizing, indent, num, with_v_if};
 use crate::lit::LitOptions;
@@ -303,11 +305,31 @@ impl<'c, 'a> Markup<'c, 'a> {
             return false;
         }
         let doc = self.ctx.doc;
-        let Ok(svg) = figcraft_svg::try_export_svg(&doc.in_srgb(), &[n.id], &figcraft_svg::SvgOptions::default()) else {
+        let mut drawn = doc.in_srgb();
+        if has_image_paint(n) {
+            self.tokens.note("image-fill", Some(&n.name), "image and pattern fills are not exported: the layer is drawn without them");
+            if let Some(copy) = drawn.to_mut().node_mut(n.id) {
+                copy.fills.retain(|p| !is_image_paint(p));
+                copy.strokes.retain(|p| !is_image_paint(p));
+            }
+        }
+        for field in ["fill", "stroke"] {
+            if let Some(variable) = crate::devinspect::bound_variable(doc, n, field) {
+                let message =
+                    format!("the {field} is bound to {}: the inline SVG keeps the colour it has today and does not follow the token", variable.name);
+                self.tokens.note("vector-token-frozen", Some(&n.name), &message);
+            }
+        }
+        let options = figcraft_svg::SvgOptions { id_prefix: format!("{class}-"), ..Default::default() };
+        let Ok(svg) = figcraft_svg::try_export_svg(&drawn, &[n.id], &options) else {
             self.tokens.note("vector-fallback", Some(&n.name), "the vector could not be exported as SVG: the layer is drawn as a plain box");
             return false;
         };
-        let own = css_decls(doc, n, &mut Tokens::default(), (false, false));
+        let mut own_tokens = Tokens::lit(&self.lit.token_prefix);
+        let own = css_decls(doc, n, &mut own_tokens, (false, false));
+        for u in &own_tokens.unreproducible {
+            self.tokens.note(u.code, u.layer.as_deref(), &u.message);
+        }
         let kept = own.lines().filter(|l| l.starts_with("opacity:") || l.starts_with("mix-blend-mode:"));
         let placed = placement.lines().filter(|l| !l.starts_with("transform"));
         let decls: String = placed.chain(kept).map(|l| format!("{l}\n")).collect();
@@ -459,6 +481,14 @@ impl<'c, 'a> Markup<'c, 'a> {
             }
         }
     }
+}
+
+fn is_image_paint(p: &Paint) -> bool {
+    p.visible && matches!(p.kind, PaintKind::Image(_) | PaintKind::Pattern(_))
+}
+
+fn has_image_paint(n: &Node) -> bool {
+    n.fills.iter().chain(&n.strokes).any(is_image_paint)
 }
 
 /// `decls` without the declarations `extra` sets again, then `extra`.

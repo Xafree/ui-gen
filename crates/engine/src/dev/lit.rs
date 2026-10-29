@@ -8,14 +8,14 @@
 //! Built on the same walk as the React, Vue and
 //! Leptos output ([`crate::component_codegen`], [`crate::codegen::Markup`]).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use figcraft_doc::{Document, NodeId, NodeKind};
 use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::codegen::{CodeLang, Ctx, Markup, Tokens, class_name};
-use crate::component_codegen::{Component, Param, ParamKind, js_string, web_tokens};
+use crate::component_codegen::{Component, Param, ParamKind, describe, instance_values, js_string, main_of, web_tokens};
 use crate::components::{slots_of, variant_props, variant_set};
 use crate::params::id_of;
 
@@ -37,59 +37,208 @@ const RESERVED_TAGS: &[&str] =
 /// Members of `HTMLElement` and `LitElement` a generated property may not take.
 const HOST_MEMBERS: &[&str] = &[
     "accessKey",
+    "accessKeyLabel",
     "addController",
+    "addEventListener",
+    "adoptedCallback",
     "after",
     "animate",
     "append",
+    "appendChild",
+    "ariaAtomic",
+    "ariaAutoComplete",
+    "ariaBusy",
+    "ariaChecked",
+    "ariaColCount",
+    "ariaColIndex",
+    "ariaColSpan",
+    "ariaCurrent",
+    "ariaDescription",
+    "ariaDisabled",
+    "ariaExpanded",
+    "ariaHasPopup",
+    "ariaHidden",
+    "ariaInvalid",
+    "ariaKeyShortcuts",
+    "ariaLabel",
+    "ariaLevel",
+    "ariaLive",
+    "ariaModal",
+    "ariaMultiLine",
+    "ariaMultiSelectable",
+    "ariaOrientation",
+    "ariaPlaceholder",
+    "ariaPosInSet",
+    "ariaPressed",
+    "ariaReadOnly",
+    "ariaRelevant",
+    "ariaRequired",
+    "ariaRoleDescription",
+    "ariaRowCount",
+    "ariaRowIndex",
+    "ariaRowSpan",
+    "ariaSelected",
+    "ariaSetSize",
+    "ariaSort",
+    "ariaValueMax",
+    "ariaValueMin",
+    "ariaValueNow",
+    "ariaValueText",
+    "attachShadow",
+    "attributeChangedCallback",
     "attributes",
+    "autocapitalize",
+    "autocorrect",
     "autofocus",
+    "baseURI",
     "before",
     "blur",
+    "checkVisibility",
+    "childElementCount",
+    "childNodes",
     "children",
     "classList",
     "className",
     "click",
+    "clientHeight",
+    "clientLeft",
+    "clientTop",
+    "clientWidth",
+    "cloneNode",
     "closest",
+    "compareDocumentPosition",
+    "computedStyleMap",
     "connectedCallback",
+    "constructor",
     "contains",
     "contentEditable",
+    "createRenderRoot",
     "dataset",
     "dir",
     "disconnectedCallback",
+    "dispatchEvent",
     "draggable",
+    "enableUpdating",
+    "enterKeyHint",
+    "firstChild",
+    "firstElementChild",
     "firstUpdated",
     "focus",
+    "getAnimations",
+    "getAttribute",
+    "getAttributeNames",
+    "getBoundingClientRect",
+    "getClientRects",
+    "getRootNode",
+    "getUpdateComplete",
+    "hasAttribute",
+    "hasAttributes",
+    "hasChildNodes",
+    "hasOwnProperty",
     "hasUpdated",
     "hidden",
+    "hidePopover",
     "id",
     "inert",
     "innerHTML",
     "innerText",
+    "inputMode",
+    "insertAdjacentElement",
+    "insertAdjacentHTML",
+    "insertAdjacentText",
+    "insertBefore",
     "isConnected",
+    "isContentEditable",
+    "isEqualNode",
+    "isSameNode",
+    "isUpdatePending",
     "lang",
+    "lastChild",
+    "lastElementChild",
+    "localName",
     "matches",
+    "namespaceURI",
+    "nextElementSibling",
+    "nextSibling",
+    "nodeName",
+    "nodeType",
+    "nodeValue",
     "nonce",
+    "normalize",
+    "offsetHeight",
+    "offsetLeft",
+    "offsetParent",
+    "offsetTop",
+    "offsetWidth",
     "outerHTML",
+    "outerText",
+    "ownerDocument",
+    "parentElement",
+    "parentNode",
     "part",
+    "performUpdate",
     "popover",
+    "prefix",
     "prepend",
+    "previousElementSibling",
+    "previousSibling",
+    "querySelector",
+    "querySelectorAll",
     "remove",
+    "removeAttribute",
+    "removeChild",
+    "removeController",
+    "removeEventListener",
     "render",
+    "renderOptions",
     "renderRoot",
+    "replaceChild",
+    "replaceChildren",
+    "replaceWith",
+    "requestFullscreen",
+    "requestPointerLock",
     "requestUpdate",
     "role",
+    "scheduleUpdate",
+    "scroll",
+    "scrollBy",
+    "scrollHeight",
+    "scrollIntoView",
+    "scrollLeft",
+    "scrollTo",
+    "scrollTop",
+    "scrollWidth",
+    "setAttribute",
     "shadowRoot",
+    "shouldUpdate",
+    "showPopover",
     "slot",
     "spellcheck",
     "style",
+    "syncFocus",
     "tabIndex",
+    "tabindex",
+    "tagName",
+    "textContent",
     "title",
+    "toLocaleString",
+    "toString",
+    "toggleAttribute",
+    "togglePopover",
     "translate",
     "update",
     "updateComplete",
     "updated",
+    "valueOf",
     "willUpdate",
+    "writingSuggestions",
 ];
+
+/// Class names a component may not take: what its file imports or relies on.
+const RESERVED_CLASSES: &[&str] = &["Boolean", "HTMLElement", "HTMLElementTagNameMap", "LitElement", "Map", "PropertyKey", "String"];
+
+/// Most nodes visited when looking for the components a component uses.
+const MAX_VISITED: usize = 1_000_000;
 
 /// Where Lit is generated: custom element names start with `prefix` (`ui-`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -175,6 +324,9 @@ pub fn tag_name(name: &str, prefix: &str) -> Result<String, TagIssue> {
     if tag.chars().count() > MAX_TAG {
         return Err(TagIssue::TooLong);
     }
+    if RESERVED_CLASSES.contains(&class_of(&tag).as_str()) {
+        return Err(TagIssue::Reserved);
+    }
     Ok(tag)
 }
 
@@ -203,6 +355,55 @@ pub(crate) fn tag_of(doc: &Document, comp: NodeId, opts: &LitOptions) -> Option<
 /// `c`'s custom element name; a component whose name makes no valid tag is `<prefix>component`.
 pub(crate) fn tag_for(doc: &Document, c: &Component, opts: &LitOptions) -> String {
     tag_of(doc, c.set.unwrap_or(c.comp), opts).or_else(|| tag_name("component", &opts.prefix).ok()).unwrap_or_else(|| "ui-component".to_string())
+}
+
+/// The component or set `id` belongs to, when it is one.
+pub(crate) fn entry_of(doc: &Document, id: NodeId) -> Option<NodeId> {
+    doc.node(id).filter(|n| matches!(n.kind, NodeKind::Component { .. } | NodeKind::ComponentSet { .. }))?;
+    Some(variant_set(doc, id).unwrap_or(id))
+}
+
+/// The components `c` draws as instances, the ones its instance swaps default to and the ones its
+/// instances swap in.
+pub(crate) fn dependencies(doc: &Document, c: &Component) -> Vec<NodeId> {
+    let mut stack = c.set.and_then(|s| doc.node(s)).map_or_else(|| vec![c.comp], |s| s.children.clone());
+    let mut out: Vec<NodeId> = c.params.iter().filter(|p| p.kind == ParamKind::InstanceSwap).filter_map(|p| id_of(&p.default)).collect();
+    let mut seen = HashSet::new();
+    while let Some(id) = stack.pop() {
+        if !seen.insert(id) || seen.len() > MAX_VISITED {
+            continue;
+        }
+        let Some(n) = doc.node(id) else { continue };
+        if let NodeKind::Instance { component, .. } = &n.kind {
+            out.push(*component);
+            if let Some(inner) = main_of(doc, id).and_then(|m| describe(doc, m))
+                && let Some(values) = instance_values(doc, id, &inner)
+            {
+                let swaps = inner.params.iter().zip(&values).filter(|(p, _)| p.kind == ParamKind::InstanceSwap);
+                out.extend(swaps.filter_map(|(_, (_, v))| id_of(v)));
+            }
+        }
+        stack.extend(n.children.iter().rev().copied());
+    }
+    out.into_iter().filter_map(|id| entry_of(doc, id)).collect()
+}
+
+/// The `import "./<tag>.js";` lines of the components `c` uses that have a file of their own.
+fn dependency_imports(doc: &Document, c: &Component, tag: &str, opts: &LitOptions) -> String {
+    let has_content =
+        |id: NodeId| main_of(doc, id).and_then(|m| describe(doc, m)).is_some_and(|d| doc.node(d.comp).is_some_and(|n| !n.children.is_empty()));
+    let mut tags: Vec<String> = dependencies(doc, c).into_iter().filter(|id| has_content(*id)).filter_map(|id| tag_of(doc, id, opts)).collect();
+    tags.sort();
+    tags.dedup();
+    tags.iter()
+        .filter(|t| *t != tag)
+        .map(|t| {
+            format!(
+                "import \"./{t}.js\";
+"
+            )
+        })
+        .collect()
 }
 
 // ------------------------------------------------------------------ properties
@@ -549,9 +750,28 @@ pub fn state_recipes(doc: &Document, c: &Component) -> Vec<StateRecipe> {
         .collect()
 }
 
+/// Where a state comes in the cascade: a later one wins over an earlier one at the same specificity.
+fn state_rank(kind: StateKind) -> u8 {
+    match kind {
+        StateKind::Rest | StateKind::Other => 0,
+        StateKind::Hover => 1,
+        StateKind::FocusVisible => 2,
+        StateKind::Active => 3,
+        StateKind::Loading => 4,
+        StateKind::Disabled => 5,
+    }
+}
+
+fn declared_property(line: &str) -> Option<&str> {
+    line.split_once(':').map(|(property, _)| property)
+}
+
 /// The rules of the other variants of a set, on the host: what differs from the default variant,
 /// or, for a pseudo-class state or an unrecognised one, from the variant with the same other values
-/// at rest. `main` are the default variant's rules, `pass` those of a variant.
+/// at rest. Rules come in the order of the cascade (rest, hover, focus, pressed, loading, disabled),
+/// and a later state repeats what an earlier one of the same variant sets: a hovered disabled
+/// button looks disabled whatever the order of the variants. `main` are the default variant's
+/// rules, `pass` those of a variant.
 pub(crate) fn variant_rules(doc: &Document, c: &Component, main: &[Rule], pass: &dyn Fn(NodeId) -> Vec<Rule>, motion: &Motion) -> String {
     let lay = layout(c);
     let children = c.set.and_then(|s| doc.node(s)).map(|s| s.children.clone()).unwrap_or_default();
@@ -574,7 +794,10 @@ pub(crate) fn variant_rules(doc: &Document, c: &Component, main: &[Rule], pass: 
     };
     let mut out = String::new();
     let mut written: Vec<(String, String)> = Vec::new();
-    for (v, pairs) in siblings.iter().filter(|(v, _)| *v != c.comp).take(64) {
+    let mut touched: HashMap<(String, String), Vec<String>> = HashMap::new();
+    let mut others: Vec<&(NodeId, BTreeMap<String, String>)> = siblings.iter().filter(|(v, _)| *v != c.comp).collect();
+    others.sort_by_key(|(_, pairs)| state_rank(kind_of(pairs)));
+    for (v, pairs) in others {
         let kind = kind_of(pairs);
         let pseudo = match kind {
             StateKind::Hover => ":hover".to_string(),
@@ -596,18 +819,36 @@ pub(crate) fn variant_rules(doc: &Document, c: &Component, main: &[Rule], pass: 
             .filter(|w| *w != c.comp);
         let reference = at_rest.map(pass);
         let reference: &[Rule] = reference.as_deref().unwrap_or(main);
+        let stacked = state_rank(kind) > 0;
         for (path, _, decls) in pass(*v) {
             let Some((_, class, base)) = main.iter().find(|(p, _, _)| *p == path) else { continue };
             let base = reference.iter().find(|(p, _, _)| *p == path).map_or(base, |(_, _, d)| d);
             let base_lines: Vec<&str> = base.lines().collect();
-            let diff: Vec<&str> = decls.lines().filter(|l| !base_lines.contains(l)).collect();
-            if diff.is_empty() || written.contains(&(selector.clone(), class.clone())) {
+            let earlier = touched.entry((attributes(pairs), path.clone())).or_default();
+            let lines: Vec<&str> = decls
+                .lines()
+                .filter(|l| !base_lines.contains(l) || (stacked && declared_property(l).is_some_and(|p| earlier.iter().any(|e| e == p))))
+                .collect();
+            if lines.is_empty() || written.contains(&(selector.clone(), class.clone())) {
                 continue;
             }
             written.push((selector.clone(), class.clone()));
+            if stacked {
+                earlier.extend(lines.iter().filter_map(|l| declared_property(l)).map(str::to_string));
+            }
             let transition = motion.state(*v, &path).into_iter();
-            let lines = diff.iter().copied().chain(transition);
-            out.push_str(&format!("{selector} .{class} {{\n{}}}\n", lines.map(|l| format!("  {l}\n")).collect::<String>()));
+            let lines = lines.iter().copied().chain(transition);
+            out.push_str(&format!(
+                "{selector} .{class} {{
+{}}}
+",
+                lines
+                    .map(|l| format!(
+                        "  {l}
+"
+                    ))
+                    .collect::<String>()
+            ));
         }
     }
     out
@@ -627,6 +868,18 @@ fn state_notes(c: &Component, lay: &Layout) -> Vec<Note> {
             message: format!("{} \"{value}\" is not a known interaction state: it stays a property", state.prop),
         })
         .collect()
+}
+
+/// A note when the set has more variants than get rules and recipes.
+fn truncation_note(doc: &Document, c: &Component) -> Option<Note> {
+    let set = c.set.and_then(|s| doc.node(s))?;
+    let count = set.children.iter().filter(|v| doc.node(**v).is_some_and(|n| matches!(n.kind, NodeKind::Component { .. }))).count();
+    (count > MAX_VARIANTS).then(|| Note {
+        code: "variants-truncated",
+        component: c.type_name.clone(),
+        layer: None,
+        message: format!("the set has {count} variants: only the first {MAX_VARIANTS} get rules and state recipes"),
+    })
 }
 
 /// One note per variable whose Web code syntax the component does not follow.
@@ -721,7 +974,9 @@ pub fn definition(doc: &Document, c: &Component, opts: &LitOptions) -> LitOutput
     let hugs = doc.node(c.comp).is_some_and(|n| n.layout.is_some() && n.child_layout.sizing_h == figcraft_doc::Sizing::Hug);
     let display = if hugs { "inline-block" } else { "block" };
     let mut out =
-        String::from("import { LitElement, css, html, nothing } from \"lit\";\nimport { customElement, property } from \"lit/decorators.js\";\n\n");
+        String::from("import { LitElement, css, html, nothing } from \"lit\";\nimport { customElement, property } from \"lit/decorators.js\";\n");
+    out.push_str(&dependency_imports(doc, c, &tag, opts));
+    out.push('\n');
     out.push_str(&format!("@customElement(\"{tag}\")\nexport class {class} extends LitElement {{\n"));
     let lay = layout(c);
     let mut fields: Vec<String> = c
@@ -748,6 +1003,7 @@ pub fn definition(doc: &Document, c: &Component, opts: &LitOptions) -> LitOutput
     out.push_str(&format!("  render() {{\n    return html`\n{markup}    `;\n  }}\n}}\n\n"));
     out.push_str(&format!("declare global {{\n  interface HTMLElementTagNameMap {{\n    \"{tag}\": {class};\n  }}\n}}\n"));
     let mut notes = state_notes(c, &lay);
+    notes.extend(truncation_note(doc, c));
     notes.extend(syntax_notes(c, &tokens));
     notes.extend(tokens.unreproducible.iter().map(|u| Note {
         code: u.code,

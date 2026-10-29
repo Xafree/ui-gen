@@ -79,6 +79,11 @@ impl LitNames {
 }
 
 impl Tokens {
+    /// Tokens for Lit: custom properties named under `prefix`, without fallbacks.
+    pub fn lit(prefix: &str) -> Self {
+        Tokens { lit_prefix: Some(prefix.to_string()), ..Tokens::default() }
+    }
+
     /// `var(--name, value)` (Lit: `var(--name)`), remembering the variable.
     fn var(&mut self, doc: &Document, n: &Node, variable: &Variable, value: String) -> String {
         let name = if let Some(prefix) = &self.lit_prefix {

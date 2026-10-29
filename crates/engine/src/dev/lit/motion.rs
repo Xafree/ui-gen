@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, HashMap};
 use figcraft_doc::proto::{Action, Easing, Interaction, Transition, Trigger};
 use figcraft_doc::{Document, Node, NodeId, NodeKind};
 
-use super::{Layout, LitOptions, Rule, StateKind, fold, layout, tag_for};
+use super::{Layout, LitOptions, MAX_VARIANTS, Rule, StateKind, fold, layout, tag_for};
 use crate::codegen::Unreproducible;
 use crate::component_codegen::{Component, ParamKind};
 use crate::components::variant_props;
@@ -153,7 +153,7 @@ pub(crate) fn plan(
 fn variants_of(doc: &Document, c: &Component) -> Vec<NodeId> {
     let Some(set) = c.set.and_then(|s| doc.node(s)) else { return Vec::new() };
     let is_variant = |id: &&NodeId| doc.node(**id).is_some_and(|n| matches!(n.kind, NodeKind::Component { .. }));
-    set.children.iter().filter(is_variant).take(64).copied().collect()
+    set.children.iter().filter(is_variant).take(MAX_VARIANTS).copied().collect()
 }
 
 fn kind_of(doc: &Document, lay: &Layout, variant: NodeId) -> StateKind {
@@ -325,10 +325,10 @@ impl Scene<'_> {
             match effect {
                 Effect::Ripple => self.ripple(motion, class, n, path),
                 Effect::Spinner => {
-                    motion.tail.push_str(&host_rule(&self.loading(), class, &format!("animation: {}-spin 1s linear infinite;", self.tag)))
+                    self.while_loading(motion, n, class, &format!("animation: {}-spin 1s linear infinite;", self.tag));
                 }
                 Effect::Pulse => {
-                    motion.tail.push_str(&host_rule(&self.loading(), class, &format!("animation: {}-pulse 1.5s ease-in-out infinite;", self.tag)))
+                    self.while_loading(motion, n, class, &format!("animation: {}-pulse 1.5s ease-in-out infinite;", self.tag));
                 }
             }
         }
@@ -351,14 +351,25 @@ impl Scene<'_> {
         motion.tail.push_str(&host_rule(":host(:active)", class, &animation));
     }
 
-    /// The host selector of the loading state: its boolean attribute.
-    fn loading(&self) -> String {
+    /// The boolean attribute of the loading state, when the component has one.
+    fn loading(&self) -> Option<String> {
         let declared = || {
             let params = self.c.params.iter().zip(&self.lay.members);
             params.into_iter().find(|(p, _)| p.kind == ParamKind::Boolean && fold(&p.prop) == "loading").and_then(|(_, m)| m.attribute.clone())
         };
         let from_state = self.lay.state.as_ref().and_then(|s| s.boolean(StateKind::Loading)).map(|(_, _, attribute)| attribute.clone());
-        format!(":host([{}])", from_state.or_else(declared).unwrap_or_else(|| "loading".to_string()))
+        from_state.or_else(declared)
+    }
+
+    /// The animation of an effect layer, played while the host has its loading attribute.
+    fn while_loading(&self, motion: &mut Motion, layer: &Node, class: &str, animation: &str) {
+        let attribute = self.loading();
+        if attribute.is_none() {
+            let message = "the component has no Loading state or boolean: this layer plays only when the element is given a loading attribute";
+            motion.note("loading-missing", Some(layer.name.as_str()), message);
+        }
+        let selector = format!(":host([{}])", attribute.as_deref().unwrap_or("loading"));
+        motion.tail.push_str(&host_rule(&selector, class, animation));
     }
 
     fn keyframes(&self) -> [(Effect, String); 3] {

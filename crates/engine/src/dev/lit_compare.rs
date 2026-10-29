@@ -12,6 +12,7 @@ use crate::{Result, bad, file_access, spec};
 const CMD: &str = "export.litCompare";
 const DEFAULT_TOLERANCE: f64 = 8.0;
 const MAX_IMAGE_BYTES: u64 = 64 << 20;
+const MAX_RENDER_PIXELS: f64 = 64e6;
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
 
 /// How two images of the same size differ.
@@ -67,6 +68,13 @@ pub fn specs() -> Vec<CommandSpec> {
                 return Err(bad(CMD, format!("{path}: not a PNG")));
             }
             let image = images::decode(&bytes).ok_or_else(|| bad(CMD, format!("{path}: not a PNG that can be read")))?;
+            let bounds = figcraft_render::export_bounds(doc, id).ok_or_else(|| bad(CMD, format!("{id} can't be rendered")))?;
+            let pixels = bounds.width() * scale * (bounds.height() * scale);
+            if !pixels.is_finite() || pixels > MAX_RENDER_PIXELS {
+                let message =
+                    format!("{id} would render {:.0} megapixels at scale {scale}: the limit is {:.0}", pixels / 1e6, MAX_RENDER_PIXELS / 1e6);
+                return Err(bad(CMD, message));
+            }
             let rendered = render_node(doc, id, scale).ok_or_else(|| bad(CMD, format!("{id} can't be rendered at scale {scale}")))?;
             let diff = pixel_diff(&rendered, &image, tolerance as u8);
             Ok(json!({
