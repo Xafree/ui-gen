@@ -12,11 +12,6 @@ pub(crate) struct Runtime {
     /// The desktop app turns the check at start on; tests and the web build leave it off.
     #[cfg(not(target_arch = "wasm32"))]
     startup_check: bool,
-    #[cfg(not(target_arch = "wasm32"))]
-    check_requested: bool,
-    /// The context of the last frame, to wake the UI when a check is queued from a menu callback.
-    #[cfg(not(target_arch = "wasm32"))]
-    repaint: Option<egui::Context>,
     pub(crate) manual_window_open: bool,
     pub(crate) status_message: Option<String>,
 }
@@ -28,10 +23,6 @@ impl Default for Runtime {
             updater: Updater::new(&craft_update::suite::FIGCRAFT, env!("CARGO_PKG_VERSION")),
             #[cfg(not(target_arch = "wasm32"))]
             startup_check: false,
-            #[cfg(not(target_arch = "wasm32"))]
-            check_requested: false,
-            #[cfg(not(target_arch = "wasm32"))]
-            repaint: None,
             manual_window_open: false,
             status_message: None,
         }
@@ -47,28 +38,14 @@ impl FigApp {
 }
 
 pub(crate) fn check(app: &mut FigApp) {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        app.updates_rt.check_requested = true;
-        if let Some(ctx) = &app.updates_rt.repaint {
-            ctx.request_repaint();
-        }
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        app.updates_rt.manual_window_open = true;
-        app.updates_rt.status_message = Some(tr("Update check is not supported in the web browser.").to_string());
-    }
+    app.toast(tr("UIGEN updates are not available yet."));
 }
 
 pub(crate) fn tick(app: &mut FigApp, ctx: &egui::Context) {
     #[cfg(not(target_arch = "wasm32"))]
     {
         let rt = &mut app.updates_rt;
-        rt.repaint = Some(ctx.clone());
-        if std::mem::take(&mut rt.check_requested) {
-            rt.updater.check_now(ctx);
-        } else if rt.startup_check {
+        if rt.startup_check {
             rt.updater.check_at_start(ctx);
         }
         rt.updater.tick(ctx);

@@ -88,6 +88,8 @@ mod gradient_shorthand_tests;
 #[cfg(test)]
 mod guide_release_tests;
 #[cfg(test)]
+mod help_menu_tests;
+#[cfg(test)]
 mod home_recents_tests;
 #[cfg(test)]
 mod home_tests;
@@ -125,8 +127,6 @@ mod live_text_tests;
 mod measure_nudge_tests;
 #[cfg(test)]
 mod menu_aim_tests;
-#[cfg(test)]
-mod help_menu_tests;
 #[cfg(test)]
 mod menu_contrast_tests;
 #[cfg(test)]

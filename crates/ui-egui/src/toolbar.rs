@@ -323,6 +323,18 @@ fn pick_mode(app: &mut FigApp, i: usize) {
     }
 }
 
+/// The Help menu: label and command. It offers no update check, as UIGEN has no release channel of its own yet.
+const HELP_MENU: [(&str, &str); 4] = [
+    (tr_noop("Getting started"), "help.gettingStarted"),
+    (tr_noop("Keyboard shortcuts"), "help.shortcuts"),
+    (tr_noop("Help page"), "help.page"),
+    (tr_noop("About UIGEN"), "help.about"),
+];
+
+pub fn help_menu_commands() -> Vec<&'static str> {
+    HELP_MENU.iter().map(|&(_, command)| command).collect()
+}
+
 /// The floating help button at the bottom right of the canvas.
 fn help_button(app: &mut FigApp, ui: &mut Ui, canvas: Rect, pill: Rect, t: &Tokens) {
     let mut hr = Rect::from_center_size(pos2(canvas.max.x - 32.0, canvas.max.y - 32.0), vec2(32.0, 32.0));
@@ -335,14 +347,8 @@ fn help_button(app: &mut FigApp, ui: &mut Ui, canvas: Rect, pill: Rect, t: &Toke
     ui.painter().circle_filled(hr.center(), 16.0, t.panel);
     ui.painter().text(hr.center(), Align2::CENTER_CENTER, "?", crate::theme::regular(15.0), t.text);
     crate::right::menu_popup(&hresp).show(|ui| {
-        for (l, c) in [
-            (tr("Getting started"), "help.gettingStarted"),
-            (tr("Keyboard shortcuts"), "help.shortcuts"),
-            (tr("Help page"), "help.page"),
-            (tr("Check for updates…"), "help.checkForUpdates"),
-            (tr("About UIGEN"), "help.about"),
-        ] {
-            if crate::right::menu_item(ui, l, crate::shortcuts::shortcut(c).unwrap_or("")) {
+        for (l, c) in HELP_MENU {
+            if crate::right::menu_item(ui, tr(l), crate::shortcuts::shortcut(c).unwrap_or("")) {
                 crate::menus::invoke(app, c);
                 ui.close();
             }

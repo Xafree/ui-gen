@@ -25,3 +25,8 @@ pub fn failed(error: &eframe::Error, quiet: bool) {
         .set_buttons(rfd::MessageButtons::Ok)
         .show();
 }
+
+/// Whether the app asks an update server for a newer release when it starts.
+pub(crate) fn checks_for_updates_at_start() -> bool {
+    false
+}
