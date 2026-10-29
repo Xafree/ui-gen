@@ -451,6 +451,8 @@ pub struct UiState {
     pub import_report: Option<import_report::Report>,
     /// The Export library as Lit window, when open.
     pub lit_export: Option<dialogs::lit_export::LitExport>,
+    /// The Project settings window, when open.
+    pub project_settings: Option<dialogs::project_settings::ProjectSettings>,
     /// Files the user opened whose fonts are yet to be checked (by document uid).
     pub font_checks: Vec<u64>,
     pub missing_fonts: Option<missing_fonts::Shown>,
@@ -614,6 +616,7 @@ impl Default for UiState {
             pending_open_frames: 0,
             import_report: None,
             lit_export: None,
+            project_settings: None,
             font_checks: Vec::new(),
             missing_fonts: None,
             screenshot_requests: Vec::new(),

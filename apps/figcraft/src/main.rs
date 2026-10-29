@@ -136,6 +136,15 @@ impl eframe::App for App {
     }
 }
 
+/// The capture service (Node sidecar) behind the library projects' source libraries; the window
+/// still opens without it, and installing a package then says it is unavailable.
+fn install_capture(session: &mut Session, wake: impl Fn() + Send + 'static) {
+    match figcraft_capture::locate() {
+        Ok(config) => session.set_capture_backend(Box::new(figcraft_capture::CaptureService::start(config, Box::new(wake)))),
+        Err(e) => log::warn!("capture service not started: {e}"),
+    }
+}
+
 fn main() -> eframe::Result {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -195,6 +204,7 @@ fn main() -> eframe::Result {
     let mut session = Session::empty();
     // Live sessions: the network threads wake the window when something arrives.
     session.live.install(Box::new(figcraft_collab_net::NetLink::new(Arc::new(wake(&ctx_slot)))));
+    install_capture(&mut session, wake(&ctx_slot));
     for f in &args.files {
         if let Err(e) = session.execute("file.open", &json!({"path": f})) {
             log::error!("{f}: {e}");

@@ -390,6 +390,10 @@ pub fn run_script(script: &str, input: Option<&str>, out: Option<&str>) -> CliRe
         }
         None => (Session::new(), 0),
     };
+    let wants_capture = crate::capture::needs_service(&steps.iter().map(|step| step.command.as_str()).collect::<Vec<_>>());
+    if wants_capture {
+        crate::capture::install(&mut s);
+    }
     // One undo step and all-or-nothing, the way the same commands behave through `command.batch`
     // (MCP, the control channel, plugins): `{"$step": n}` and `{"$ref": "name"}` resolve against the
     // steps before it, and a step that fails takes the whole script back instead of leaving the
@@ -415,6 +419,15 @@ pub fn run_script(script: &str, input: Option<&str>, out: Option<&str>) -> CliRe
     }
     for (i, (step, v)) in steps.iter().zip(scope.results()).enumerate() {
         println!("{}", json!({"step": i, "command": step.command, "ok": true, "result": v}));
+    }
+    if wants_capture {
+        let failures = crate::capture::finish(&mut s);
+        for failure in &failures {
+            eprintln!("error: {failure}");
+        }
+        if !failures.is_empty() {
+            return Ok(ExitCode::from(1));
+        }
     }
     if let Some(out) = out {
         let ds = s.ds().map_err(|e| CliError::Failed(e.to_string()))?;

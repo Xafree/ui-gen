@@ -57,6 +57,7 @@ impl Headless {
     fn execute(&mut self, cmd: &str, params: &Value) -> Result<Value, String> {
         // What happened in a live session since the last call (latest presence only).
         self.session.live_poll();
+        self.session.pump_capture();
         let r = self.session.execute(cmd, params).map_err(|e| e.to_string());
         self.session.live_sync();
         // No UI: dialogs and panels requested by commands are dropped.

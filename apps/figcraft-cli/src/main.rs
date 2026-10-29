@@ -4,6 +4,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 mod args;
+mod capture;
 mod files;
 mod perf;
 
@@ -298,7 +299,11 @@ fn mcp(attach: Option<&str>, roots: Option<figcraft_engine::file_access::Roots>)
             })?;
             Box::new(b)
         }
-        None => Box::new(figcraft_mcp::Headless::new()),
+        None => {
+            let mut session = figcraft_engine::Session::new();
+            capture::install(&mut session);
+            Box::new(figcraft_mcp::Headless::with_session(session))
+        }
     };
     eprintln!("figcraft MCP server ({}) on stdio", backend.describe());
     if let Some(r) = &roots {
