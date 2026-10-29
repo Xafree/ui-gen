@@ -36,6 +36,7 @@ pub(crate) use load::{load_fig, read_capped, recovered, variables_param, write};
 pub use open::MAX_RECENT;
 #[cfg(test)]
 use open::append_pages;
+pub(crate) use open::read_tab;
 use open::{import, open, open_recent};
 pub(crate) use save::save_ends_preview;
 pub use save::{FileSnapshot, file_bytes, thumbnail};
@@ -197,12 +198,14 @@ pub fn specs() -> Vec<CommandSpec> {
             let (loaded, _) = load_path(&path, None)?;
             let i = s.active;
             let uid = s.ds()?.uid;
+            let project = s.ds()?.project.clone();
             if let Some(slot) = s.docs.get_mut(i) {
                 *slot = DocState::new(loaded.doc, Some(path.clone()))
                     .with_versions(loaded.versions)
                     .with_branches(loaded.branches)
                     .with_images_left_in_file(&path, loaded.images_past_budget);
                 slot.on_disk = on_disk;
+                slot.project = project;
             }
             // Edits on its branch tabs are reverted too.
             crate::branches::close_tabs(s, uid, None);

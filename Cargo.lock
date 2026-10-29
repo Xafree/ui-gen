@@ -1709,6 +1709,7 @@ dependencies = [
  "figcraft-pathops",
  "figcraft-pdf",
  "figcraft-plugin",
+ "figcraft-project",
  "figcraft-render",
  "figcraft-svg",
  "figcraft-text",

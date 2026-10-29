@@ -1,5 +1,7 @@
 use super::load::{ext, file_stem, import_summary, load_path, load_with, read, rest_images, sibling_variables, variables_param};
 use super::*;
+use crate::project::binding_for_file;
+use figcraft_project::FILE_NAME;
 
 /// How many files File ▸ Open recent keeps.
 pub const MAX_RECENT: usize = 20;
@@ -68,31 +70,55 @@ pub(super) fn open(s: &mut Session, p: &Value) -> Result<Value> {
         remember(s, &path);
         return Ok(json!({"index": i}));
     }
-    // Stamped before reading: a change made during the read makes the next save refuse.
-    let on_disk = crate::library::stat(&path).ok();
-    let (loaded, rest) = load_path(&path, variables.as_ref())?;
+    let mut tab = read_tab(&path, variables.as_ref())?;
     remember(s, &path);
-    let native = !rest && matches!(ext(&path).as_str(), "figcraft" | "json");
-    let warnings = rest || ext(&path) == "svg";
-    // A native file that lost something (a damaged image, say): the app says so, not only the result.
-    if native && !loaded.issues.is_empty() {
-        s.message = Some(match loaded.issues.as_slice() {
-            [one] => format!("{}: {one}", file_stem(&path)),
-            more => format!("{}: {} problems were repaired or left out while opening it, e.g. {}", file_stem(&path), more.len(), more[0]),
-        });
+    if tab.message.is_some() {
+        s.message = tab.message.take();
     }
+    if tab.ds.path.is_some() && ext(&path) == "figcraft" {
+        match binding_for_file(&path) {
+            Some(Ok(binding)) => tab.ds.project = Some(Arc::new(binding)),
+            Some(Err(cause)) => s.message = Some(format!("{FILE_NAME}: {cause}; opened as an ordinary file")),
+            None => {}
+        }
+    }
+    s.docs.push(tab.ds);
+    s.active = s.docs.len() - 1;
+    let mut out = json!({"index": s.active, "summary": tab.summary});
+    out[if tab.warnings { "warnings" } else { "repairs" }] = json!(tab.issues);
+    Ok(out)
+}
+
+/// A file read into a tab that is not in the session yet.
+pub(crate) struct ReadTab {
+    pub(crate) ds: DocState,
+    summary: Value,
+    issues: Vec<String>,
+    warnings: bool,
+    /// What the app says about the file besides the result (a damaged image it left out, say).
+    pub(crate) message: Option<String>,
+}
+
+/// Read `path` into a tab.
+pub(crate) fn read_tab(path: &str, variables: Option<&Value>) -> Result<ReadTab> {
+    // Stamped before reading: a change made during the read makes the next save refuse.
+    let on_disk = crate::library::stat(path).ok();
+    let (loaded, rest) = load_path(path, variables)?;
+    let native = !rest && matches!(ext(path).as_str(), "figcraft" | "json");
+    let warnings = rest || ext(path) == "svg";
+    // A native file that lost something (a damaged image, say): the app says so, not only the result.
+    let message = (native && !loaded.issues.is_empty()).then(|| match loaded.issues.as_slice() {
+        [one] => format!("{}: {one}", file_stem(path)),
+        more => format!("{}: {} problems were repaired or left out while opening it, e.g. {}", file_stem(path), more.len(), more[0]),
+    });
     let summary = import_summary(&loaded.doc);
     let images_left_out = if native { loaded.images_past_budget } else { 0 };
-    let mut ds = DocState::new(loaded.doc, native.then(|| path.clone()))
+    let mut ds = DocState::new(loaded.doc, native.then(|| path.to_string()))
         .with_versions(loaded.versions)
         .with_branches(loaded.branches)
-        .with_images_left_in_file(&path, images_left_out);
+        .with_images_left_in_file(path, images_left_out);
     ds.on_disk = on_disk.filter(|_| native);
-    s.docs.push(ds);
-    s.active = s.docs.len() - 1;
-    let mut out = json!({"index": s.active, "summary": summary});
-    out[if warnings { "warnings" } else { "repairs" }] = json!(loaded.issues);
-    Ok(out)
+    Ok(ReadTab { ds, summary, issues: loaded.issues, warnings, message })
 }
 
 /// [`open`] for a file given as base64 `data` (a file dropped without a path on disk): `name` tells

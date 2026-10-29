@@ -100,6 +100,7 @@ mod derived;
 mod doc_state;
 mod error;
 mod prefs;
+pub mod project;
 mod session;
 mod view_state;
 
