@@ -82,10 +82,13 @@ fn token_matches(expected: &str, given: &str) -> bool {
     diff == 0 && !expected.is_empty()
 }
 
+/// Write the token under a temporary name, private from the start, then rename it into place: a
+/// reader never finds a half-written token, and a file left by a crashed run is replaced.
 fn write_token_file(dir: &Path, port: u16, token: &str) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(dir)?;
     let path = figcraft_engine::control_token::control_token_path(dir, port);
-    match std::fs::remove_file(&path) {
+    let temporary = path.with_extension("tmp");
+    match std::fs::remove_file(&temporary) {
         Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
         _ => {}
     }
@@ -93,36 +96,54 @@ fn write_token_file(dir: &Path, port: u16, token: &str) -> std::io::Result<PathB
     options.write(true).create_new(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    options.open(&path)?.write_all(token.as_bytes())?;
+    let written = options.open(&temporary).and_then(|mut file| file.write_all(token.as_bytes())).and_then(|()| std::fs::rename(&temporary, &path));
+    if let Err(e) = written {
+        remove_token_file(&temporary);
+        return Err(e);
+    }
     Ok(path)
 }
 
-pub fn start(port: u16, queue: Queue, ctx: CtxSlot) {
+/// Remove the token file when the app exits, so a stale token is not left for a client to try.
+pub fn remove_token_file(path: &Path) {
+    if let Err(e) = std::fs::remove_file(path) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            log::warn!("control server: can't remove the token file {}: {e}", path.display());
+        }
+    }
+}
+
+/// Start the control server; the token file it wrote, to remove when the app exits.
+pub fn start(port: u16, queue: Queue, ctx: CtxSlot) -> Option<PathBuf> {
     let token = generate_token();
     if token.is_empty() {
         log::error!("control server: the system has no secure random numbers, so no session token can be made");
         eprintln!("UIGEN control server not started: no secure random numbers for the session token");
-        return;
+        return None;
     }
     let listener = match TcpListener::bind(("127.0.0.1", port)) {
         Ok(l) => l,
         Err(e) => {
             log::error!("control server: can't bind 127.0.0.1:{port}: {e} (another app may own it; pick another port)");
             eprintln!("UIGEN control server failed to bind port {port}: {e}");
-            return;
+            return None;
         }
     };
     eprintln!("UIGEN control server listening on 127.0.0.1:{port}");
     let token_file = crate::services::config_dir()
         .ok_or_else(|| std::io::Error::other("no configuration folder"))
         .and_then(|dir| write_token_file(&dir, port, &token));
-    match token_file {
-        Ok(path) => eprintln!("UIGEN control token: {token} (also in {})", path.display()),
+    let token_file = match token_file {
+        Ok(path) => {
+            eprintln!("UIGEN control token: {token} (also in {})", path.display());
+            Some(path)
+        }
         Err(e) => {
             log::error!("control server: can't write the token file: {e}");
             eprintln!("UIGEN control token: {token} (the token file could not be written: {e})");
+            None
         }
-    }
+    };
     let token: Arc<str> = Arc::from(token);
     let spawned = std::thread::Builder::new().name("figcraft-control".into()).spawn(move || {
         let mut workers = Vec::new();
@@ -133,6 +154,7 @@ pub fn start(port: u16, queue: Queue, ctx: CtxSlot) {
     if let Err(e) = spawned {
         log::error!("control server thread: {e}");
     }
+    token_file
 }
 
 /// The connections `incoming` accepts, calling `wait` after each failed accept.
@@ -299,3 +321,6 @@ mod auth_tests;
 #[cfg(test)]
 #[path = "control_server_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "control_server_token_file_tests.rs"]
+mod token_file_tests;

@@ -246,9 +246,7 @@ fn main() -> eframe::Result {
         figcraft_ui_egui::live::open_invite(&mut fig, link);
     }
     let queue: Arc<Mutex<Vec<ControlRequest>>> = Arc::new(Mutex::new(Vec::new()));
-    if let Some(p) = port {
-        control_server::start(p, queue.clone(), ctx_slot.clone());
-    }
+    let token_file = port.and_then(|p| control_server::start(p, queue.clone(), ctx_slot.clone()));
     let icon = services::window_icon();
     // The app id is the Wayland app_id and the X11 window class on Linux: the desktop entry's name
     // and StartupWMClass (FreeBSD's package matches the binary's name instead).
@@ -294,6 +292,9 @@ fn main() -> eframe::Result {
             }))
         }),
     );
+    if let Some(path) = &token_file {
+        control_server::remove_token_file(path);
+    }
     // Say why instead of quitting silently: release builds on Windows have no console.
     if let Err(e) = &result {
         startup::failed(e, port.is_some());
