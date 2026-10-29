@@ -212,7 +212,7 @@ async function platformFontOfMarks(page, marks) {
         const { fonts } = await cdp.send('CSS.getPlatformFontsForNode', { nodeId });
         const used = fonts.reduce((best, font) => (best === undefined || font.glyphCount > best.glyphCount ? font : best), undefined);
         if (used?.familyName) {
-          fontOfMark.set(mark, used.familyName);
+          fontOfMark.set(mark, { family: used.familyName, postScript: used.postScriptName });
         }
       }
     }
@@ -226,9 +226,12 @@ async function recordPlatformFonts(page, root) {
   const texts = textsOf(root);
   const fontOfMark = await platformFontOfMarks(page, [...new Set(texts.map((text) => text.markId))]);
   for (const text of texts) {
-    const family = fontOfMark.get(text.markId);
-    if (family !== undefined) {
-      text.style.platformFont = family;
+    const font = fontOfMark.get(text.markId);
+    if (font !== undefined) {
+      text.style.platformFont = font.family;
+      if (font.postScript) {
+        text.style.platformFontPostScript = font.postScript;
+      }
     }
     delete text.markId;
   }

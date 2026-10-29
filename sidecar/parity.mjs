@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
+import { GEOMETRY_TOLERANCE_PX, collectTexts, textGeometryVerdict } from './parity-text.mjs';
 
 const here = import.meta.dirname;
 const repoRoot = resolve(here, '..');
@@ -14,7 +15,7 @@ const STATES = ['default', 'hover'];
 const FRAME_NAME = 'parity-frame';
 const PIXELMATCH_THRESHOLD = 0.1;
 const SHAPES_MAX_PERCENT = 1;
-const TEXT_MAX_PERCENT = 4;
+const SCANNED_IDS_MARGIN = 4;
 const DIFF_PIXEL = [255, 0, 0];
 
 function run(command, args, options = {}) {
@@ -35,7 +36,25 @@ function crop(png, width, height) {
   return out;
 }
 
-const collectTexts = (node) => (node.type === 'text' ? [node] : (node.children ?? []).flatMap(collectTexts));
+const countNodes = (node) => 1 + (node.children ?? []).reduce((total, child) => total + countNodes(child), 0);
+
+function nodeQueries(snapshot) {
+  const lastId = countNodes(snapshot.root) + SCANNED_IDS_MARGIN;
+  return Array.from({ length: lastId }, (_, index) => ({ command: 'node.get', params: { id: index + 1 } }));
+}
+
+function parseSteps(output) {
+  return output
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+const textLayersOf = (steps) =>
+  steps
+    .filter((step) => step.command === 'node.get' && step.result?.type === 'TEXT')
+    .map((step) => step.result)
+    .sort((a, b) => a.id - b.id);
 
 function textMask(snapshot, width, height) {
   const mask = new Uint8Array(width * height);
@@ -102,18 +121,16 @@ async function measure(lib, state) {
       params: { x: 0, y: 0, width: capture.width, height: capture.height, name: FRAME_NAME, props: { fill: '#FFFFFF', clip: true } },
     },
     { command: 'uigen.importDom', as: 'imported', params: { snapshot, parent: { $ref: 'frame' }, x: 0, y: 0 } },
+    ...nodeQueries(snapshot),
   ];
   const scriptPath = resolve(outDir, `${name}.script.json`);
   const documentPath = resolve(outDir, `${name}.figcraft`);
   const renderPath = resolve(outDir, `${name}-render.png`);
   await writeFile(scriptPath, JSON.stringify(script));
   const runOutput = run(cli, ['run', scriptPath, '--out', documentPath]);
-  const importStep = runOutput
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line))
-    .find((step) => step.command === 'uigen.importDom');
-  const warnings = importStep?.result?.warnings ?? [];
+  const steps = parseSteps(runOutput);
+  const warnings = steps.find((step) => step.command === 'uigen.importDom')?.result?.warnings ?? [];
+  const geometry = textGeometryVerdict(collectTexts(snapshot.root), textLayersOf(steps), snapshot.root.box);
   run(cli, ['export', documentPath, '-o', renderPath, '--node', FRAME_NAME, '--scale', '1']);
 
   const render = await readPng(renderPath);
@@ -124,6 +141,7 @@ async function measure(lib, state) {
   const shapesPercent = percentOf(shapesDiffering, result.unionPixels - split.textPixels);
   const textPercent = percentOf(split.text, split.textPixels);
   return {
+    geometry,
     name,
     captureSize: `${capture.width}x${capture.height}`,
     renderSize: `${render.width}x${render.height}`,
@@ -135,21 +153,28 @@ async function measure(lib, state) {
     sizeMismatch: result.sizeMismatch,
     warnings,
     shapesVerdict: shapesPercent < SHAPES_MAX_PERCENT ? 'OK' : 'KO',
-    textVerdict: textPercent < TEXT_MAX_PERCENT ? 'OK' : 'KO',
+    textVerdict: geometry.verdict,
   };
 }
 
+const yesNo = (value) => (value ? 'oui' : 'non');
+const signed = (value) => value.toFixed(2);
+
 function table(rows) {
   const lines = [
-    '| cas | taille capture | taille rendu | pixels formes | % formes | verdict formes | pixels texte | zone texte (px) | % texte | verdict texte |',
-    '|---|---|---|---|---|---|---|---|---|---|',
-    ...rows.map(
-      (row) =>
-        `| ${row.name} | ${row.captureSize} | ${row.renderSize} | ${row.shapesDiffering} | ${row.shapesPercent.toFixed(2)} % | ${row.shapesVerdict} | ${row.textDiffering} | ${row.textPixels} | ${row.textPercent.toFixed(2)} % | ${row.textVerdict} |`,
-    ),
+    '| cas | taille capture | taille rendu | pixels formes | % formes | verdict formes | verdict texte (géométrie) | dx max (px) | dy max (px) | dlargeur max (px) | police égale | taille égale | graisse égale | pixels texte (info) | zone texte (px) | % texte (info) |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    ...rows.map((row) => {
+      const { geometry } = row;
+      return `| ${row.name} | ${row.captureSize} | ${row.renderSize} | ${row.shapesDiffering} | ${row.shapesPercent.toFixed(2)} % | ${row.shapesVerdict} | ${row.textVerdict} | ${signed(geometry.maxDx)} | ${signed(geometry.maxDy)} | ${signed(geometry.maxDwidth)} | ${yesNo(geometry.familyOk)} | ${yesNo(geometry.sizeOk)} | ${yesNo(geometry.weightOk)} | ${row.textDiffering} | ${row.textPixels} | ${row.textPercent.toFixed(2)} % |`;
+    }),
   ];
   const warnings = rows.flatMap((row) => row.warnings.map((warning) => `- ${row.name} : ${warning}`));
-  return `${lines.join('\n')}\n\nSeuil de pixelmatch : ${PIXELMATCH_THRESHOLD}, includeAA: false (pixels anticrénelés ignorés). Formes (hors boîtes de texte, lineBox ∪ box) : < ${SHAPES_MAX_PERCENT} % = OK. Texte (dans ces boîtes) : < ${TEXT_MAX_PERCENT} % = OK.\n\n## Avertissements de uigen.importDom\n\n${warnings.length > 0 ? warnings.join('\n') : 'aucun'}\n`;
+  const reasons = rows.filter((row) => row.geometry.reason !== '').map((row) => `- ${row.name} : ${row.geometry.reason}`);
+  const note = `Seuil de pixelmatch : ${PIXELMATCH_THRESHOLD}, includeAA: false (pixels anticrénelés ignorés). Formes (hors boîtes de texte, lineBox ∪ box) : < ${SHAPES_MAX_PERCENT} % = OK. Texte : même police (famille), même taille, même graisse que Chromium, et position (x, y) et largeur de la couche à ${GEOMETRY_TOLERANCE_PX} px près de la boîte de ligne (lineBox, sinon box) = OK ; l'écart pixel du texte est donné à titre d'information et ne fait pas échouer (les glyphes diffèrent entre DirectWrite et le moteur de texte d'UIGEN).`;
+  const section = (title, items) => `## ${title}\n\n${items.length > 0 ? items.join('\n') : 'aucun'}`;
+  const parts = [lines.join('\n'), note, section('Avertissements de uigen.importDom', warnings), section('Textes non appariés', reasons)];
+  return `${parts.join('\n\n')}\n`;
 }
 
 try {

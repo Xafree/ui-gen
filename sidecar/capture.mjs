@@ -166,9 +166,9 @@ async function capture({ lib, state, outDir }) {
   const htmlPath = resolve(buildDir, `${lib}.html`);
   await writeFile(htmlPath, pageHtml(lib));
 
-  const browser = await chromium.launch({ args: ['--disable-lcd-text'] });
+  const browser = await chromium.launch({ chromiumSandbox: true, args: ['--disable-lcd-text'] });
   try {
-    const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1 });
+    const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, offline: true });
     const page = await context.newPage();
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));

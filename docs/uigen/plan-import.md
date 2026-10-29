@@ -44,8 +44,11 @@ Une requête par ligne, `{"id","method","params"}` ; réponse `{"id","ok","resul
 ### Lot 0 · Essai de faisabilité (risque principal d'abord)
 Avant toute interface : le service capture le Button de MUI, shadcn/ui et Chakra en 2 états, et
 `uigen-dom` le traduit en calques dans un fichier `.figcraft`. Critère : les trois boutons s'ouvrent
-dans UIGEN, à moins de 2 % de pixels d'écart avec leur capture. Si l'essai échoue, on revoit
-l'approche avant d'aller plus loin.
+dans UIGEN. Critère : les formes s'écartent de moins de 1 % de pixels de leur capture ; le texte ne
+se juge pas au pixel (les glyphes diffèrent entre DirectWrite et le moteur de texte d'UIGEN) mais sur
+la police (famille), la taille et la graisse identiques à celles de Chromium, la position (x, y) et
+la largeur de la couche à 1 px près de sa boîte capturée, l'écart pixel du texte restant affiché à
+titre d'information. Si l'essai échoue, on revoit l'approche avant d'aller plus loin.
 
 ### Lot 1 · Projet de lib
 1. `uigen-project` : lecture et écriture de `uigen.json` (sources, versions, préfixe des balises,
