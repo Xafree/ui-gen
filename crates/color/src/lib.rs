@@ -721,6 +721,8 @@ impl Paint {
 }
 
 #[cfg(test)]
+mod css_color_tests;
+#[cfg(test)]
 mod gradient_tests;
 #[cfg(test)]
 mod lch_tests;
