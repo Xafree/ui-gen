@@ -90,6 +90,16 @@ code.
   `app.set_props(ids, props)`. Colours come from `theme::Tokens`.
 - **Time goes through `chrono`** (workspace dependency). Never hand-roll UTC/calendar conversion (days-to-date algorithms, leap-year math); a crate owns only its output format string. The one exception is range extension: past the years chrono can represent, shift the date by whole 400-year Gregorian cycles (146,097 days, after which the calendar repeats), let chrono compute the month and day, and add the cycles back to the year (splitting seconds into hours, minutes and seconds is plain arithmetic).
 - **Rust only** (no handwritten JS/TS). **Never break wasm** (`cargo xtask wasm`).
+  UIGEN exception (owner decision): `sidecar/` holds the capture service in JavaScript (Node +
+  Playwright), the only code that installs npm packages and drives Chromium; Rust talks to it over
+  JSON-lines on stdio. Nothing else is JS, and nothing under `sidecar/` is reachable from wasm.
+- **UIGEN: imported libraries are the user's project data, never assets.** npm packages a user
+  imports live in their project folder (`.uigen/sources/`), are never committed, bundled or shipped
+  with UIGEN; committed test fixtures are synthetic DOM snapshots, never captures of third-party
+  libraries.
+- **UIGEN quality gate:** SonarQube runs locally in Docker (`docker/compose.yaml`,
+  http://127.0.0.1:9100); coverage comes from `cargo llvm-cov` (lcov) and must stay at 80 % or more
+  on new code.
 
 ### Quality gates (before every commit)
 `cargo xtask ci` (fmt, clippy -D warnings, tests, layers, assets, wasm). One task per commit with a

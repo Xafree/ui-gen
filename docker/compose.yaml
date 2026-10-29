@@ -1,0 +1,30 @@
+name: uigen
+
+services:
+  sonarqube:
+    image: sonarqube:26.9.0.129388-community
+    ports:
+      - "127.0.0.1:9100:9000"
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    mem_limit: 3g
+
+  sonar-scanner:
+    image: sonarsource/sonar-scanner-cli:12.2.0.4256_8.1.0
+    profiles: ["scan"]
+    network_mode: host
+    environment:
+      SONAR_HOST_URL: http://127.0.0.1:9100
+      SONAR_TOKEN: ${SONAR_TOKEN:?SONAR_TOKEN is not set}
+    volumes:
+      - ..:/usr/src
+    working_dir: /usr/src
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
