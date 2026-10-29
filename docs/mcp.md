@@ -15,9 +15,21 @@ The server lives in `crates/mcp` (`figcraft-mcp`) and is started by the CLI:
 | Command | Backend |
 |---|---|
 | `figcraft-cli mcp` | **Headless**: an in-process engine session with one untitled document. No window; renders with the CPU renderer. |
-| `figcraft-cli mcp --attach <port>` | **Attached**: drives a running FigCraft app through its control channel (`figcraft --control <port>`). The user sees every change live. |
+| `figcraft-cli mcp --attach <port>` | **Attached**: drives a running UIGEN app through its control channel (`uigen --control <port> --automation-read-root DIR`, with a session token). The user sees every change live. |
 
 `--attach` also takes `host:port`. The control channel only listens on 127.0.0.1.
+
+The app starts the control channel only with a folder to confine file access to: `uigen --control 7979
+--automation-read-root DIR` (and/or `--automation-write-root DIR`). It then makes a session token, prints it
+on stderr and writes it to `control-token-<port>` in its configuration folder (`%APPDATA%\FigCraft`,
+`~/Library/Application Support/FigCraft`, `$XDG_CONFIG_HOME/FigCraft` or `~/.config/FigCraft`); a connection
+must begin with `{"auth": "<token>"}` ([Control protocol](control-protocol.md#authentication)).
+`figcraft-cli mcp --attach <port>` does that for you: it reads the token from the `FIGCRAFT_CONTROL_TOKEN`
+environment variable when that is set and not empty, else from the `control-token-<port>` file of the same
+configuration folder. With neither it stops before connecting and says which file it expected. The file is
+only read for a local address (`127.0.0.1`, `::1`, `localhost`): it is the token of an app on this machine and is
+never sent to another host. A server started by another user or on another machine has its own
+configuration folder: pass its token in `FIGCRAFT_CONTROL_TOKEN`, which is then the only source.
 
 Attached calls are never automatically replayed after a transport failure: the app may have
 applied the request before its reply was lost. The error reports that the operation may have
@@ -114,7 +126,8 @@ The Linux AppImage bundles the CLI: `FigCraft.AppImage cli <args>` runs `figcraf
 ```sh
 # headless
 claude mcp add figcraft -- /path/to/figcraft-cli mcp
-# drive the running app (start it with: figcraft --control 7979)
+# drive the running app (start it with: uigen --control 7979 --automation-read-root DIR;
+# the token is read from control-token-7979, or from FIGCRAFT_CONTROL_TOKEN)
 claude mcp add figcraft-app -- /path/to/figcraft-cli mcp --attach 7979
 ```
 

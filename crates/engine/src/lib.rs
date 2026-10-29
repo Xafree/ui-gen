@@ -33,6 +33,7 @@ pub use assets::playground;
 pub use assets::style_vars;
 pub use assets::token_roles;
 pub use automation::batch;
+pub use automation::control_token;
 pub use automation::doc_urls;
 pub use automation::file_access;
 pub use automation::inspect;
