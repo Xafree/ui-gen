@@ -1,0 +1,216 @@
+use figcraft_color::Color;
+use serde_json::{Map, Value, json};
+
+use super::support::{Run, bounds, frame, import, mentions};
+
+fn sized(style: Value, width: f64, height: f64) -> Run {
+    import(json!({ "type": "element", "tag": "div", "box": bounds(0.0, 0.0, width, height), "style": style }))
+}
+
+fn borders(sides: [(&str, &str, &str); 4]) -> Value {
+    let mut style = Map::new();
+    for (side, (width, kind, color)) in ["Top", "Right", "Bottom", "Left"].into_iter().zip(sides) {
+        style.insert(format!("border{side}Width"), json!(width));
+        style.insert(format!("border{side}Style"), json!(kind));
+        style.insert(format!("border{side}Color"), json!(color));
+    }
+    Value::Object(style)
+}
+
+fn fills(run: &Run) -> Vec<[u8; 4]> {
+    run.root_node().fills.iter().filter_map(|paint| paint.solid_color()).map(Color::to_rgba8).collect()
+}
+
+// covers: T10
+#[test]
+fn every_computed_colour_form_gives_the_same_fill() {
+    let forms = [
+        ("rgb(25, 118, 210)", [25, 118, 210, 255]),
+        ("rgba(25, 118, 210, 0.5)", [25, 118, 210, 128]),
+        ("rgb(25 118 210 / 0.9)", [25, 118, 210, 230]),
+        ("hsl(210 79% 46% / 0.9)", [25, 117, 210, 230]),
+        ("oklch(0.6 0.2 30 / 0.9)", [222, 62, 45, 230]),
+        ("oklab(0.205 0 0)", [23, 23, 23, 255]),
+        ("color(srgb 0.0941176 0.0941176 0.105882 / 0.9)", [24, 24, 27, 230]),
+        ("color(display-p3 1 1 1 / 0.5)", [255, 255, 255, 128]),
+    ];
+    for (css, expected) in forms {
+        let run = frame(json!({ "backgroundColor": css }));
+        let [actual] = fills(&run)[..] else { panic!("{css}: one fill expected, got {:?}", run.root_node().fills) };
+        assert!(actual.iter().zip(expected).all(|(a, e)| a.abs_diff(e) <= 1), "{css}: {actual:?} vs {expected:?}");
+        assert!(run.warnings.is_empty(), "{css}: {:?}", run.warnings);
+    }
+}
+
+// covers: T2
+#[test]
+fn a_gradient_background_is_reported_not_flattened() {
+    let run = frame(json!({ "backgroundColor": "rgb(0, 0, 0)", "backgroundImage": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))" }));
+    assert_eq!(fills(&run), [[0, 0, 0, 255]]);
+    assert!(mentions(&run.warnings, "Bouton", "backgroundImage"), "{:?}", run.warnings);
+    assert!(frame(json!({ "backgroundImage": "none" })).warnings.is_empty());
+}
+
+// covers: T3
+#[test]
+fn sides_of_another_colour_are_left_out_and_named() {
+    let run = frame(borders([
+        ("1px", "solid", "rgb(255, 0, 0)"),
+        ("1px", "solid", "rgb(255, 0, 0)"),
+        ("1px", "solid", "rgb(255, 0, 0)"),
+        ("2px", "solid", "rgb(0, 0, 255)"),
+    ]));
+    let node = run.root_node();
+    assert_eq!(node.stroke.sides, Some([1.0, 1.0, 1.0, 0.0]));
+    assert_eq!(node.stroke.weight, 1.0);
+    assert_eq!(node.strokes.iter().filter_map(|paint| paint.solid_color()).map(Color::to_rgba8).collect::<Vec<_>>(), [[255, 0, 0, 255]]);
+    assert!(mentions(&run.warnings, "Bouton", "borderLeftColor"), "{:?}", run.warnings);
+}
+
+// covers: T3
+#[test]
+fn transparent_and_hidden_sides_draw_nothing_without_a_warning() {
+    let run = frame(borders([("2px", "solid", "rgba(0, 0, 0, 0)"), ("2px", "hidden", "red"), ("2px", "none", "red"), ("0px", "solid", "red")]));
+    assert!(run.root_node().strokes.is_empty());
+    assert!(run.warnings.is_empty(), "{:?}", run.warnings);
+}
+
+// covers: T3
+#[test]
+fn one_drawn_side_keeps_the_others_at_zero() {
+    let run = frame(borders([("3px", "solid", "red"), ("3px", "none", "red"), ("3px", "none", "red"), ("3px", "none", "red")]));
+    let node = run.root_node();
+    assert_eq!((node.stroke.weight, node.stroke.sides), (3.0, Some([3.0, 0.0, 0.0, 0.0])));
+}
+
+// covers: T9
+#[test]
+fn borders_that_are_not_solid_are_reported_and_not_drawn() {
+    let run = frame(borders([("2px", "dashed", "red"), ("2px", "dotted", "red"), ("2px", "double", "red"), ("2px", "wavy", "red")]));
+    assert!(run.root_node().strokes.is_empty());
+    for side in ["Top", "Right", "Bottom", "Left"] {
+        assert!(mentions(&run.warnings, "Bouton", &format!("border{side}Style")), "{side}: {:?}", run.warnings);
+    }
+}
+
+// covers: T9
+#[test]
+fn a_border_needs_a_readable_width_and_colour() {
+    let missing = frame(json!({ "borderTopStyle": "solid", "borderTopColor": "red" }));
+    assert!(missing.root_node().strokes.is_empty());
+    assert!(missing.warnings.is_empty(), "{:?}", missing.warnings);
+
+    let run = frame(borders([("thick", "solid", "red"), ("-1px", "solid", "red"), ("1px", "solid", "nonsense(1)"), ("1px", "solid", "red")]));
+    assert_eq!(run.root_node().stroke.sides, Some([0.0, 0.0, 0.0, 1.0]));
+    for property in ["borderTopWidth", "borderRightWidth", "borderBottomColor"] {
+        assert!(mentions(&run.warnings, "Bouton", property), "{property}: {:?}", run.warnings);
+    }
+}
+
+// covers: T3
+#[test]
+fn border_widths_may_be_in_em() {
+    let mut style = borders([("0.5em", "solid", "red"); 4]);
+    style["fontSize"] = json!("10px");
+    assert_eq!(frame(style).root_node().stroke.weight, 5.0);
+}
+
+// covers: T4
+#[test]
+fn percent_radius_of_a_square_is_a_circle() {
+    let run = sized(
+        json!({ "borderTopLeftRadius": "50%", "borderTopRightRadius": "50%", "borderBottomRightRadius": "50%", "borderBottomLeftRadius": "50%" }),
+        40.0,
+        40.0,
+    );
+    assert_eq!(run.root_node().corners.radii, [20.0; 4]);
+    assert!(run.warnings.is_empty(), "{:?}", run.warnings);
+}
+
+// covers: T4
+#[test]
+fn elliptical_radius_comes_out_as_its_smaller_axis_and_is_reported() {
+    let run = sized(json!({ "borderTopLeftRadius": "50%", "borderTopRightRadius": "10px 20px", "borderBottomRightRadius": "1em" }), 92.0, 36.0);
+    assert_eq!(run.root_node().corners.radii, [18.0, 10.0, 16.0, 0.0]);
+    assert!(mentions(&run.warnings, "div", "borderTopLeftRadius"), "{:?}", run.warnings);
+    assert!(mentions(&run.warnings, "div", "borderTopRightRadius"), "{:?}", run.warnings);
+    assert!(!mentions(&run.warnings, "div", "borderBottomRightRadius"), "{:?}", run.warnings);
+}
+
+// covers: T4
+#[test]
+fn radii_too_big_for_a_side_shrink_together_like_css() {
+    let pill = sized(
+        json!({ "borderTopLeftRadius": "33554400px", "borderTopRightRadius": "33554400px", "borderBottomRightRadius": "33554400px", "borderBottomLeftRadius": "33554400px" }),
+        92.0,
+        36.0,
+    );
+    assert!(pill.root_node().corners.radii.iter().all(|radius| (radius - 18.0).abs() < 1e-6), "{:?}", pill.root_node().corners);
+
+    let left = sized(json!({ "borderTopLeftRadius": "30px", "borderBottomLeftRadius": "30px" }), 92.0, 36.0);
+    assert_eq!(left.root_node().corners.radii, [18.0, 0.0, 0.0, 18.0]);
+
+    let flat = sized(json!({ "borderTopLeftRadius": "30px" }), 92.0, 0.0);
+    assert_eq!(flat.root_node().corners.radii, [0.0; 4]);
+}
+
+// covers: T9
+#[test]
+fn radii_that_cannot_be_read_are_reported_and_square() {
+    let run = frame(json!({ "borderTopLeftRadius": "-4px", "borderTopRightRadius": "1px 2px 3px", "borderBottomRightRadius": "4pt" }));
+    assert_eq!(run.root_node().corners.radii, [0.0; 4]);
+    for property in ["borderTopLeftRadius", "borderTopRightRadius", "borderBottomRightRadius"] {
+        assert!(mentions(&run.warnings, "Bouton", property), "{property}: {:?}", run.warnings);
+    }
+}
+
+// covers: T6
+#[test]
+fn every_overflow_that_cuts_content_clips() {
+    for (value, clips) in
+        [("hidden", true), ("auto", true), ("scroll", true), ("clip", true), ("visible hidden", true), ("VISIBLE", false), ("visible visible", false)]
+    {
+        let run = frame(json!({ "overflow": value }));
+        assert_eq!(run.root_node().clip, clips, "{value}");
+        assert!(run.warnings.is_empty(), "{value}: {:?}", run.warnings);
+    }
+    assert!(!frame(json!({})).root_node().clip, "a frame starts without a clip, as a div does");
+    for value in ["banana", "hidden hidden hidden"] {
+        let run = frame(json!({ "overflow": value }));
+        assert!(!run.root_node().clip, "{value}");
+        assert!(mentions(&run.warnings, "Bouton", "overflow"), "{value}: {:?}", run.warnings);
+    }
+}
+
+// covers: T6
+#[test]
+fn opacity_takes_numbers_and_percentages_within_range() {
+    for (value, expected) in [("0.25", 0.25), ("50%", 0.5), ("2", 1.0), ("-1", 0.0)] {
+        let run = frame(json!({ "opacity": value }));
+        assert!((run.root_node().opacity - expected).abs() < 1e-6, "{value}: {}", run.root_node().opacity);
+    }
+    let run = frame(json!({ "opacity": "see-through" }));
+    assert_eq!(run.root_node().opacity, 1.0);
+    assert!(mentions(&run.warnings, "Bouton", "opacity"), "{:?}", run.warnings);
+}
+
+// covers: T9
+#[test]
+fn outline_and_transition_are_ignored_without_a_warning() {
+    let run = frame(json!({
+        "outlineWidth": "2px", "outlineStyle": "solid", "outlineColor": "rgb(255, 0, 0)", "outlineOffset": "nonsense",
+        "transitionProperty": "all", "transitionDuration": "0.3s", "transitionTimingFunction": "ease", "transitionDelay": "0s",
+        "cursor": "pointer"
+    }));
+    assert!(run.root_node().strokes.is_empty());
+    assert!(run.warnings.is_empty(), "{:?}", run.warnings);
+}
+
+// covers: T1
+#[test]
+fn a_frame_is_named_after_its_tag_when_the_label_is_empty_and_names_are_capped() {
+    let unlabelled = import(json!({ "type": "element", "tag": "nav", "label": "", "box": bounds(0.0, 0.0, 1.0, 1.0) }));
+    assert_eq!(unlabelled.root_node().name, "nav");
+    let long = import(json!({ "type": "element", "tag": "div", "label": "é".repeat(1000), "box": bounds(0.0, 0.0, 1.0, 1.0) }));
+    assert_eq!(long.root_node().name.chars().count(), 128);
+}

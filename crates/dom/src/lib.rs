@@ -1,13 +1,16 @@
 ﻿//! DOM snapshots: the validated model and parser of a rendered component's tree, boxes and
-//! computed styles (format version 1, written by the capture service).
+//! computed styles (format version 1, written by the capture service), and their translation
+//! into editable layers.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 mod error;
+mod import;
 mod model;
 mod parse;
 
-pub use error::SnapshotError;
+pub use error::{ImportError, SnapshotError};
+pub use import::{Imported, import_snapshot};
 pub use model::{DomBox, DomNode, Element, Snapshot, Source, SvgNode, TextRun, Viewport};
 pub use parse::parse_snapshot;
 
