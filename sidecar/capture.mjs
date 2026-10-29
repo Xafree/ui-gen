@@ -166,7 +166,7 @@ async function capture({ lib, state, outDir }) {
   const htmlPath = resolve(buildDir, `${lib}.html`);
   await writeFile(htmlPath, pageHtml(lib));
 
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ args: ['--disable-lcd-text'] });
   try {
     const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1 });
     const page = await context.newPage();
