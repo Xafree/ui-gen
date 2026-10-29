@@ -13,6 +13,7 @@ mod assets;
 mod automation;
 mod boards;
 mod canvas;
+pub mod capture;
 pub mod catalog;
 pub mod cmd;
 mod content;
@@ -148,6 +149,8 @@ pub struct Session {
     pub live: live::Lives,
     /// Commands the UI runs without waiting on a server ([`Session::start_background`]).
     pub background: background::Background,
+    /// The capture service the desktop apps install; none in the browser.
+    capture: capture::Capture,
 }
 
 impl Default for Session {
