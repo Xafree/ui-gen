@@ -4,8 +4,8 @@ use figcraft_color::{Color, Paint};
 use figcraft_doc::geom::Affine;
 use figcraft_doc::{LetterSpacing, LineHeight, Node, NodeId, NodeKind, TextAlignH, TextAutoResize, TextCase, TextData, TextStyle};
 
-use super::css::{DEFAULT_FONT_SIZE, Style, length, read, split_outside};
-use super::{Report, Warnings, capped};
+use super::css::{DEFAULT_FONT_SIZE, Style, get, length, read};
+use super::{Placement, Report, Warnings, capped, fonts};
 use crate::model::TextRun;
 
 const NAME_CHARS: usize = 64;
@@ -13,7 +13,7 @@ const REGULAR: u16 = 400;
 const NATURAL_LINE_HEIGHT: f64 = 1.2;
 const WRAPPED_AFTER_LINES: f64 = 1.5;
 
-pub(super) fn layer(id: NodeId, run: &TextRun, offset: (f64, f64), warnings: &mut Warnings) -> Node {
+pub(super) fn layer(id: NodeId, run: &TextRun, placement: &Placement, warnings: &mut Warnings) -> Node {
     let name: String = run.text.chars().take(NAME_CHARS).collect();
     let mut report = Report::new(&name, warnings);
     let style = &run.style;
@@ -24,11 +24,16 @@ pub(super) fn layer(id: NodeId, run: &TextRun, offset: (f64, f64), warnings: &mu
     if let Some(align) = read(style, "textAlign", &mut report, text_align) {
         data.align_h = align;
     }
-    if run.r#box.height > WRAPPED_AFTER_LINES * data.style.line_height.resolve(data.style.font_size, NATURAL_LINE_HEIGHT) {
-        data.auto_resize = TextAutoResize::Height;
+    match &run.line_box {
+        Some(line_box) => data.style.line_height = LineHeight::Pixels(line_box.height),
+        None if run.r#box.height > WRAPPED_AFTER_LINES * data.style.line_height.resolve(data.style.font_size, NATURAL_LINE_HEIGHT) => {
+            data.auto_resize = TextAutoResize::Height;
+        }
+        None => {}
     }
-    let mut node = Node::new(id, NodeKind::Text(data), &name, run.r#box.width, run.r#box.height);
-    node.transform = Affine::translate(offset);
+    let (width, height) = placement.size();
+    let mut node = Node::new(id, NodeKind::Text(data), &name, width, height);
+    node.transform = Affine::translate(placement.offset);
     if let Some(color) = read(style, "color", &mut report, Color::parse_css) {
         node.fills = if color.a > 0.0 { vec![Paint::solid(color)] } else { Vec::new() };
     }
@@ -40,12 +45,17 @@ fn text_style(style: &Style, report: &mut Report) -> TextStyle {
     if let Some(size) = read(style, "fontSize", report, |value| length(value, DEFAULT_FONT_SIZE, None).filter(|px| *px > 0.0)) {
         text.font_size = size;
     }
-    if let Some(family) = read(style, "fontFamily", report, first_family) {
-        text.font_family = family;
-    }
     let weight = read(style, "fontWeight", report, font_weight).unwrap_or(REGULAR);
     let italic = read(style, "fontStyle", report, is_italic).unwrap_or(false);
-    text.font_style = style_name(weight, italic);
+    let installed = match family_of(style, report) {
+        Some((family, installed)) => {
+            text.font_family = family;
+            installed
+        }
+        None => false,
+    };
+    text.font_style =
+        installed.then(|| fonts::installed_style(&text.font_family, weight, italic)).flatten().unwrap_or_else(|| style_name(weight, italic));
     let size = text.font_size;
     if let Some(height) = read(style, "lineHeight", report, |value| line_height(value, size)) {
         text.line_height = height;
@@ -56,10 +66,22 @@ fn text_style(style: &Style, report: &mut Report) -> TextStyle {
     text
 }
 
+/// The family the text is drawn in, and whether the font database has it.
+fn family_of(style: &Style, report: &mut Report) -> Option<(String, bool)> {
+    let first = read(style, "fontFamily", report, first_family);
+    if let Some(platform) = get(style, "platformFont") {
+        let family = capped(platform);
+        let installed = fonts::is_installed(&family);
+        return Some((family, installed));
+    }
+    if let Some(family) = get(style, "fontFamily").and_then(fonts::installed_family) {
+        return Some((family, true));
+    }
+    first.map(|family| (family, false))
+}
+
 fn first_family(stack: &str) -> Option<String> {
-    let first = split_outside(stack, |c| c == ',').into_iter().next()?;
-    let family = first.trim_matches(|c: char| matches!(c, '"' | '\'') || c.is_whitespace());
-    (!family.is_empty()).then(|| capped(family))
+    fonts::stack_families(stack).first().map(|family| capped(family))
 }
 
 fn font_weight(value: &str) -> Option<u16> {

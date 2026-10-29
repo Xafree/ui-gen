@@ -3,6 +3,7 @@
 //! in the warnings; nothing is made up in its place.
 
 mod css;
+mod fonts;
 mod frame;
 mod shadow;
 mod svg;
@@ -29,6 +30,8 @@ use figcraft_doc::{Document, NodeId};
 
 use crate::error::ImportError;
 use crate::model::{DomBox, DomNode, Element, Snapshot};
+
+pub use fonts::nearest_weight;
 
 const MAX_WARNINGS: usize = 200;
 const MAX_NAME_CHARS: usize = 128;
@@ -106,6 +109,40 @@ fn finite_or_zero(value: f64) -> f64 {
     if value.is_finite() { value } else { 0.0 }
 }
 
+/// A box on the pixel grid, as Chromium paints it at a device scale factor of 1: its edges are rounded, its size is the distance between them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Snapped {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+impl Snapped {
+    fn of(dom_box: &DomBox) -> Self {
+        let (x, y) = (finite_or_zero(dom_box.x.round()), finite_or_zero(dom_box.y.round()));
+        let right = finite_or_zero((dom_box.x + dom_box.width).round());
+        let bottom = finite_or_zero((dom_box.y + dom_box.height).round());
+        Self { x, y, width: (right - x).max(0.0), height: (bottom - y).max(0.0) }
+    }
+
+    fn size(&self) -> (f64, f64) {
+        (self.width, self.height)
+    }
+}
+
+/// Where a node goes: its offset in its parent and its snapped size.
+struct Placement {
+    offset: (f64, f64),
+    snapped: Snapped,
+}
+
+impl Placement {
+    fn size(&self) -> (f64, f64) {
+        self.snapped.size()
+    }
+}
+
 struct Pending<'s> {
     node: &'s DomNode,
     parent: NodeId,
@@ -114,8 +151,10 @@ struct Pending<'s> {
 }
 
 impl Pending<'_> {
-    fn offset(&self, dom_box: &DomBox) -> (f64, f64) {
-        self.at.unwrap_or((finite_or_zero(dom_box.x - self.origin.0), finite_or_zero(dom_box.y - self.origin.1)))
+    fn place(&self, dom_box: &DomBox) -> Placement {
+        let snapped = Snapped::of(dom_box);
+        let offset = self.at.unwrap_or((snapped.x - self.origin.0, snapped.y - self.origin.1));
+        Placement { offset, snapped }
     }
 }
 
@@ -142,12 +181,13 @@ impl Walk<'_> {
             DomNode::Element(element) => self.element(element, item, pending),
             DomNode::Text(run) => {
                 let id = self.doc.alloc_id();
-                let node = text::layer(id, run, item.offset(&run.r#box), &mut self.warnings);
+                let placement = item.place(run.line_box.as_ref().unwrap_or(&run.r#box));
+                let node = text::layer(id, run, &placement, &mut self.warnings);
                 Ok(Some(self.doc.insert(node, item.parent, None)?))
             }
             DomNode::Svg(svg) => {
                 let mut report = Report::new("svg", &mut self.warnings);
-                Ok(svg::layer(self.doc, svg, item.parent, item.offset(&svg.r#box), &mut report))
+                Ok(svg::layer(self.doc, svg, item.parent, &item.place(&svg.r#box), &mut report))
             }
         }
     }
@@ -160,9 +200,10 @@ impl Walk<'_> {
         let (parent, origin, id) = if item.at.is_none() && css::is_contents(&element.style) {
             (item.parent, item.origin, None)
         } else {
-            let node = frame::build(self.doc.alloc_id(), element, item.offset(&element.r#box), &mut self.warnings);
+            let placement = item.place(&element.r#box);
+            let node = frame::build(self.doc.alloc_id(), element, &placement, &mut self.warnings);
             let id = self.doc.insert(node, item.parent, None)?;
-            (id, (element.r#box.x, element.r#box.y), Some(id))
+            (id, (placement.snapped.x, placement.snapped.y), Some(id))
         };
         pending.extend(element.children.iter().rev().map(|child| Pending { node: child, parent, origin, at: None }));
         Ok(id)

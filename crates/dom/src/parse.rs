@@ -87,7 +87,10 @@ fn validate_tree(root: &DomNode) -> Result<(), SnapshotError> {
 fn validate_node(node: &DomNode) -> Result<(), SnapshotError> {
     match node {
         DomNode::Element(element) => validate_box(&element.r#box, || format!("element <{}>", element.tag)),
-        DomNode::Text(text) => validate_box(&text.r#box, || "text".to_owned()),
+        DomNode::Text(text) => {
+            validate_box(&text.r#box, || "text".to_owned())?;
+            text.line_box.as_ref().map_or(Ok(()), |line_box| validate_box(line_box, || "text line box".to_owned()))
+        }
         DomNode::Svg(svg) => {
             if svg.markup.len() > MAX_MARKUP_BYTES {
                 return Err(SnapshotError::MarkupTooLarge { node: "svg".to_owned(), size: svg.markup.len() });

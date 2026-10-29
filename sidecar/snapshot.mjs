@@ -24,7 +24,9 @@ function walkInPage({ rootSelector, limits }) {
   const SKIPPED_TAGS = new Set(['script', 'style', 'noscript', 'template', 'link', 'meta', 'title']);
   const LABEL_MAX = 40;
   const encoder = new TextEncoder();
+  const MARK_ATTRIBUTE = 'data-uigen-text-id';
   let nodeCount = 0;
+  let markCount = 0;
 
   const fail = (message) => {
     throw new Error(message);
@@ -93,6 +95,31 @@ function walkInPage({ rootSelector, limits }) {
     return { type: 'svg', markup, box: boxOf(svg.getBoundingClientRect()) };
   };
 
+  const normalLineHeight = (parent) => {
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute;visibility:hidden;display:inline-block;margin:0;padding:0;border:0;';
+    probe.textContent = 'X';
+    parent.append(probe);
+    const { height } = probe.getBoundingClientRect();
+    probe.remove();
+    return height;
+  };
+
+  const lineHeightOf = (parent, computed) => {
+    const px = computed.lineHeight.endsWith('px') ? Number.parseFloat(computed.lineHeight) : Number.NaN;
+    return Number.isFinite(px) ? px : normalLineHeight(parent);
+  };
+
+  const isSingleLine = (range) => new Set([...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => Math.round(rect.top))).size <= 1;
+
+  const markParent = (parent) => {
+    if (!parent.hasAttribute(MARK_ATTRIBUTE)) {
+      markCount += 1;
+      parent.setAttribute(MARK_ATTRIBUTE, String(markCount));
+    }
+    return parent.getAttribute(MARK_ATTRIBUTE);
+  };
+
   const textNode = (node) => {
     const text = node.textContent.replace(/\s+/g, ' ').trim();
     if (!text) {
@@ -101,7 +128,16 @@ function walkInPage({ rootSelector, limits }) {
     const range = document.createRange();
     range.selectNodeContents(node);
     const box = boxOf(range.getBoundingClientRect());
-    return { type: 'text', text, box, style: pick(getComputedStyle(node.parentElement), TEXT_KEYS) };
+    const parent = node.parentElement;
+    const computed = getComputedStyle(parent);
+    const result = { type: 'text', text, box, style: pick(computed, TEXT_KEYS), markId: markParent(parent) };
+    if (isSingleLine(range)) {
+      const height = lineHeightOf(parent, computed);
+      if (Number.isFinite(height) && height > 0) {
+        result.lineBox = { x: box.x, y: box.y + box.height / 2 - height / 2, width: box.width, height };
+      }
+    }
+    return result;
   };
 
   const elementNode = (element, depth) => {
@@ -156,10 +192,61 @@ function walkInPage({ rootSelector, limits }) {
   return { root, devicePixelRatio: window.devicePixelRatio, innerWidth: window.innerWidth, innerHeight: window.innerHeight };
 }
 
+const MARK_ATTRIBUTE = 'data-uigen-text-id';
+
+const textsOf = (node) => (node.type === 'text' ? [node] : (node.children ?? []).flatMap(textsOf));
+
+async function platformFontOfMarks(page, marks) {
+  const fontOfMark = new Map();
+  if (marks.length === 0) {
+    return fontOfMark;
+  }
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await cdp.send('DOM.enable');
+    await cdp.send('CSS.enable');
+    const { root } = await cdp.send('DOM.getDocument', { depth: 0 });
+    for (const mark of marks) {
+      const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector: `[${MARK_ATTRIBUTE}="${mark}"]` });
+      if (nodeId) {
+        const { fonts } = await cdp.send('CSS.getPlatformFontsForNode', { nodeId });
+        const used = fonts.reduce((best, font) => (best === undefined || font.glyphCount > best.glyphCount ? font : best), undefined);
+        if (used?.familyName) {
+          fontOfMark.set(mark, used.familyName);
+        }
+      }
+    }
+  } finally {
+    await cdp.detach();
+  }
+  return fontOfMark;
+}
+
+async function recordPlatformFonts(page, root) {
+  const texts = textsOf(root);
+  const fontOfMark = await platformFontOfMarks(page, [...new Set(texts.map((text) => text.markId))]);
+  for (const text of texts) {
+    const family = fontOfMark.get(text.markId);
+    if (family !== undefined) {
+      text.style.platformFont = family;
+    }
+    delete text.markId;
+  }
+}
+
 export async function captureSnapshot(page, rootSelector, source) {
   const walked = await page.evaluate(walkInPage, { rootSelector, limits: LIMITS }).catch((error) => {
     throw new Error(error.message.replace(/^page\.evaluate: (Error: )?/, ''), { cause: error });
   });
+  try {
+    await recordPlatformFonts(page, walked.root);
+  } finally {
+    await page.evaluate((attribute) => {
+      for (const element of document.querySelectorAll(`[${attribute}]`)) {
+        element.removeAttribute(attribute);
+      }
+    }, MARK_ATTRIBUTE);
+  }
   const size = page.viewportSize() ?? { width: walked.innerWidth, height: walked.innerHeight };
   const snapshot = {
     version: 1,

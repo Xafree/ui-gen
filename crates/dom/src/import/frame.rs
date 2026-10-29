@@ -6,16 +6,17 @@ use figcraft_doc::{Effect, EffectKind, Node, NodeId, NodeKind, Shadow, StrokeAli
 
 use super::css::{Style, font_size_px, get, keyword, length, number_or_percent, read, words};
 use super::shadow::shadows;
-use super::{Report, Warnings, capped};
+use super::{Placement, Report, Warnings, capped};
 use crate::model::Element;
 
 const SIDES: [&str; 4] = ["Top", "Right", "Bottom", "Left"];
 const CORNERS: [&str; 4] = ["borderTopLeftRadius", "borderTopRightRadius", "borderBottomRightRadius", "borderBottomLeftRadius"];
 
-pub(super) fn build(id: NodeId, element: &Element, offset: (f64, f64), warnings: &mut Warnings) -> Node {
+pub(super) fn build(id: NodeId, element: &Element, placement: &Placement, warnings: &mut Warnings) -> Node {
     let name = capped(element.label.as_deref().filter(|label| !label.is_empty()).unwrap_or(&element.tag));
-    let mut node = Node::new(id, NodeKind::Frame, &name, element.r#box.width, element.r#box.height);
-    node.transform = Affine::translate(offset);
+    let (width, height) = placement.size();
+    let mut node = Node::new(id, NodeKind::Frame, &name, width, height);
+    node.transform = Affine::translate(placement.offset);
     node.fills.clear();
     node.clip = false;
     let mut report = Report::new(&name, warnings);

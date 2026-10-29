@@ -66,6 +66,8 @@ pub struct TextRun {
     pub text: String,
     #[serde(rename = "box")]
     pub r#box: DomBox,
+    #[serde(default, rename = "lineBox")]
+    pub line_box: Option<DomBox>,
     #[serde(default)]
     pub style: BTreeMap<String, String>,
 }

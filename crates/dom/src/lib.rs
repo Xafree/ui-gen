@@ -10,7 +10,7 @@ mod model;
 mod parse;
 
 pub use error::{ImportError, SnapshotError};
-pub use import::{Imported, import_snapshot};
+pub use import::{Imported, import_snapshot, nearest_weight};
 pub use model::{DomBox, DomNode, Element, Snapshot, Source, SvgNode, TextRun, Viewport};
 pub use parse::parse_snapshot;
 

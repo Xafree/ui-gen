@@ -3,13 +3,14 @@
 use figcraft_doc::geom::Affine;
 use figcraft_doc::{Document, NodeId};
 
-use super::Report;
+use super::{Placement, Report};
 use crate::model::SvgNode;
 
 const SAME_SIZE: f64 = 1e-3;
 
-pub(super) fn layer(doc: &mut Document, svg: &SvgNode, parent: NodeId, offset: (f64, f64), report: &mut Report) -> Option<NodeId> {
-    let (width, height) = (svg.r#box.width, svg.r#box.height);
+pub(super) fn layer(doc: &mut Document, svg: &SvgNode, parent: NodeId, placement: &Placement, report: &mut Report) -> Option<NodeId> {
+    let (width, height) = placement.size();
+    let offset = placement.offset;
     if !(width > 0.0 && height > 0.0) {
         return None;
     }

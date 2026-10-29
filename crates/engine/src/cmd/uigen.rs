@@ -45,6 +45,7 @@ fn import_dom(s: &mut Session, p: &Value) -> Result<Value> {
     let parent = parent_of(s, p)?;
     let x = coordinate(p, "x")?;
     let y = coordinate(p, "y")?;
+    figcraft_text::scan_system_fonts();
     let imported = figcraft_dom::import_snapshot(s.doc_mut()?, &snapshot, parent, x, y).map_err(|e| bad(IMPORT_DOM, e.to_string()))?;
     Ok(json!({"root": imported.root, "warnings": imported.warnings}))
 }
