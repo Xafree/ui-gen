@@ -464,6 +464,7 @@ fn every_command_survives_junk_params() {
         if matches!(
             spec.id,
             "file.open"
+                | "project.open"
                 | "file.save"
                 | "file.saveAs"
                 | "file.import"

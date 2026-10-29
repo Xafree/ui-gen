@@ -110,6 +110,10 @@ mod layers_keys_tests;
 #[cfg(test)]
 mod layers_rename_tests;
 #[cfg(test)]
+mod lit_export_review_ui_tests;
+#[cfg(test)]
+mod lit_export_ui_tests;
+#[cfg(test)]
 mod live_chat_tests;
 #[cfg(test)]
 mod live_docs_tests;
@@ -179,6 +183,8 @@ mod proto_reorder_tests;
 #[cfg(test)]
 mod proto_responsive_tests;
 #[cfg(test)]
+mod rail_components_tests;
+#[cfg(test)]
 mod resources_tests;
 #[cfg(test)]
 mod save_as_tests;
@@ -194,6 +200,15 @@ mod style_folder_rename_tests;
 mod text_enter_tests;
 #[cfg(test)]
 mod titlebar_tests;
+#[cfg(test)]
+mod toast_action_tests;
+
+#[cfg(test)]
+mod project_divider_ui_tests;
+#[cfg(test)]
+mod project_open_tests;
+#[cfg(test)]
+mod project_pages_ui_tests;
 #[cfg(test)]
 mod ui_scale_tests;
 #[cfg(test)]
@@ -286,7 +301,7 @@ mod services;
 mod state;
 
 pub(crate) use clock::repaint_in;
-pub use clock::{AUTO_SAVE_SECS, AUTOSAVE_SECS, FrameClock, ToastClock};
+pub use clock::{AUTO_SAVE_SECS, AUTOSAVE_SECS, FrameClock, ToastAction, ToastClock};
 pub(crate) use open::{drop_overlay, dropped_bytes, is_document, opens};
 pub use services::{ContentsFuture, DialogFuture, NoServices, ReadFuture, Services, browser_can_read, egui_copy_png, egui_copy_text, unreadable};
 use services::{DialogDone, PickFuture, Picked, RepaintWaker};
@@ -387,6 +402,8 @@ pub struct UiState {
     pub icon_gallery: bool,
     /// A message at the bottom of the window and how long it has been showing.
     pub toast: Option<(String, ToastClock)>,
+    /// The button the toast carries, while it applies to the file it was raised in.
+    pub toast_action: Option<ToastAction>,
     pub present: Option<present::Presenter>,
     pub presents: Vec<present::PresentTab>,
     /// The tab shown last. It is on screen while `present` has a value.
@@ -430,6 +447,8 @@ pub struct UiState {
     pub pending_open_frames: u8,
     /// The latest successful file import's summary and compatibility notes.
     pub import_report: Option<import_report::Report>,
+    /// The Export library as Lit window, when open.
+    pub lit_export: Option<dialogs::lit_export::LitExport>,
     /// Files the user opened whose fonts are yet to be checked (by document uid).
     pub font_checks: Vec<u64>,
     pub missing_fonts: Option<missing_fonts::Shown>,
@@ -567,6 +586,7 @@ impl Default for UiState {
             title_bar: TitleBar::Native,
             icon_gallery: false,
             toast: None,
+            toast_action: None,
             present: None,
             presents: Vec::new(),
             present_active: None,
@@ -591,6 +611,7 @@ impl Default for UiState {
             pending_opens: Vec::new(),
             pending_open_frames: 0,
             import_report: None,
+            lit_export: None,
             font_checks: Vec::new(),
             missing_fonts: None,
             screenshot_requests: Vec::new(),

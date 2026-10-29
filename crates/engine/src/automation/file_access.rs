@@ -270,6 +270,13 @@ pub fn is_dir(path: impl AsRef<Path>) -> bool {
     metadata(path).is_ok_and(|m| m.is_dir())
 }
 
+/// Whether `path` itself is a link (a symbolic link, or a junction on Windows), not followed;
+/// false when it doesn't exist or may not be read.
+pub fn is_link(path: impl AsRef<Path>) -> bool {
+    let path = path.as_ref();
+    allowed(path, Access::Read) && std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
+}
+
 /// Whether `path` exists (false when it may not be read).
 pub fn exists(path: impl AsRef<Path>) -> bool {
     metadata(path).is_ok()

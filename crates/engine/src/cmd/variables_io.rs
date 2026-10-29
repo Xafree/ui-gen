@@ -11,6 +11,7 @@ use super::CommandSpec;
 use crate::codegen::{css_var_name, css_var_of};
 use crate::library::{is_remote_collection, local_collections};
 use crate::params::{get, string};
+use crate::token_roles::{NumberRole, Roles};
 use crate::{EngineError, Result, Session, bad, spec};
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -65,6 +66,27 @@ fn css_safe(text: &str) -> String {
     text.replace("*/", "* /").replace(['"', '\\', '\n'], " ")
 }
 
+/// `v` in `mode` as a CSS value, `None` when it has none there. `text` writes the content of a string,
+/// `name` the custom property an alias points at.
+pub(crate) fn css_value(
+    vars: &Variables,
+    roles: &Roles,
+    v: &Variable,
+    mode: &ModeId,
+    text: impl Fn(&str) -> String,
+    name: impl Fn(&Variable) -> String,
+) -> Option<String> {
+    Some(match v.values.get(mode)? {
+        VariableValue::Color(col) => col.to_css(),
+        VariableValue::Number(x) if !x.is_finite() => return None,
+        VariableValue::Number(x) if roles.role(v) == NumberRole::Unitless => trim_num(*x),
+        VariableValue::Number(x) => format!("{}px", trim_num(*x)),
+        VariableValue::String(t) => format!("\"{}\"", text(t)),
+        VariableValue::Boolean(b) => b.to_string(),
+        VariableValue::Alias(a) => format!("var({})", name(vars.get(a)?)),
+    })
+}
+
 /// Each collection's variables as custom properties (named as generated code names them): the
 /// default mode's values on `:root`, every other mode's on `[data-<collection>="<mode>"]`;
 /// aliases are `var(--name)`.
@@ -75,7 +97,7 @@ fn css(doc: &Document, colls: &[&Collection], tailwind: bool) -> String {
     let name = |v: &Variable| if tailwind { theme.name(v) } else { css_var_of(v) };
     // Lengths need a unit where CSS reads them (`border-radius: var(--radius)`); opacity and
     // font weight don't.
-    let roles = crate::token_roles::Roles::new(doc);
+    let roles = Roles::new(doc);
     let mut out = if tailwind { "@import \"tailwindcss\";\n\n".to_string() } else { String::new() };
     for c in colls {
         let attr = css_var_name(&c.name);
@@ -89,18 +111,7 @@ fn css(doc: &Document, colls: &[&Collection], tailwind: bool) -> String {
             };
             out.push_str(&format!("/* {} · {} */\n{sel} {{\n", css_safe(&c.name), css_safe(&m.name)));
             for v in vars.variables.iter().filter(|v| v.collection == c.id) {
-                let value = match v.values.get(&m.id) {
-                    Some(VariableValue::Color(col)) => col.to_css(),
-                    Some(VariableValue::Number(x)) if roles.role(v) == crate::token_roles::NumberRole::Unitless => trim_num(*x),
-                    Some(VariableValue::Number(x)) => format!("{}px", trim_num(*x)),
-                    Some(VariableValue::String(t)) => format!("\"{}\"", css_safe(t)),
-                    Some(VariableValue::Boolean(b)) => b.to_string(),
-                    Some(VariableValue::Alias(a)) => match vars.get(a) {
-                        Some(t) => format!("var({})", name(t)),
-                        None => continue,
-                    },
-                    None => continue,
-                };
+                let Some(value) = css_value(vars, &roles, v, &m.id, css_safe, name) else { continue };
                 out.push_str(&format!("  {}: {value};\n", name(v)));
             }
             out.push_str("}\n");

@@ -32,6 +32,7 @@ use menu_input::menu_input_dialog;
 pub mod branch_ui;
 pub mod credits;
 pub mod import_report;
+pub mod lit_export;
 pub mod missing_fonts;
 pub mod plugins_ui;
 pub mod updates_ui;
@@ -170,6 +171,7 @@ pub fn keys(app: &mut FigApp, ctx: &Context) {
         || u.find.is_some()
         || u.batch_rename.is_some()
         || u.import_report.is_some()
+        || u.lit_export.is_some()
         || u.missing_fonts.is_some()
         || u.confirm_close
         || u.export_preview
@@ -184,6 +186,7 @@ pub fn keys(app: &mut FigApp, ctx: &Context) {
         || u.find.take().is_some()
         || u.batch_rename.take().is_some()
         || u.import_report.take().is_some()
+        || u.lit_export.take().is_some()
         || u.missing_fonts.take().is_some()
     {
         return;
@@ -203,6 +206,7 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
     // Dropped files waiting to open: their card, then (once it has shown) the files.
     crate::pending_open::pending_opens(app, ctx);
     crate::import_report::show(app, ctx);
+    lit_export::show(app, ctx);
     crate::missing_fonts::show(app, ctx);
     let t = Tokens::get(ctx);
     if app.ui.about {

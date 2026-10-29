@@ -1,11 +1,13 @@
 //! FigCraft desktop app.
 //!
-//! Usage: `figcraft [--control <port>] [files…] [figcraft://join?…]` (an invite link joins that
+//! Usage: `figcraft [--control <port> --automation-read-root <dir>…] [files…] [figcraft://join?…]` (an invite link joins that
 //! live session; the app registers itself as the opener of such links: `collab.registerLinks`).
 //!
 //! `--control <port>` (or `FIGCRAFT_CONTROL_PORT`) starts a localhost JSON-lines control server:
 //! `{"id":1,"method":"engine.execute","params":{"command":"shape.rectangle","params":{"x":0,"y":0,"width":100,"height":100}}}`
-//! → `{"id":1,"ok":true,"result":{…}}`. Methods: `figcraft_ui_egui::control`.
+//! → `{"id":1,"ok":true,"result":{…}}`. Methods: `figcraft_ui_egui::control`. The first line of a
+//! connection is `{"auth":"<token>"}` (the token is printed at startup and kept in a private file),
+//! and the channel refuses to start without an automation root.
 //!
 //! `--automation-read-root <dir>` / `--automation-write-root <dir>` (each repeatable) confine the
 //! files the window and the control channel read and write (`figcraft_engine::file_access`); the
@@ -32,6 +34,8 @@ mod startup;
 
 #[cfg(all(test, target_os = "macos"))]
 mod apple_events_tests;
+#[cfg(test)]
+mod args_invite_tests;
 #[cfg(test)]
 mod args_tests;
 #[cfg(test)]
@@ -150,6 +154,16 @@ fn main() -> eframe::Result {
         );
         std::process::exit(2);
     }
+    if args.join.is_some() && !args.ignored.is_empty() {
+        let ignored = format!("{:?}", args.ignored);
+        log::warn!("UIGEN: started with an invite link: ignoring the other arguments after `--`: {ignored}");
+        eprintln!("UIGEN: an invite link stands alone: ignoring the other arguments after `--`: {ignored}");
+    }
+    let port = args::control_port(&args, std::env::var("FIGCRAFT_CONTROL_PORT").ok().as_deref());
+    if let Err(message) = args::require_roots_for_control(port, &args) {
+        eprintln!("{message}");
+        std::process::exit(2);
+    }
     let roots = match (
         args.read_roots.is_empty() && args.write_roots.is_empty(),
         figcraft_engine::file_access::Roots::new(&args.read_roots, &args.write_roots),
@@ -161,7 +175,6 @@ fn main() -> eframe::Result {
             std::process::exit(2);
         }
     };
-    let port = args.control.or_else(|| std::env::var("FIGCRAFT_CONTROL_PORT").ok().and_then(|p| p.parse().ok()));
     // System fonts: index them in the background, then wake the UI (an idle window draws no frames)
     // to lay text out again with them.
     let ctx_slot: Arc<Mutex<Option<egui::Context>>> = Arc::new(Mutex::new(None));
@@ -228,9 +241,7 @@ fn main() -> eframe::Result {
         figcraft_ui_egui::live::open_invite(&mut fig, link);
     }
     let queue: Arc<Mutex<Vec<ControlRequest>>> = Arc::new(Mutex::new(Vec::new()));
-    if let Some(p) = port {
-        control_server::start(p, queue.clone(), ctx_slot.clone());
-    }
+    let token_file = port.and_then(|p| control_server::start(p, queue.clone(), ctx_slot.clone()));
     let icon = services::window_icon();
     // The app id is the Wayland app_id and the X11 window class on Linux: the desktop entry's name
     // and StartupWMClass (FreeBSD's package matches the binary's name instead).
@@ -276,6 +287,9 @@ fn main() -> eframe::Result {
             }))
         }),
     );
+    if let Some(path) = &token_file {
+        control_server::remove_token_file(path);
+    }
     // Say why instead of quitting silently: release builds on Windows have no console.
     if let Err(e) = &result {
         startup::failed(e, port.is_some());

@@ -81,10 +81,16 @@ code.
   (`spec!(id, label, params doc, undoable, run)`) + tests. The menus, shortcuts, Actions palette,
   CLI, control channel and MCP server all dispatch the same command ids. Command ids follow the
   incumbent's menu catalog in `crates/engine/src/catalog.rs` (the parity metric: `cargo xtask parity`).
+- **Library projects** (`crates/project`, `figcraft-project`, L3, pure: types, validation, JSON, no disk) are a folder with a
+  `uigen.json` and the `.figcraft` files it lists. The engine reads and writes the manifest only through
+  `file_access` (`crates/engine/src/project.rs`, commands `project.*` in `cmd/project.rs`); a tab belongs to a project
+  through `DocState.project` (never saved). In a project every page is a component (same name, same life cycle:
+  `cmd/page.rs`), so a page named with a hyphen is a divider and never a component, component names are unique
+  (case apart), and the last component stays. Outside a project every page rule is unchanged.
 - **Programmatic calls never open dialogs.** Commands only *request* UI (`Session::request_ui`); the
   control channel drops dialog requests.
 - **Layering** is enforced by `cargo xtask layers`: geom/color (L0) → doc (L1) → layout/text/pathops/plugin/collab
-  (L2) → render/format (L3) → svg/pdf (L4) → engine (L5) → ui-egui/mcp (L6) → apps. Nothing below
+  (L2) → render/format/project (L3) → svg/pdf (L4) → engine (L5) → ui-egui/mcp (L6) → apps. Nothing below
   L6 depends on egui/eframe/rfd/winit. **The UI crate is swappable.**
 - **The UI is thin**: panels read engine state and act through `app.run(id, params)` /
   `app.set_props(ids, props)`. Colours come from `theme::Tokens`.
@@ -107,10 +113,12 @@ milestone id in the message (`M2.1: auto layout wrap`). Commit after every lande
 to `main`.
 
 ## Running and looking at the app
-- `cargo run -p figcraft -- --control <port> [file.figcraft|file.svg|image]`. Pick a free port
+- `cargo run -p figcraft -- --control <port> --automation-write-root <dir> [file.figcraft|file.svg|image]`
+  (a root is required with `--control`; the app prints a session token on stderr and keeps it in
+  `control-token-<port>` in its configuration folder). Pick a free port
   (`python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])'`);
   sibling apps use the control channel too.
-- Drive it with JSON lines, e.g.
+- Drive it with JSON lines: the first line of a connection is `{"auth":"<token>"}`, then e.g.
   `{"id":1,"method":"engine.execute","params":{"command":"shape.rectangle","params":{"x":10,"y":10,"width":100,"height":50}}}`
   then `{"id":2,"method":"ui.screenshot","params":{"path":"/tmp/shot.png"}}`. Methods are documented
   in `crates/ui-egui/src/control.rs` and `docs/control-protocol.md`.

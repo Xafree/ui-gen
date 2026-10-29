@@ -16,6 +16,7 @@ const TABLE: &[(&str, u8)] = &[
     ("plugin", 2),
     ("render", 3),
     ("format", 3),
+    ("project", 3),
     ("svg", 4),
     ("pdf", 4),
     ("vectordrawable", 4),

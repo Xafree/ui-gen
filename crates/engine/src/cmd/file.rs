@@ -36,6 +36,8 @@ pub(crate) use load::{load_fig, read_capped, recovered, variables_param, write};
 pub use open::MAX_RECENT;
 #[cfg(test)]
 use open::append_pages;
+pub(crate) use open::read_tab;
+pub(super) use open::remember;
 use open::{import, open, open_recent};
 pub(crate) use save::save_ends_preview;
 pub use save::{FileSnapshot, file_bytes, thumbnail};
@@ -197,12 +199,14 @@ pub fn specs() -> Vec<CommandSpec> {
             let (loaded, _) = load_path(&path, None)?;
             let i = s.active;
             let uid = s.ds()?.uid;
+            let project = s.ds()?.project.clone();
             if let Some(slot) = s.docs.get_mut(i) {
                 *slot = DocState::new(loaded.doc, Some(path.clone()))
                     .with_versions(loaded.versions)
                     .with_branches(loaded.branches)
                     .with_images_left_in_file(&path, loaded.images_past_budget);
                 slot.on_disk = on_disk;
+                slot.project = project;
             }
             // Edits on its branch tabs are reverted too.
             crate::branches::close_tabs(s, uid, None);
@@ -352,6 +356,7 @@ pub fn export_file(doc: &Document, ids: &[NodeId], setting: &ExportSetting, scal
                 outline_text: setting.svg_outline_text,
                 simplify_stroke: setting.svg_simplify_stroke,
                 bounds: Some(area),
+                ..Default::default()
             };
             let svg = figcraft_svg::try_export_svg(&doc.in_srgb(), &drawn, &opts).map_err(|e| match e {
                 figcraft_svg::SvgError::Empty => nothing(),

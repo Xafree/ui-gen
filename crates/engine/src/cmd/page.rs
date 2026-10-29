@@ -2,10 +2,12 @@
 
 use figcraft_doc::proto::Flow;
 use figcraft_doc::{Guide, NodeId, NodeKind};
+use figcraft_project::{MAX_NAME_CHARS, next_component_name};
 use serde_json::{Value, json};
 
 use super::{CommandSpec, ok};
 use crate::params::{boolean, color, id, req_index, req_num, req_string, string};
+use crate::project::{component_name_in_use, component_pages, free_component_name, is_component_page};
 use crate::{Session, bad, spec};
 
 /// After a page edit: the file keeps a page that isn't a divider, and the canvas shows one (the
@@ -24,6 +26,51 @@ fn settle(s: &mut Session, cmd: &str) -> crate::Result<()> {
     Ok(())
 }
 
+fn add(s: &mut Session, p: &Value) -> crate::Result<Value> {
+    // An added page takes the current page's colour; the theme only decides new files.
+    let current = s.page().ok().and_then(|p| match s.doc().ok()?.node(p)?.kind {
+        NodeKind::Page { background, .. } => Some(background),
+        _ => None,
+    });
+    let background = current.unwrap_or_else(|| s.new_page_background());
+    let in_project = s.in_lib_project();
+    let template = string(p, "template").unwrap_or_default();
+    if in_project && template.chars().count() > MAX_NAME_CHARS {
+        return Err(bad("page.add", "template is too long"));
+    }
+    let doc = s.doc_mut()?;
+    let name = match string(p, "name") {
+        Some(name) if in_project && !name.starts_with('-') && component_name_in_use(doc, &name, None) => {
+            return Err(bad("page.add", format!("a component named \"{name}\" exists already")));
+        }
+        Some(name) => name,
+        None if in_project => {
+            let start = doc.pages.iter().filter(|page| is_component_page(doc, **page)).count() + 1;
+            let name = next_component_name(&template, doc.pages.iter().filter_map(|page| doc.node(*page)).map(|n| n.name.as_str()), start);
+            free_component_name(doc, &name)
+        }
+        None => format!("Page {}", doc.pages.len() + 1),
+    };
+    let id = doc.add_page(&name);
+    if let NodeKind::Page { background: b, .. } = &mut doc.get_mut(id)?.kind {
+        *b = background;
+    }
+    if doc.is_divider(id) {
+        return Ok(json!({"id": id, "divider": true}));
+    }
+    let ds = s.ds_mut()?;
+    ds.page = id;
+    ds.selection.clear();
+    ds.zoom_to_fit();
+    Ok(json!({"id": id}))
+}
+
+/// Whether the current tab is a library project and `page` is its last component.
+fn is_last_component(s: &Session, page: NodeId) -> crate::Result<bool> {
+    let doc = s.doc()?;
+    Ok(s.in_lib_project() && is_component_page(doc, page) && component_pages(doc).len() <= 1)
+}
+
 /// The page a command targets: the explicit `id` (which must be a page) or the open page.
 fn page_target(s: &Session, cmd: &str, p: &Value) -> crate::Result<NodeId> {
     let Some(target) = id(p, "id") else { return s.page() };
@@ -35,28 +82,13 @@ fn page_target(s: &Session, cmd: &str, p: &Value) -> crate::Result<NodeId> {
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
-        spec!("page.add", "Add page", "{name?} (a name starting with a hyphen adds a divider)", true, |s, p| {
-            // An added page takes the current page's colour; the theme only decides new files.
-            let current = s.page().ok().and_then(|p| match s.doc().ok()?.node(p)?.kind {
-                NodeKind::Page { background, .. } => Some(background),
-                _ => None,
-            });
-            let background = current.unwrap_or_else(|| s.new_page_background());
-            let doc = s.doc_mut()?;
-            let name = string(p, "name").unwrap_or_else(|| format!("Page {}", doc.pages.len() + 1));
-            let id = doc.add_page(&name);
-            if let NodeKind::Page { background: b, .. } = &mut doc.get_mut(id)?.kind {
-                *b = background;
-            }
-            if doc.is_divider(id) {
-                return Ok(json!({"id": id, "divider": true}));
-            }
-            let ds = s.ds_mut()?;
-            ds.page = id;
-            ds.selection.clear();
-            ds.zoom_to_fit();
-            Ok(json!({"id": id}))
-        }),
+        spec!(
+            "page.add",
+            "Add page",
+            "{name?, template? (in a library project: the name pattern with {n}, default \"Component {n}\")} (a name starting with a hyphen adds a divider)",
+            true,
+            add
+        ),
         spec!("page.select", "Go to page", "{id | index}", false, |s, p| {
             let doc = s.doc()?;
             let id = match id(p, "id") {
@@ -82,20 +114,37 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!("page.rename", "Rename page", "{id?, name} (an empty page named with a leading hyphen becomes a divider)", true, |s, p| {
             let name = req_string("page.rename", p, "name")?;
             let id = page_target(s, "page.rename", p)?;
+            if s.in_lib_project() {
+                if name.trim().is_empty() {
+                    return Err(bad("page.rename", "a component needs a name"));
+                }
+                if name.starts_with('-') {
+                    if is_last_component(s, id)? {
+                        return Err(bad("page.rename", "a library project needs at least one component"));
+                    }
+                } else if component_name_in_use(s.doc()?, &name, Some(id)) {
+                    return Err(bad("page.rename", format!("a component named \"{name}\" exists already")));
+                }
+            }
             s.doc_mut()?.get_mut(id)?.name = name;
             settle(s, "page.rename")?;
             ok()
         }),
         spec!("page.delete", "Delete page", "{id?}", true, |s, p| {
             let id = page_target(s, "page.delete", p)?;
+            if is_last_component(s, id)? {
+                return Err(bad("page.delete", "a library project needs at least one component"));
+            }
             s.doc_mut()?.remove(id)?;
             settle(s, "page.delete")?;
             ok()
         }),
         spec!("page.duplicate", "Duplicate page", "{id?}", true, |s, p| {
             let src = id(p, "id").unwrap_or(s.page()?);
+            let in_project = s.in_lib_project();
             let doc = s.doc_mut()?;
             let name = format!("Copy of {}", doc.get(src)?.name);
+            let name = if in_project { free_component_name(doc, &name) } else { name };
             let np = doc.add_page(&name);
             // One copy with one id map, so navigation between the copied frames points at the copies;
             // then each layer and its copy (also those in sections), so flows can follow their start frames.

@@ -2,6 +2,8 @@ use super::export::export_fig;
 use super::load::{ext, file_stem, write};
 use super::open::remember;
 use super::*;
+use crate::project::binding_for_file;
+use figcraft_project::FILE_NAME;
 
 /// Thumbnail PNG of the first page's content (for file browsers / the home screen).
 pub fn thumbnail(doc: &Document) -> Option<Vec<u8>> {
@@ -165,12 +167,34 @@ fn save_to(s: &mut Session, path: Option<String>) -> Result<Value> {
         return Ok(json!({"name": name, "bytes": bytes.len(), "data": base64::engine::general_purpose::STANDARD.encode(&bytes)}));
     };
     write(&path, &bytes)?;
+    let moved = ds.path.as_deref() != Some(path.as_str());
     ds.doc = snapshot.doc;
     ds.path = Some(path.clone());
     ds.note_on_disk();
+    let unreadable = if moved { rebind_project(ds, &path) } else { None };
     mark_saved(s, &json!({}))?;
+    if unreadable.is_some() {
+        s.message = unreadable;
+    }
     remember(s, &path);
     Ok(json!({"path": path, "bytes": bytes.len()}))
+}
+
+/// A file saved under a new path belongs to the project whose manifest lists it in its new folder, if any;
+/// returns what to tell the user when that manifest can't be read (the file is then an ordinary one).
+fn rebind_project(ds: &mut DocState, path: &str) -> Option<String> {
+    ds.project = None;
+    if ext(path) != "figcraft" {
+        return None;
+    }
+    match binding_for_file(path) {
+        Some(Ok(binding)) => {
+            ds.project = Some(Arc::new(binding));
+            None
+        }
+        Some(Err(cause)) => Some(format!("{FILE_NAME}: {cause}; saved as an ordinary file")),
+        None => None,
+    }
 }
 
 /// The file of the active tab (with its branch tabs) now matches what was written or delivered.

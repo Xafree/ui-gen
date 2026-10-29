@@ -25,26 +25,26 @@ mod swift;
 
 pub(crate) use arkui::arkui;
 pub(crate) use compose::{compose, kotlin_color};
-pub(crate) use css::Tokens;
 #[cfg(test)]
 pub(crate) use css::css_decls;
+pub(crate) use css::{LitNames, Tokens, Unreproducible};
 use css::{css, tok};
 pub use css::{css_var_name, css_var_of};
 use html::html;
-pub(crate) use html::{Markup, class_name};
+pub(crate) use html::{Markup, class_name, html_escape};
 pub(crate) use swift::swift;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![spec!(
         "inspect.code",
         "Code for layer",
-        "{id?, language?: css|html|react|leptos|vue|tailwind|swiftui|compose|arkui (default css; html, react, leptos and vue are the whole layer tree; components take their properties as parameters, instances pass their values; a component connected to code (codeConnect.set) gives its import and snippet instead; tailwind is React with Tailwind CSS v4 utilities for pages: fluid auto layout boxes, instances inlined with their overrides, bound variables as theme utilities), mobile? (tailwind: a mobile frame with the same layer names; the code is mobile first with the desktop layer's classes behind lg:), unit?: px|rem (CSS, HTML, React, Leptos and Vue; default px), rootFontSize? (rem: pixels per rem, default 16)} → {code, language, connected}",
+        "{id?, language?: css|html|react|leptos|vue|tailwind|swiftui|compose|arkui|lit (default css; html, react, leptos and vue are the whole layer tree; lit is a LitElement for a component and the custom element for an instance; components take their properties as parameters, instances pass their values; a component connected to code (codeConnect.set) gives its import and snippet instead; tailwind is React with Tailwind CSS v4 utilities for pages: fluid auto layout boxes, instances inlined with their overrides, bound variables as theme utilities), mobile? (tailwind: a mobile frame with the same layer names; the code is mobile first with the desktop layer's classes behind lg:), unit?: px|rem (CSS, HTML, React, Leptos, Vue and Lit; default px), rootFontSize? (rem: pixels per rem, default 16)} → {code, language, connected}",
         false,
         |s, p| {
             let cmd = "inspect.code";
             let id = targets(s, p).first().copied().ok_or_else(|| bad(cmd, "select a layer"))?;
             let lang = match string(p, "language") {
-                Some(l) => CodeLang::from_id(&l).ok_or_else(|| bad(cmd, "language: css|html|react|leptos|vue|tailwind|swiftui|compose|arkui"))?,
+                Some(l) => CodeLang::from_id(&l).ok_or_else(|| bad(cmd, "language: css|html|react|leptos|vue|tailwind|swiftui|compose|arkui|lit"))?,
                 None => CodeLang::Css,
             };
             let rem = match string(p, "unit").map(|u| u.to_ascii_lowercase()).as_deref() {
@@ -96,10 +96,12 @@ pub enum CodeLang {
     Compose,
     /// HarmonyOS ArkUI: an ArkTS struct (`@Component`, `build`).
     ArkUi,
+    /// A Lit web component (`LitElement`, TypeScript).
+    Lit,
 }
 
 impl CodeLang {
-    pub const ALL: [CodeLang; 9] = [
+    pub const ALL: [CodeLang; 10] = [
         CodeLang::Css,
         CodeLang::Html,
         CodeLang::React,
@@ -109,6 +111,7 @@ impl CodeLang {
         CodeLang::SwiftUi,
         CodeLang::Compose,
         CodeLang::ArkUi,
+        CodeLang::Lit,
     ];
     pub fn id(self) -> &'static str {
         match self {
@@ -121,6 +124,7 @@ impl CodeLang {
             CodeLang::SwiftUi => "swiftui",
             CodeLang::Compose => "compose",
             CodeLang::ArkUi => "arkui",
+            CodeLang::Lit => "lit",
         }
     }
     pub fn label(self) -> &'static str {
@@ -134,12 +138,13 @@ impl CodeLang {
             CodeLang::SwiftUi => "SwiftUI",
             CodeLang::Compose => "Compose",
             CodeLang::ArkUi => "ArkUI",
+            CodeLang::Lit => "Lit",
         }
     }
     /// Languages whose lengths are CSS pixels that can be shown in rem (not Tailwind: its lengths
     /// are utility classes).
     pub fn is_web(self) -> bool {
-        matches!(self, CodeLang::Css | CodeLang::Html | CodeLang::React | CodeLang::Leptos | CodeLang::Vue)
+        matches!(self, CodeLang::Css | CodeLang::Html | CodeLang::React | CodeLang::Leptos | CodeLang::Vue | CodeLang::Lit)
     }
     pub fn from_id(s: &str) -> Option<CodeLang> {
         if s.eq_ignore_ascii_case("tsx") || s.eq_ignore_ascii_case("jsx") {
@@ -262,7 +267,7 @@ pub fn code_for(doc: &Document, id: NodeId, lang: CodeLang) -> String {
         CodeLang::Css => css(doc, id),
         CodeLang::Html => html(doc, id),
         CodeLang::Tailwind => crate::tailwind::code(doc, id, None),
-        CodeLang::React | CodeLang::Leptos | CodeLang::Vue | CodeLang::SwiftUi | CodeLang::Compose | CodeLang::ArkUi => {
+        CodeLang::React | CodeLang::Leptos | CodeLang::Vue | CodeLang::SwiftUi | CodeLang::Compose | CodeLang::ArkUi | CodeLang::Lit => {
             crate::component_codegen::code(doc, id, lang)
         }
     }

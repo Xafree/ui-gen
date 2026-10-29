@@ -1,10 +1,11 @@
 //! Localhost JSON-lines control server: each line `{"id", "method", "params"}` is queued for the UI
 //! thread; the reply line `{"id", "ok", "result" | "error"}` is written when the frame handled it.
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use figcraft_ui_egui::{ControlReply, ControlRequest, RequestGate, RequestState};
 use serde_json::{Value, json};
@@ -13,9 +14,15 @@ type Queue = Arc<Mutex<Vec<ControlRequest>>>;
 type CtxSlot = Arc<Mutex<Option<egui::Context>>>;
 
 const MAX_LINE: usize = 32 * 1024 * 1024;
+const MAX_AUTH_LINE: usize = 1024;
 const MAX_CONNECTIONS: usize = 8;
 const MAX_QUEUED_REQUESTS: usize = 8;
 const TIMEOUT: Duration = Duration::from_secs(60);
+/// How long a new connection has to send its token line: far shorter than a request's wait, so a
+/// silent client cannot hold one of the few connection slots for a minute.
+const AUTH_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long the refusal sent to a client over the connection limit may take to write.
+const REFUSAL_TIMEOUT: Duration = Duration::from_secs(1);
 /// How long the accepting thread waits after a failed accept. Accepting can keep failing, for
 /// example while the process has no file descriptors left, and retrying at once would keep a
 /// core busy until it recovers.
@@ -58,25 +65,97 @@ pub fn drain_queue(queue: &Queue, target: &mut Vec<ControlRequest>) {
     target.extend(queue.drain(..count));
 }
 
-pub fn start(port: u16, queue: Queue, ctx: CtxSlot) {
+fn generate_token() -> String {
+    figcraft_collab_net::token::secret_256_hex().unwrap_or_else(|e| {
+        log::error!("control server: can't make a session token: {e}");
+        String::new()
+    })
+}
+
+fn token_matches(expected: &str, given: &str) -> bool {
+    // Every byte of the expected token is compared, so the time taken does not tell how much of a guess is right.
+    let given = given.as_bytes();
+    let mut diff = expected.len() ^ given.len();
+    for (i, &byte) in expected.as_bytes().iter().enumerate() {
+        diff |= usize::from(byte ^ given.get(i).copied().unwrap_or(0));
+    }
+    diff == 0 && !expected.is_empty()
+}
+
+/// Write the token under a temporary name, private from the start, then rename it into place: a
+/// reader never finds a half-written token, and a file left by a crashed run is replaced.
+fn write_token_file(dir: &Path, port: u16, token: &str) -> std::io::Result<PathBuf> {
+    std::fs::create_dir_all(dir)?;
+    let path = figcraft_engine::control_token::control_token_path(dir, port);
+    let temporary = path.with_extension("tmp");
+    match std::fs::remove_file(&temporary) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
+        _ => {}
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let written = options.open(&temporary).and_then(|mut file| file.write_all(token.as_bytes())).and_then(|()| std::fs::rename(&temporary, &path));
+    if let Err(e) = written {
+        remove_token_file(&temporary);
+        return Err(e);
+    }
+    Ok(path)
+}
+
+/// Remove the token file when the app exits, so a stale token is not left for a client to try.
+pub fn remove_token_file(path: &Path) {
+    match std::fs::remove_file(path) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+            log::warn!("control server: can't remove the token file {}: {e}", path.display());
+        }
+        _ => {}
+    }
+}
+
+/// Start the control server; the token file it wrote, to remove when the app exits.
+pub fn start(port: u16, queue: Queue, ctx: CtxSlot) -> Option<PathBuf> {
+    let token = generate_token();
+    if token.is_empty() {
+        log::error!("control server: the system has no secure random numbers, so no session token can be made");
+        eprintln!("UIGEN control server not started: no secure random numbers for the session token");
+        return None;
+    }
     let listener = match TcpListener::bind(("127.0.0.1", port)) {
         Ok(l) => l,
         Err(e) => {
             log::error!("control server: can't bind 127.0.0.1:{port}: {e} (another app may own it; pick another port)");
             eprintln!("UIGEN control server failed to bind port {port}: {e}");
-            return;
+            return None;
         }
     };
     eprintln!("UIGEN control server listening on 127.0.0.1:{port}");
+    let token_file = crate::services::config_dir()
+        .ok_or_else(|| std::io::Error::other("no configuration folder"))
+        .and_then(|dir| write_token_file(&dir, port, &token));
+    let token_file = match token_file {
+        Ok(path) => {
+            eprintln!("UIGEN control token: {token} (also in {})", path.display());
+            Some(path)
+        }
+        Err(e) => {
+            log::error!("control server: can't write the token file: {e}");
+            eprintln!("UIGEN control token: {token} (the token file could not be written: {e})");
+            None
+        }
+    };
+    let token: Arc<str> = Arc::from(token);
     let spawned = std::thread::Builder::new().name("figcraft-control".into()).spawn(move || {
         let mut workers = Vec::new();
         for stream in accepted(listener.incoming(), || std::thread::sleep(ACCEPT_RETRY)) {
-            spawn_connection(stream, queue.clone(), ctx.clone(), &mut workers, TIMEOUT);
+            spawn_connection(stream, queue.clone(), ctx.clone(), &mut workers, TIMEOUT, token.clone());
         }
     });
     if let Err(e) = spawned {
         log::error!("control server thread: {e}");
     }
+    token_file
 }
 
 /// The connections `incoming` accepts, calling `wait` after each failed accept.
@@ -84,30 +163,101 @@ fn accepted<T>(incoming: impl Iterator<Item = std::io::Result<T>>, mut wait: imp
     incoming.filter_map(move |stream| stream.map_err(|_| wait()).ok())
 }
 
-fn spawn_connection(stream: TcpStream, queue: Queue, ctx: CtxSlot, workers: &mut Vec<std::thread::JoinHandle<()>>, timeout: Duration) {
+fn spawn_connection(
+    stream: TcpStream,
+    queue: Queue,
+    ctx: CtxSlot,
+    workers: &mut Vec<std::thread::JoinHandle<()>>,
+    timeout: Duration,
+    token: Arc<str>,
+) {
     workers.retain(|worker| !worker.is_finished());
     if workers.len() >= MAX_CONNECTIONS {
+        refuse(stream);
         return;
     }
     match std::thread::Builder::new().name("figcraft-control-conn".into()).spawn(move || {
-        let _ = serve(stream, queue, ctx, timeout);
+        let _ = serve(stream, queue, ctx, timeout, &token);
     }) {
         Ok(worker) => workers.push(worker),
         Err(e) => log::error!("control connection thread: {e}"),
     }
 }
 
-/// Serve one control connection: read bounded JSON lines, reject oversized frames and a
-/// full queue, queue one request, wait under its gate, and write one reply. Non-JSON input
-/// answers with an error and closes the connection so HTTP body lines cannot become commands.
-fn serve(mut out: TcpStream, queue: Queue, ctx: CtxSlot, timeout: Duration) -> std::io::Result<()> {
+/// Tell a client the app has no connection left for it, then close: the answer lets it report why
+/// instead of a bare closed connection. Best effort, since the client may already be gone.
+fn refuse(mut stream: TcpStream) {
+    let refusal = stream
+        .set_write_timeout(Some(REFUSAL_TIMEOUT))
+        .and_then(|()| writeln!(stream, "{}", json!({"id": null, "ok": false, "error": "too many connections"})));
+    if let Err(e) = refusal {
+        log::debug!("control connection refused without telling the client why: {e}");
+    }
+}
+
+/// Read one line of at most `limit` bytes (plus its newline) into `line`, within `timeout` in
+/// total: a client that sends one byte at a time cannot keep the connection open.
+fn read_frame(reader: &mut BufReader<TcpStream>, line: &mut Vec<u8>, limit: usize, timeout: Duration) -> std::io::Result<usize> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(std::io::ErrorKind::TimedOut.into());
+        }
+        reader.get_ref().set_read_timeout(Some(left))?;
+        let available = reader.fill_buf()?;
+        if available.is_empty() {
+            return Ok(line.len());
+        }
+        let room = limit + 1 - line.len();
+        let window = available.get(..available.len().min(room)).unwrap_or(available);
+        let newline = window.iter().position(|&b| b == b'\n');
+        let used = newline.map_or(window.len(), |i| i + 1);
+        line.extend_from_slice(window.get(..used).unwrap_or(window));
+        reader.consume(used);
+        if newline.is_some() || line.len() > limit {
+            return Ok(line.len());
+        }
+    }
+}
+
+/// The first line of a connection must be `{"auth": "<token>"}` and is answered with one
+/// acknowledgement line. Anything else ends the connection before any request is read.
+fn authenticated(reader: &mut BufReader<TcpStream>, out: &mut TcpStream, timeout: Duration, token: &str) -> std::io::Result<bool> {
+    let mut line = Vec::new();
+    if read_frame(reader, &mut line, MAX_AUTH_LINE, timeout)? == 0 {
+        return Ok(false);
+    }
+    if line.len() > MAX_AUTH_LINE && line.last() != Some(&b'\n') {
+        let _ = writeln!(out, "{}", json!({"id": null, "ok": false, "error": "authentication failed: the first line is longer than 1 KiB"}));
+        return Ok(false);
+    }
+    let given = std::str::from_utf8(&line).ok().and_then(|l| serde_json::from_str::<Value>(l).ok()).and_then(|v| match v {
+        Value::Object(fields) if fields.len() == 1 => fields.get("auth").and_then(Value::as_str).map(str::to_string),
+        _ => None,
+    });
+    if given.is_some_and(|given| token_matches(token, &given)) {
+        writeln!(out, "{}", json!({"id": null, "ok": true, "result": "authenticated"}))?;
+        return Ok(true);
+    }
+    let _ = writeln!(out, "{}", json!({"id": null, "ok": false, "error": "authentication failed: the first line must be {\"auth\": \"<token>\"}"}));
+    Ok(false)
+}
+
+/// Serve one control connection: check the token (within [`AUTH_TIMEOUT`], or `timeout` if shorter) and acknowledge it, then read bounded JSON lines, reject oversized
+/// frames and a full queue, queue one request, wait under its gate, and write one reply. Non-JSON
+/// input answers with an error and closes the connection so HTTP body lines cannot become commands.
+fn serve(mut out: TcpStream, queue: Queue, ctx: CtxSlot, timeout: Duration, token: &str) -> std::io::Result<()> {
     out.set_read_timeout(Some(timeout))?;
     out.set_write_timeout(Some(timeout))?;
     let mut reader = BufReader::new(out.try_clone()?);
+    if !authenticated(&mut reader, &mut out, timeout.min(AUTH_TIMEOUT), token)? {
+        return Ok(());
+    }
     let mut line = Vec::new();
     loop {
         line.clear();
-        if (&mut reader).take((MAX_LINE + 1) as u64).read_until(b'\n', &mut line)? == 0 {
+        if read_frame(&mut reader, &mut line, MAX_LINE, timeout)? == 0 {
             break;
         }
         if line.last() == Some(&b'\n') {
@@ -167,5 +317,11 @@ fn serve(mut out: TcpStream, queue: Queue, ctx: CtxSlot, timeout: Duration) -> s
 }
 
 #[cfg(test)]
+#[path = "control_server_auth_tests.rs"]
+mod auth_tests;
+#[cfg(test)]
 #[path = "control_server_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "control_server_token_file_tests.rs"]
+mod token_file_tests;

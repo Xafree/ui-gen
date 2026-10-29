@@ -1,5 +1,10 @@
+use std::collections::BTreeMap;
+
+use figcraft_color::{Paint, PaintKind};
+
 use super::css::{Tokens, css_decls};
 use super::{CodeLang, Ctx, Document, LayoutMode, Node, NodeId, NodeKind, Param, Sizing, indent, num, with_v_if};
+use crate::lit::LitOptions;
 
 // ------------------------------------------------------------------ HTML and React markup
 
@@ -62,7 +67,7 @@ pub(crate) fn class_name(name: &str, kind: &str, used: &mut Vec<String>) -> Stri
     name
 }
 
-fn html_escape(s: &str) -> String {
+pub(crate) fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('\n', "<br>")
 }
 
@@ -125,6 +130,14 @@ pub(crate) struct Markup<'c, 'a> {
     /// With `fluid`, other layers at least this share of the root's width are fluid too (a
     /// divider, a banner image); smaller ones (icons) keep their size. Default: none.
     pub fluid_leaves: f64,
+    /// Lit: the tag prefix of the components it calls.
+    pub lit: LitOptions,
+    /// Lit: the markup is plain HTML, not the content of a `html` template literal.
+    pub lit_plain: bool,
+    /// Each layer's class, in the order they are written.
+    pub ids: Vec<(NodeId, String)>,
+    /// Lit: declarations added to the rule of the layer at a path (transitions, effects).
+    pub lit_motion: BTreeMap<String, String>,
 }
 
 /// How `n` sits in its parent: in the flex flow, or placed at its position.
@@ -155,13 +168,18 @@ fn placement_decls(n: &Node, parent: Option<&Node>, root: bool, in_flow: bool) -
 
 impl<'c, 'a> Markup<'c, 'a> {
     pub fn new(ctx: &'c Ctx<'a>, lang: CodeLang) -> Self {
+        let lit = LitOptions::default();
+        let mut tokens = Tokens::default();
+        if lang == CodeLang::Lit {
+            tokens.lit_prefix = Some(lit.token_prefix.clone());
+        }
         Markup {
             ctx,
             lang,
             used: Vec::new(),
             markup: String::new(),
             styles: String::new(),
-            tokens: Tokens::default(),
+            tokens,
             root_class: None,
             root_attrs: String::new(),
             v_if: None,
@@ -170,12 +188,24 @@ impl<'c, 'a> Markup<'c, 'a> {
             inline: false,
             fluid: false,
             fluid_leaves: f64::INFINITY,
+            lit,
+            lit_plain: false,
+            ids: Vec::new(),
+            lit_motion: BTreeMap::new(),
         }
     }
 
-    /// JSX and Vue templates indent by two spaces, HTML and Leptos by four.
+    /// The Lit components this markup calls, and (in Lit) its tokens, follow `opts`.
+    pub fn use_lit(&mut self, opts: &LitOptions) {
+        self.lit = opts.clone();
+        if self.lang == CodeLang::Lit {
+            self.tokens.lit_prefix = Some(opts.token_prefix.clone());
+        }
+    }
+
+    /// JSX, Vue and Lit templates indent by two spaces, HTML and Leptos by four.
     fn pad(&self, depth: usize) -> String {
-        if matches!(self.lang, CodeLang::React | CodeLang::Vue) { "  ".repeat(depth) } else { indent(depth) }
+        if matches!(self.lang, CodeLang::React | CodeLang::Vue | CodeLang::Lit) { "  ".repeat(depth) } else { indent(depth) }
     }
 
     /// Component code (React or Leptos): parameters and instances as calls.
@@ -185,7 +215,11 @@ impl<'c, 'a> Markup<'c, 'a> {
 
     /// A parameter's name in the generated code.
     fn ident(&self, p: &Param) -> String {
-        if self.lang == CodeLang::Leptos { crate::component_codegen::rust_ident(&p.ident) } else { p.ident.clone() }
+        match (self.lang, self.ctx.comp) {
+            (CodeLang::Leptos, _) => crate::component_codegen::rust_ident(&p.ident),
+            (CodeLang::Lit, Some(c)) => crate::lit::member(c, p).ident,
+            _ => p.ident.clone(),
+        }
     }
 
     /// A layer, shown only while its boolean parameter is on (component code).
@@ -203,8 +237,11 @@ impl<'c, 'a> Markup<'c, 'a> {
                 return;
             }
             let (pad, p) = (self.pad(depth), self.ident(p));
-            let (open, close) =
-                if self.lang == CodeLang::Leptos { (format!("{{{p}.then(|| view! {{"), "})}") } else { (format!("{{{p} && ("), ")}") };
+            let (open, close) = match self.lang {
+                CodeLang::Leptos => (format!("{{{p}.then(|| view! {{"), "})}"),
+                CodeLang::Lit => (format!("${{this.{p} ? html`"), "` : nothing}"),
+                _ => (format!("{{{p} && ("), ")}"),
+            };
             self.markup.push_str(&format!("{pad}{open}\n"));
             self.element(n, parent, depth + 1, path);
             self.markup.push_str(&format!("{pad}{close}\n"));
@@ -214,6 +251,10 @@ impl<'c, 'a> Markup<'c, 'a> {
     }
 
     fn rule(&mut self, path: &str, class: &str, decls: String) {
+        let decls = match self.lit_motion.get(path) {
+            Some(extra) => merge_decls(&decls, extra),
+            None => decls,
+        };
         self.styles.push_str(&format!(".{class} {{\n"));
         for line in decls.lines() {
             self.styles.push_str(&format!("  {line}\n"));
@@ -232,7 +273,12 @@ impl<'c, 'a> Markup<'c, 'a> {
             let run = if self.lang == CodeLang::Leptos { ".run()" } else { "" };
             let (inner, css) = match self.ctx.param(n, "mainComponent") {
                 Some(p) if self.lang == CodeLang::Vue => (Some(format!("{}<component :is=\"{}\" />\n", self.pad(at), self.ident(p))), String::new()),
+                Some(p) if self.lang == CodeLang::Lit => (Some(crate::lit::swap_slot(self.ctx, p, at, &self.lit)), String::new()),
                 Some(p) => (Some(format!("{}{{{}{run}}}\n", self.pad(at), self.ident(p))), String::new()),
+                None if self.lang == CodeLang::Lit => {
+                    crate::component_codegen::usage_in(self.ctx.doc, n.id, self.lang, at, &self.lit, !self.lit_plain)
+                        .map_or((None, String::new()), |(code, css)| (Some(code), css))
+                }
                 None => self.ctx.call(n, self.lang, at).map_or((None, String::new()), |(code, css)| (Some(code), css)),
             };
             self.styles.push_str(&css);
@@ -252,10 +298,53 @@ impl<'c, 'a> Markup<'c, 'a> {
         false
     }
 
+    /// Lit: a vector layer as the inline `<svg>` of its export, placed by its own rule; false for
+    /// any other layer, or a vector that doesn't export (it stays a box, with a note).
+    fn inline_vector(&mut self, n: &Node, depth: usize, path: &str, class: &str, placement: &str) -> bool {
+        if self.lang != CodeLang::Lit || !matches!(n.kind, NodeKind::Vector { .. }) {
+            return false;
+        }
+        let doc = self.ctx.doc;
+        let mut drawn = doc.in_srgb();
+        if has_image_paint(n) {
+            self.tokens.note("image-fill", Some(&n.name), "image and pattern fills are not exported: the layer is drawn without them");
+            if let Some(copy) = drawn.to_mut().node_mut(n.id) {
+                copy.fills.retain(|p| !is_image_paint(p));
+                copy.strokes.retain(|p| !is_image_paint(p));
+            }
+        }
+        for field in ["fill", "stroke"] {
+            if let Some(variable) = crate::devinspect::bound_variable(doc, n, field) {
+                let message =
+                    format!("the {field} is bound to {}: the inline SVG keeps the colour it has today and does not follow the token", variable.name);
+                self.tokens.note("vector-token-frozen", Some(&n.name), &message);
+            }
+        }
+        let options = figcraft_svg::SvgOptions { id_prefix: format!("{class}-"), ..Default::default() };
+        let Ok(svg) = figcraft_svg::try_export_svg(&drawn, &[n.id], &options) else {
+            self.tokens.note("vector-fallback", Some(&n.name), "the vector could not be exported as SVG: the layer is drawn as a plain box");
+            return false;
+        };
+        let mut own_tokens = Tokens::lit(&self.lit.token_prefix);
+        let own = css_decls(doc, n, &mut own_tokens, (false, false));
+        for u in &own_tokens.unreproducible {
+            self.tokens.note(u.code, u.layer.as_deref(), &u.message);
+        }
+        let kept = own.lines().filter(|l| l.starts_with("opacity:") || l.starts_with("mix-blend-mode:"));
+        let placed = placement.lines().filter(|l| !l.starts_with("transform"));
+        let decls: String = placed.chain(kept).map(|l| format!("{l}\n")).collect();
+        self.rule(path, class, decls);
+        let svg = svg.trim_end().replacen("<svg ", &format!("<svg class=\"{class}\" "), 1);
+        let svg = if self.lit_plain { svg } else { crate::lit::template_text(&svg) };
+        self.markup.push_str(&format!("{}{svg}\n", self.pad(depth)));
+        true
+    }
+
     fn text_body(&self, n: &Node, t: &figcraft_doc::TextData) -> String {
         match (self.ctx.param(n, "characters").filter(|_| self.code()), self.lang) {
             (Some(p), CodeLang::Leptos) => format!("{{{}.clone()}}", self.ident(p)),
             (Some(p), CodeLang::Vue) => format!("{{{{ {} }}}}", self.ident(p)),
+            (Some(p), CodeLang::Lit) => format!("${{this.{}}}", self.ident(p)),
             (Some(p), _) => format!("{{{}}}", p.ident),
             (None, CodeLang::React) => jsx_text(&t.characters),
             // `view!` takes text as string literals and void elements self-closed.
@@ -264,6 +353,8 @@ impl<'c, 'a> Markup<'c, 'a> {
             }
             // A Vue template reads `{{ }}` as interpolation, so braces are escaped.
             (None, CodeLang::Vue) => html_escape(&t.characters).replace('{', "&#123;").replace('}', "&#125;"),
+            (None, CodeLang::Lit) if self.lit_plain => html_escape(&t.characters),
+            (None, CodeLang::Lit) => crate::lit::text(&t.characters),
             (None, _) => html_escape(&t.characters),
         }
     }
@@ -284,6 +375,7 @@ impl<'c, 'a> Markup<'c, 'a> {
                 }
             }
         };
+        self.ids.push((n.id, class.clone()));
         let pad = self.pad(depth);
         let attr = if self.lang == CodeLang::React { "className" } else { "class" };
         // How it sits in its parent: in the flex flow, or placed at its position.
@@ -292,7 +384,7 @@ impl<'c, 'a> Markup<'c, 'a> {
         // Nested instances are calls (component code), in a wrapper that places them when needed.
         // Page code inlines instances, except those connected to code (codeConnect.set): their
         // snippet, e.g. a design-system `<Button>`.
-        if self.instance_call(n, depth, path, &class, &decls, root) {
+        if self.instance_call(n, depth, path, &class, &decls, root) || self.inline_vector(n, depth, path, &class, &decls) {
             return;
         }
         let hugs = n.layout.is_some() || matches!(n.kind, NodeKind::Text(_));
@@ -326,8 +418,10 @@ impl<'c, 'a> Markup<'c, 'a> {
                 let slot = self.ctx.param(n, "slot").filter(|_| self.code());
                 let vue = self.lang == CodeLang::Vue;
                 let leptos = self.lang == CodeLang::Leptos;
+                let lit = self.lang == CodeLang::Lit;
                 let open = open("div");
                 let slot_ident = slot.map(|p| match self.ctx.comp {
+                    Some(c) if lit => crate::lit::slot_name(c, p),
                     Some(c) => crate::component_codegen::slot_name(c, p),
                     None => class_name(&p.ident, "slot", &mut Vec::new()),
                 });
@@ -340,6 +434,8 @@ impl<'c, 'a> Markup<'c, 'a> {
                             Some(name) => format!("<slot name=\"{name}\" />"),
                             None => "<slot />".into(),
                         }
+                    } else if lit {
+                        format!("<slot name=\"{}\"></slot>", slot_ident.clone().unwrap_or_default())
                     } else {
                         format!("{{{}}}", p.ident)
                     };
@@ -351,7 +447,7 @@ impl<'c, 'a> Markup<'c, 'a> {
                     // A slot shows the instance's content, or else the main's.
                     let (p1, p2) = (self.pad(depth + 1), self.pad(depth + 2));
                     let inner = match slot {
-                        Some(_) if vue => {
+                        Some(_) if vue || lit => {
                             let name = slot_ident.clone().map(|n| format!(" name=\"{n}\"")).unwrap_or_default();
                             self.markup.push_str(&format!("{p1}<slot{name}>\n"));
                             depth + 2
@@ -375,7 +471,7 @@ impl<'c, 'a> Markup<'c, 'a> {
                         self.node(k, Some(n), inner, &format!("{path}/{}#{count}", kn.name));
                     }
                     match slot {
-                        Some(_) if vue => self.markup.push_str(&format!("{p1}</slot>\n")),
+                        Some(_) if vue || lit => self.markup.push_str(&format!("{p1}</slot>\n")),
                         Some(_) if leptos => self.markup.push_str(&format!("{p1}}}.into_any() }}}}\n")),
                         Some(_) => self.markup.push_str(&format!("{p2}</>\n{p1})}}\n")),
                         None => {}
@@ -385,6 +481,22 @@ impl<'c, 'a> Markup<'c, 'a> {
             }
         }
     }
+}
+
+fn is_image_paint(p: &Paint) -> bool {
+    p.visible && matches!(p.kind, PaintKind::Image(_) | PaintKind::Pattern(_))
+}
+
+fn has_image_paint(n: &Node) -> bool {
+    n.fills.iter().chain(&n.strokes).any(is_image_paint)
+}
+
+/// `decls` without the declarations `extra` sets again, then `extra`.
+fn merge_decls(decls: &str, extra: &str) -> String {
+    let property = |line: &str| line.split_once(':').map(|(p, _)| p.to_string());
+    let replaced: Vec<String> = extra.lines().filter_map(property).collect();
+    let kept = decls.lines().filter(|l| !property(l).is_some_and(|p| replaced.contains(&p)));
+    kept.chain(extra.lines()).map(|l| format!("{l}\n")).collect()
 }
 
 /// `decls` for a box that follows the page: a fixed width becomes `width: 100%` capped at that

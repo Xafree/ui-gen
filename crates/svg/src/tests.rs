@@ -277,3 +277,19 @@ fn matrix_snaps_rotation_noise_and_tiny_values() {
     assert_eq!(matrix(r), "matrix(0 1 -1 0 0 0)");
     assert_eq!(matrix(Affine::scale(1e-320)), "matrix(0 0 0 0 0 0)");
 }
+
+#[test]
+fn an_id_prefix_names_every_generated_id_and_leaves_the_default_alone() {
+    let mut d = Document::new("t");
+    let p = d.first_page().unwrap();
+    let f = d.create(p, NodeKind::Frame, "Card", 0.0, 0.0, 100.0, 100.0).unwrap();
+    d.get_mut(f).unwrap().clip = true;
+    let r = d.create(f, NodeKind::Rectangle, "R", 10.0, 10.0, 50.0, 50.0).unwrap();
+    d.get_mut(r).unwrap().fills = vec![Paint::solid(Color::from_hex("FF0000").unwrap())];
+    d.get_mut(r).unwrap().effects.push(Effect::drop_shadow());
+    let plain = export_svg(&d, &[f], &SvgOptions::default()).unwrap();
+    let prefixed = export_svg(&d, &[f], &SvgOptions { id_prefix: "mark-".into(), ..SvgOptions::default() }).unwrap();
+    assert!(plain.contains("id=\"filter") && plain.contains("id=\"clip"), "{plain}");
+    assert!(prefixed.contains("id=\"mark-filter") && prefixed.contains("url(#mark-filter") && prefixed.contains("id=\"mark-clip"), "{prefixed}");
+    assert_eq!(prefixed.replace("mark-", ""), plain, "only the ids change");
+}

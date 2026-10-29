@@ -68,3 +68,5 @@ mod session_tests;
 mod sessions_tests;
 #[cfg(test)]
 mod tls_tests;
+#[cfg(test)]
+mod token_tests;
