@@ -1,7 +1,10 @@
 use super::{
-    Arc, CJK_CHANGES, FigApp, LEFT_PANEL, MobilePanel, PANEL_DEFAULT, RIGHT_PANEL, RightTab, TOAST_SECS, ToastClock, Value, a11y, cjk, i18n, icons,
-    json, repaint_in, theme,
+    Arc, CJK_CHANGES, FigApp, LEFT_PANEL, MobilePanel, PANEL_DEFAULT, RIGHT_PANEL, RightTab, TOAST_ACTION_SECS, TOAST_SECS, ToastAction, ToastClock,
+    Value, a11y, cjk, i18n, icons, json, repaint_in, theme,
 };
+
+/// Width kept for the toast button beside its message.
+const TOAST_BUTTON_ROOM: f32 = 72.0;
 
 impl FigApp {
     /// Show what `command params` would do on the canvas as a live preview (`text.preview`) while
@@ -79,6 +82,32 @@ impl FigApp {
 
     pub fn toast(&mut self, msg: impl Into<String>) {
         self.ui.toast = Some((msg.into(), ToastClock::Raised));
+        self.ui.toast_action = None;
+    }
+
+    /// A toast with one button, `label`, that runs `command params` once. The button belongs to the
+    /// file and revision shown now: it goes as soon as another change or another file comes up.
+    /// With no file open there is nothing to act on, so the toast is a plain one.
+    pub fn toast_with_action(&mut self, msg: impl Into<String>, label: impl Into<String>, command: &str, params: Value) {
+        let current = self.session.ds().ok().map(|d| (d.uid, d.revision));
+        self.toast(msg);
+        if let Some((doc_uid, revision)) = current {
+            self.ui.toast_action = Some(ToastAction { label: label.into(), command: command.to_owned(), params, doc_uid, revision });
+        }
+    }
+
+    /// A toast offering to take the last change back (`edit.undo`).
+    pub fn toast_with_undo(&mut self, msg: impl Into<String>) {
+        self.toast_with_action(msg, i18n::tr("Undo"), "edit.undo", json!({}));
+    }
+
+    /// The toast's button is gone once the file in front or its revision is not the one it was raised in.
+    fn drop_stale_toast_action(&mut self) {
+        let Some(action) = &self.ui.toast_action else { return };
+        let current = self.session.ds().ok().map(|d| (d.uid, d.revision));
+        if self.ui.toast.is_none() || current != Some((action.doc_uid, action.revision)) {
+            self.ui.toast_action = None;
+        }
     }
 
     /// Say that `n` documents left unsaved by a crash were opened again from recovery copies.
@@ -211,6 +240,8 @@ impl FigApp {
     /// that frame and the frame that hides it, expire and remove it at the deadline, and place it
     /// at the bottom centre.
     pub(super) fn toast_ui(&mut self, ctx: &egui::Context) {
+        self.drop_stale_toast_action();
+        let lasts = if self.ui.toast_action.is_some() { TOAST_ACTION_SECS } else { TOAST_SECS };
         let Some((msg, clock)) = &mut self.ui.toast else { return };
         let now = ctx.input(|i| i.time);
         // The clock starts on the frame after the one that first draws the toast: that frame's
@@ -220,16 +251,17 @@ impl FigApp {
             ToastClock::Raised => {
                 *clock = ToastClock::Drawn;
                 ctx.request_repaint();
-                TOAST_SECS
+                lasts
             }
             ToastClock::Drawn => {
                 *clock = ToastClock::Since(now);
-                TOAST_SECS
+                lasts
             }
-            ToastClock::Since(t) => TOAST_SECS - (now - t),
+            ToastClock::Since(t) => lasts - (now - t),
         };
         if left <= 0.0 {
             self.ui.toast = None;
+            self.ui.toast_action = None;
             return;
         }
         let msg = msg.clone();
@@ -238,6 +270,9 @@ impl FigApp {
             repaint_in(ctx, left);
         }
         let screen = ctx.content_rect();
+        let label = self.ui.toast_action.as_ref().map(|a| a.label.clone());
+        let accent = theme::Tokens::get(ctx).accent;
+        let mut clicked = false;
         egui::Area::new(egui::Id::unique("toast"))
             .fixed_pos(egui::pos2(screen.center().x, screen.max.y - 96.0))
             .pivot(egui::Align2::CENTER_BOTTOM)
@@ -250,9 +285,27 @@ impl FigApp {
                     .show(ui, |ui| {
                         // Wrapped at a readable width (the area alone would wrap at a sliver).
                         let width = (screen.width() - 64.0).clamp(120.0, 480.0);
-                        let galley = ui.painter().layout(msg, theme::regular(12.0), egui::Color32::WHITE, width);
-                        ui.label(galley);
+                        let Some(label) = &label else {
+                            let galley = ui.painter().layout(msg, theme::regular(12.0), egui::Color32::WHITE, width);
+                            ui.label(galley);
+                            return;
+                        };
+                        ui.horizontal(|ui| {
+                            let galley = ui.painter().layout(msg, theme::regular(12.0), egui::Color32::WHITE, width - TOAST_BUTTON_ROOM);
+                            ui.label(galley);
+                            ui.add_space(8.0);
+                            let button = egui::Button::new(egui::RichText::new(label).font(theme::regular(12.0)).color(accent))
+                                .frame(false)
+                                .min_size(egui::vec2(0.0, 24.0));
+                            let resp = ui.add(button).on_hover_cursor(egui::CursorIcon::PointingHand);
+                            a11y::named_button(&resp, label);
+                            clicked = resp.clicked();
+                        });
                     });
             });
+        if clicked && let Some(action) = self.ui.toast_action.take() {
+            self.ui.toast = None;
+            self.run(&action.command, action.params);
+        }
     }
 }

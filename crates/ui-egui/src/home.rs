@@ -331,11 +331,22 @@ fn action_card(ui: &mut Ui, t: &Tokens, icon: Icon, title: &str, sub: &str) -> b
 fn recents(app: &mut FigApp, ui: &mut Ui, t: &Tokens) {
     heading(ui, t, tr("Recents"));
     let (mut new_file, mut new_board, mut open) = (false, false, false);
+    #[cfg(not(target_arch = "wasm32"))]
+    let (mut open_project, mut new_project) = (false, false);
     ui.horizontal_wrapped(|ui| {
         new_file = action_card(ui, t, Icon::PenNib, tr("New design file"), tr("Start from a blank canvas"));
         new_board = action_card(ui, t, Icon::Board, tr("New board"), tr("Sticky notes, shapes and connectors"));
         open = action_card(ui, t, Icon::Page, tr("Open file"), tr("Open .figcraft, .svg or images"));
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            open_project = action_card(ui, t, Icon::Library, tr("Open project"), tr("A folder with uigen.json"));
+            new_project = action_card(ui, t, Icon::Plus, tr("New library project"), tr("Start a project in an empty folder"));
+        }
     });
+    #[cfg(not(target_arch = "wasm32"))]
+    if open_project || new_project {
+        app.open_project_dialog(new_project);
+    }
     if new_file || new_board {
         app.run(if new_board { "file.newBoard" } else { "file.new" }, json!({}));
         app.ui.home = false;

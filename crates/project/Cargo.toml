@@ -1,0 +1,17 @@
+[package]
+name = "figcraft-project"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "UIGEN library project file: uigen.json model, validation, JSON round-trip and component naming"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

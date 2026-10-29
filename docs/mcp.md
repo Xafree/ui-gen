@@ -78,7 +78,7 @@ Each may be given more than once, as `--flag DIR` or `--flag=DIR`:
   every command that names a file: `file.open`, `file.openRecent` (recent files outside the roots
   are never listed, opened, removed or named: `index` counts the files listed), `file.import`,
   `file.placeImage`, `image.place`, `file.save`, `file.saveAs`, `file.revert`, `file.recover`,
-  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, the images and variables JSON read next to an imported REST API
+  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, `project.open` and `project.update` (the project folder and its `uigen.json`), the images and variables JSON read next to an imported REST API
   file, `library.add` and the library files open documents link to, `variable.import` /
   `variable.export`, `codeConnect.import` / `codeConnect.export`, `component.playground {path}`,
   `plugin.import {path}`, a development plugin's module read again from disk,
@@ -569,8 +569,9 @@ on; `key` resolves keys the way the canvas does. Commands behind keys:
   matching), `` $` `` and `$'` the text before and after the match, `$1`…`$9` groups, `$n` a number
   counting up from `start` (default 1), `$N` one counting down to it, `$nnn` padded to three digits,
   `$$` a dollar sign. Layers are numbered in stacking order, bottom first. Returns `{names}`.
-- Pages: `page.add {name?}` (a name starting with `-` adds a divider: an empty page shown as a line
-  in the pages list, never opened and holding no layers), `page.list` (each page's `divider`),
+- Pages: `page.add {name?, template?}` (a name starting with `-` adds a divider: an empty page shown as a line
+  in the pages list, never opened and holding no layers; `template`, up to 200 characters, only counts in a
+  [library project](#library-projects)), `page.list` (each page's `divider`),
   `page.rename`, `page.move {id, index}`, `page.duplicate` ("Copy of …", after its source, with its colour,
   flows (starting at the copied frames), prototype settings and guides),
   `page.delete` (the last page that isn't a divider stays).
@@ -785,6 +786,37 @@ in `inspect_ui` (`presenter`, `preview`: screen, scroll, `scale`, `zoom`, `pan`,
 The presenter's Options menu offers Responsive next to the size options (without a device) or
 Responsive / Fixed size (on one), the same `proto.settings {responsive}`; its flow picker lists each
 flow with its description.
+
+### Library projects
+
+A folder with a `uigen.json` and the `.figcraft` files it lists (`designFiles`, default `["lib.figcraft"]`) is a
+library project. Every tab opened from one of those files belongs to the project, however it was opened;
+`file.open` of a file the manifest of its folder lists binds it too (the file name matches whatever its case).
+The manifest is read and written only through the automation roots, and the commands never open a dialog.
+
+- `project.open {path, create?, firstComponent?}`: open every design file of the folder in a tab bound to the
+  project (an open file is reused, the first file becomes the current tab). Returns `{opened: true, created, root,
+  name, index, files: [{name, index}]}`, or `{opened: false, missing: true, root}` for a folder with no
+  `uigen.json` (nothing is written). With `create: true` the folder gets `uigen.json` (named after the folder), a
+  `.uigen` work folder and a `lib.figcraft` of one page named `firstComponent` (default `Component 1`; never
+  overwrites anything, and writes the manifest last). An invalid manifest or a missing design file is refused,
+  naming the file and the cause, and opens nothing. Not undoable.
+- `project.info {}`: `{project: null | {root, name, designFiles, tagPrefix, litOutDir, appliedTheme, sources},
+  components: [{page, name, empty, layers}]}`; `project` is `null` for an ordinary file. `components` lists the
+  pages that don't start with a hyphen, in order; `layers` counts the top-level layers that don't carry a
+  `uigen.role` of `reference` or `note` in their plugin data, and `empty` is `layers == 0`.
+- `project.update {name?, tagPrefix?, litOutDir?, appliedTheme?}`: read the manifest again, change those fields
+  (`appliedTheme: null` clears it), validate and rewrite it, keeping `sources` and every key it doesn't know; every
+  tab of the project sees the change. A value that fails validation is refused naming the field, and the file is
+  left alone. Not undoable.
+- `project.openFolder {}` and `project.newFolder {}`: ask the interface for a folder to open as a project, or to
+  start one in (Home's "Open project" and "New library project"); a programmatic call opens no dialog.
+
+In a project every page is a component: `page.add {name?, template?}` names the new page `Component N` (or
+`template` with `{n}` for the counter), `page.rename` refuses a blank name, `page.duplicate` takes a free
+`Copy of …` name (then ` 2`, ` 3`…), `page.rename` and `page.add {name}` refuse a name another component has (case
+apart), and `page.delete` refuses the last component. A page whose name starts with `-` is a divider and never a
+component, whether or not it holds layers. Outside a project none of this applies.
 
 ### Local libraries
 

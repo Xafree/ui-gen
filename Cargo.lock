@@ -1709,6 +1709,7 @@ dependencies = [
  "figcraft-pathops",
  "figcraft-pdf",
  "figcraft-plugin",
+ "figcraft-project",
  "figcraft-render",
  "figcraft-svg",
  "figcraft-text",
@@ -1810,6 +1811,16 @@ dependencies = [
  "thiserror 2.0.21",
  "wasmi",
  "wat",
+]
+
+[[package]]
+name = "figcraft-project"
+version = "0.12.1"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

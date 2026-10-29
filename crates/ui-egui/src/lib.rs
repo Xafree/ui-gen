@@ -177,6 +177,8 @@ mod proto_reorder_tests;
 #[cfg(test)]
 mod proto_responsive_tests;
 #[cfg(test)]
+mod rail_components_tests;
+#[cfg(test)]
 mod resources_tests;
 #[cfg(test)]
 mod save_as_tests;
@@ -192,6 +194,15 @@ mod style_folder_rename_tests;
 mod text_enter_tests;
 #[cfg(test)]
 mod titlebar_tests;
+#[cfg(test)]
+mod toast_action_tests;
+
+#[cfg(test)]
+mod project_divider_ui_tests;
+#[cfg(test)]
+mod project_open_tests;
+#[cfg(test)]
+mod project_pages_ui_tests;
 #[cfg(test)]
 mod ui_scale_tests;
 #[cfg(test)]
@@ -284,7 +295,7 @@ mod services;
 mod state;
 
 pub(crate) use clock::repaint_in;
-pub use clock::{AUTO_SAVE_SECS, AUTOSAVE_SECS, FrameClock, ToastClock};
+pub use clock::{AUTO_SAVE_SECS, AUTOSAVE_SECS, FrameClock, ToastAction, ToastClock};
 pub(crate) use open::{drop_overlay, dropped_bytes, is_document, opens};
 pub use services::{ContentsFuture, DialogFuture, NoServices, ReadFuture, Services, browser_can_read, egui_copy_png, egui_copy_text, unreadable};
 use services::{DialogDone, PickFuture, Picked, RepaintWaker};
@@ -385,6 +396,8 @@ pub struct UiState {
     pub icon_gallery: bool,
     /// A message at the bottom of the window and how long it has been showing.
     pub toast: Option<(String, ToastClock)>,
+    /// The button the toast carries, while it applies to the file it was raised in.
+    pub toast_action: Option<ToastAction>,
     pub present: Option<present::Presenter>,
     pub presents: Vec<present::PresentTab>,
     /// The tab shown last. It is on screen while `present` has a value.
@@ -565,6 +578,7 @@ impl Default for UiState {
             title_bar: TitleBar::Native,
             icon_gallery: false,
             toast: None,
+            toast_action: None,
             present: None,
             presents: Vec::new(),
             present_active: None,

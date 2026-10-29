@@ -13,6 +13,20 @@ pub(crate) const AUTO_SAVE_RETRY_SECS: f64 = 60.0;
 /// How long a toast shows (seconds).
 pub(crate) const TOAST_SECS: f64 = 3.0;
 
+/// How long a toast with an action button shows (seconds): time to read it and reach the button.
+pub(crate) const TOAST_ACTION_SECS: f64 = 8.0;
+
+/// The button a toast carries ([`UiState::toast_action`]): a command to run on click, good only
+/// for the file and revision the toast was raised in.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ToastAction {
+    pub label: String,
+    pub command: String,
+    pub params: serde_json::Value,
+    pub doc_uid: u64,
+    pub revision: u64,
+}
+
 /// How long a toast has been showing ([`UiState::toast`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ToastClock {

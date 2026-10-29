@@ -45,7 +45,34 @@ pub struct Lang {
 include!(concat!(env!("OUT_DIR"), "/locales.rs"));
 
 /// Index into [`LANGS`] of the language the UI shows (0: English).
+#[cfg(not(test))]
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
+
+// Tests run in parallel threads and switch languages, so each test thread keeps its own.
+#[cfg(test)]
+thread_local! {
+    static CURRENT: AtomicUsize = const { AtomicUsize::new(0) };
+}
+
+#[cfg(not(test))]
+fn current_index() -> usize {
+    CURRENT.load(Ordering::Relaxed)
+}
+
+#[cfg(test)]
+fn current_index() -> usize {
+    CURRENT.with(|c| c.load(Ordering::Relaxed))
+}
+
+#[cfg(not(test))]
+fn store_index(i: usize) {
+    CURRENT.store(i, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+fn store_index(i: usize) {
+    CURRENT.with(|c| c.store(i, Ordering::Relaxed));
+}
 
 /// The languages the UI can show, English first.
 pub fn languages() -> &'static [Lang] {
@@ -54,13 +81,13 @@ pub fn languages() -> &'static [Lang] {
 
 /// The language the UI shows.
 pub fn current() -> Option<&'static Lang> {
-    LANGS.get(CURRENT.load(Ordering::Relaxed))
+    LANGS.get(current_index())
 }
 
 /// Show the language of `pref` (a language code, or "system" for `system`, the OS or browser
 /// languages, most preferred first and comma-separated). Unknown languages show English.
 pub fn set(pref: &str, system: Option<&str>) {
-    CURRENT.store(resolve(pref, system), Ordering::Relaxed);
+    store_index(resolve(pref, system));
 }
 
 /// The [`LANGS`] index for a preference: the first language in it the UI has, else English.
@@ -115,7 +142,7 @@ pub fn tr(key: &str) -> &str {
 /// [`tr`] for text that comes from data and may have no catalog entry (an importer's notes, say):
 /// `None` when the catalog doesn't have it.
 pub fn try_tr(key: &str) -> Option<&str> {
-    match lookup(CURRENT.load(Ordering::Relaxed), key)? {
+    match lookup(current_index(), key)? {
         Text::Plain(s) | Text::Plural { other: s, .. } => Some(s),
     }
 }
@@ -133,7 +160,7 @@ pub fn trf(key: &str, args: &[(&str, &dyn Display)]) -> String {
 
 /// The plural form of `key` (its English "other" form) for count `n`, with `{n}` and `args` filled.
 pub fn trn(key: &str, n: usize, args: &[(&str, &dyn Display)]) -> String {
-    let lang = CURRENT.load(Ordering::Relaxed);
+    let lang = current_index();
     let text = counted(lang, key, n);
     let mut all: Vec<(&str, &dyn Display)> = vec![("n", &n)];
     all.extend_from_slice(args);
@@ -232,7 +259,7 @@ pub fn menu_item<'a>(id: &str, english: &'a str) -> Cow<'a, str> {
 }
 
 fn label<'a>(menu: bool, id: &str, english: &'a str) -> Cow<'a, str> {
-    let text = chain(CURRENT.load(Ordering::Relaxed)).find_map(|l| menu.then(|| find(l.menu, id)).flatten().or_else(|| find(l.commands, id)));
+    let text = chain(current_index()).find_map(|l| menu.then(|| find(l.menu, id)).flatten().or_else(|| find(l.commands, id)));
     match text {
         Some(Text::Plain(s) | Text::Plural { other: s, .. }) if english.ends_with('…') && !s.ends_with('…') => Cow::Owned(format!("{s}…")),
         Some(Text::Plain(s) | Text::Plural { other: s, .. }) => Cow::Borrowed(s),
