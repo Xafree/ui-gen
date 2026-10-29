@@ -26,6 +26,17 @@ impl Session {
     pub fn in_lib_project(&self) -> bool {
         self.project().is_some()
     }
+
+    /// Give every tab of the project in folder `root` the manifest `config`.
+    pub(crate) fn rebind_project(&mut self, root: &str, config: Project) -> Arc<ProjectBinding> {
+        let updated = Arc::new(ProjectBinding { root: root.to_string(), config });
+        for ds in &mut self.docs {
+            if ds.project.as_ref().is_some_and(|b| file_access::same_file(&b.root, root)) {
+                ds.project = Some(Arc::clone(&updated));
+            }
+        }
+        updated
+    }
 }
 
 pub(crate) fn manifest_path(root: &str) -> PathBuf {

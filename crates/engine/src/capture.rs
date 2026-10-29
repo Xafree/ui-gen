@@ -2,7 +2,6 @@
 //! their components. The engine never starts a process; the desktop apps install an adapter
 //! (`figcraft-capture`) with [`Session::set_capture_backend`], the browser build installs none.
 
-use std::collections::HashMap;
 use std::fmt;
 
 use serde_json::Value;
@@ -67,17 +66,60 @@ pub struct CaptureEvent {
     pub outcome: CaptureOutcome,
 }
 
+const MAX_FINISHED_JOBS: usize = 100;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum JobState {
+    Queued,
+    Running,
+    Done,
+    Failed(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct JobStatus {
+    pub job: JobId,
+    pub command: String,
+    pub package: String,
+    pub state: JobState,
+}
+
+struct JobRecord {
+    id: JobId,
+    command: String,
+    package: String,
+    root: String,
+    finished: Option<Result<(), String>>,
+}
+
+impl CaptureJob {
+    fn root(&self) -> &str {
+        match self {
+            Self::Install { root, .. } | Self::Uninstall { root, .. } | Self::Inspect { root, .. } | Self::Render { root, .. } => root,
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct Capture {
     backend: Option<Box<dyn CaptureBackend>>,
-    pending: HashMap<JobId, (String, String)>,
+    jobs: Vec<JobRecord>,
 }
 
 impl Capture {
     fn stop(&mut self) {
-        self.pending.clear();
+        self.jobs.retain(|record| record.finished.is_some());
         if let Some(mut backend) = self.backend.take() {
             backend.shutdown();
+        }
+    }
+
+    fn forget_oldest_finished(&mut self) {
+        let finished = self.jobs.iter().filter(|record| record.finished.is_some()).count();
+        for _ in MAX_FINISHED_JOBS..finished {
+            if let Some(oldest) = self.jobs.iter().position(|record| record.finished.is_some()) {
+                self.jobs.remove(oldest);
+            }
         }
     }
 }
@@ -97,25 +139,64 @@ impl Session {
     pub fn submit_capture(&mut self, command: &str, package: &str, job: CaptureJob) -> Result<JobId, CaptureError> {
         let capture = &mut self.capture;
         let Some(backend) = capture.backend.as_mut() else {
-            return Err(CaptureError { kind: CaptureErrorKind::Unavailable, message: "capture service unavailable".to_string() });
+            return Err(CaptureError { kind: CaptureErrorKind::Unavailable, message: unavailable_message().to_string() });
         };
+        let root = job.root().to_string();
         let id = backend.submit(job);
-        capture.pending.insert(id, (command.to_string(), package.to_string()));
+        capture.jobs.push(JobRecord { id, command: command.to_string(), package: package.to_string(), root, finished: None });
         Ok(id)
     }
 
+    /// Bring back the jobs the service finished. A finished install or uninstall of a source is
+    /// applied to `uigen.json` first; one that can't be applied comes out as a failure.
     pub fn pump_capture(&mut self) -> Vec<CaptureEvent> {
-        let capture = &mut self.capture;
-        let Some(backend) = capture.backend.as_mut() else {
+        let Some(backend) = self.capture.backend.as_mut() else {
             return Vec::new();
         };
-        backend
-            .poll()
-            .into_iter()
-            .filter_map(|(job, outcome)| {
-                let (command, package) = capture.pending.remove(&job)?;
-                Some(CaptureEvent { job, command, package, outcome })
+        let mut events = Vec::new();
+        for (job, outcome) in backend.poll() {
+            let Some(record) = self.capture.jobs.iter().find(|record| record.id == job && record.finished.is_none()) else {
+                continue;
+            };
+            let (command, package, root) = (record.command.clone(), record.package.clone(), record.root.clone());
+            let outcome = outcome.and_then(|value| {
+                crate::cmd::project_sources::apply(self, &command, &package, &root, &value)
+                    .map(|()| value)
+                    .map_err(|e| CaptureError { kind: CaptureErrorKind::Internal, message: e.to_string() })
+            });
+            if let Some(record) = self.capture.jobs.iter_mut().find(|record| record.id == job) {
+                record.finished = Some(outcome.as_ref().map(|_| ()).map_err(|e| e.message.clone()));
+            }
+            events.push(CaptureEvent { job, command, package, outcome });
+        }
+        self.capture.forget_oldest_finished();
+        events
+    }
+
+    pub(crate) fn capture_jobs(&self) -> Vec<JobStatus> {
+        let mut running = true;
+        self.capture
+            .jobs
+            .iter()
+            .map(|record| {
+                let state = match &record.finished {
+                    Some(Ok(())) => JobState::Done,
+                    Some(Err(message)) => JobState::Failed(message.clone()),
+                    None if std::mem::take(&mut running) => JobState::Running,
+                    None => JobState::Queued,
+                };
+                JobStatus { job: record.id, command: record.command.clone(), package: record.package.clone(), state }
             })
             .collect()
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn unavailable_message() -> &'static str {
+    "capture service unavailable in the browser"
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn unavailable_message() -> &'static str {
+    "capture service not available"
 }

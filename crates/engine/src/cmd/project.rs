@@ -256,11 +256,6 @@ fn update(s: &mut Session, p: &Value) -> Result<Value> {
     }
     config.validate().map_err(|e| bad(UPDATE, format!("{FILE_NAME}: {e}")))?;
     project::save(&binding.root, &config)?;
-    let updated = Arc::new(ProjectBinding { root: binding.root.clone(), config });
-    for ds in &mut s.docs {
-        if ds.project.as_ref().is_some_and(|b| file_access::same_file(&b.root, &updated.root)) {
-            ds.project = Some(Arc::clone(&updated));
-        }
-    }
+    let updated = s.rebind_project(&binding.root, config);
     Ok(json!({"project": describe(&updated)?}))
 }
