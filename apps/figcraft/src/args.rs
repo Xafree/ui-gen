@@ -5,8 +5,9 @@
 //! Linux desktop entry passes URLs, `%U`, so that it can also hand over invite links). Any other
 //! `--flag` is unknown and stops the app at startup (#836): a mistyped root flag must never leave
 //! the app running unconfined. After a bare `--` (how the Windows URL handler passes the link, so a
-//! link holding a quote can never add an option) nothing is an option: an invite link still joins
-//! and every other argument is a file.
+//! link holding a quote can never add an option) nothing is an option. An invite link there stands
+//! alone: it joins and every other argument is dropped (`ignored`), since a launcher that does not
+//! escape a quote can split one link into a link and a file; without a link every argument is a file.
 
 /// What the app was started with.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -23,6 +24,8 @@ pub struct Args {
     pub write_roots: Vec<String>,
     /// `--flags` the app doesn't know, as given.
     pub unknown: Vec<String>,
+    /// What came after `--` next to an invite link and was dropped: an invite link stands alone.
+    pub ignored: Vec<String>,
 }
 
 /// An invite link rather than a file (`figcraft:` links, in any case).
@@ -76,12 +79,13 @@ pub fn parse(args: &[String]) -> Args {
     let mut it = args.iter();
     while let Some(a) = it.next() {
         if a == "--" {
-            for rest in it.by_ref() {
-                if is_invite(rest) {
-                    out.join = Some(rest.clone());
-                } else {
-                    out.files.push(rest.clone());
+            let rest: Vec<String> = it.by_ref().cloned().collect();
+            match rest.iter().rposition(|a| is_invite(a)) {
+                Some(link) => {
+                    out.ignored = rest.iter().enumerate().filter(|(i, _)| *i != link).map(|(_, a)| a.clone()).collect();
+                    out.join = rest.into_iter().nth(link);
                 }
+                None => out.files.extend(rest),
             }
             break;
         }

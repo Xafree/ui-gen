@@ -35,6 +35,8 @@ mod startup;
 #[cfg(all(test, target_os = "macos"))]
 mod apple_events_tests;
 #[cfg(test)]
+mod args_invite_tests;
+#[cfg(test)]
 mod args_tests;
 #[cfg(test)]
 mod graphics_tests;
@@ -156,6 +158,11 @@ fn main() -> eframe::Result {
             "UIGEN: unknown option {flag}\nUsage: uigen [--control PORT] [--automation-read-root DIR]... [--automation-write-root DIR]... [FILE | figcraft://join?...]..."
         );
         std::process::exit(2);
+    }
+    if args.join.is_some() && !args.ignored.is_empty() {
+        let ignored = format!("{:?}", args.ignored);
+        log::warn!("UIGEN: started with an invite link: ignoring the other arguments after `--`: {ignored}");
+        eprintln!("UIGEN: an invite link stands alone: ignoring the other arguments after `--`: {ignored}");
     }
     let port = args::control_port(&args, std::env::var("FIGCRAFT_CONTROL_PORT").ok().as_deref());
     if let Err(message) = args::require_roots_for_control(port, &args) {
