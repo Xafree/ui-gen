@@ -77,8 +77,11 @@ pub fn decode_data(v: &Value) -> Result<Vec<u8>, String> {
     base64::engine::general_purpose::STANDARD.decode(d.trim()).map_err(|e| format!("bad base64 from the app: {e}"))
 }
 
-/// How long a new connection waits for the app to refuse its token.
-const AUTH_ANSWER_WINDOW: Duration = Duration::from_millis(150);
+/// How long a new connection waits for the app to acknowledge or refuse its token.
+const AUTH_ANSWER_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// What the app answers to a connection it has no room for.
+const FULL_REFUSAL: &str = "too many connections";
 
 /// The variable that gives the control channel's session token, ahead of the app's token file.
 pub const TOKEN_ENV: &str = "FIGCRAFT_CONTROL_TOKEN";
@@ -117,6 +120,26 @@ pub fn control_token(port: u16) -> Result<String, String> {
     control_token_from(env.as_deref(), figcraft_engine::control_token::config_dir().as_deref(), port)
 }
 
+fn closed_after_token() -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::ConnectionAborted, "the app closed the connection (too many connections or not authenticated)")
+}
+
+/// The app's answer to the token line: `Ok` for its acknowledgement, else the reason it gave.
+fn check_acknowledgement(answer: &str) -> std::io::Result<()> {
+    let Ok(v) = serde_json::from_str::<Value>(answer.trim()) else {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("bad answer from the app after the token: {}", answer.trim())));
+    };
+    if v.get("ok").and_then(Value::as_bool) == Some(true) {
+        return Ok(());
+    }
+    let reason = v.get("error").and_then(Value::as_str).unwrap_or("no reason given");
+    if reason == FULL_REFUSAL {
+        return Err(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, format!("the app has no connection left for this client ({reason})")));
+    }
+    let message = if reason.starts_with("authentication failed") { reason.to_string() } else { format!("authentication failed: {reason}") };
+    Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, message))
+}
+
 /// A running FigCraft app, reached through its loopback control port (`uigen --control PORT`),
 /// which answers only a connection whose first line is `{"auth": "<session token>"}`.
 pub struct Attached {
@@ -128,8 +151,8 @@ pub struct Attached {
 
 impl Attached {
     /// Connect to `addr` (e.g. `127.0.0.1:7979`) with the app's session `token`, failing fast when
-    /// nothing is listening. A wrong token shows on the first call, the app answering it with an
-    /// error.
+    /// nothing is listening. The app acknowledges a good token and refuses a wrong one, so the
+    /// error is reported here rather than on the first call.
     pub fn connect(addr: &str, token: &str) -> std::io::Result<Self> {
         let mut r = Self { addr: addr.to_string(), token: token.to_string(), conn: None, next_id: 1 };
         r.reconnect()?;
@@ -161,24 +184,28 @@ impl Attached {
         Err(last)
     }
 
-    /// Send the token as the first line. The app says nothing when it accepts it and answers an
-    /// error, then closes, when it doesn't: a short wait for that answer reports a wrong token
-    /// here rather than as a lost connection on the first request.
+    /// Send the token as the first line and read the app's one-line answer: `ok` when it accepts
+    /// the token, an error (then it closes) when it doesn't or has no connection left. A closed
+    /// connection with no line is reported as such.
     fn authenticate(&self, writer: TcpStream) -> std::io::Result<(BufReader<TcpStream>, TcpStream)> {
         let mut writer = writer;
         let mut reader = BufReader::new(writer.try_clone()?);
         writeln!(writer, "{}", json!({"auth": self.token}))?;
         writer.flush()?;
-        reader.get_ref().set_read_timeout(Some(AUTH_ANSWER_WINDOW))?;
+        reader.get_ref().set_read_timeout(Some(AUTH_ANSWER_TIMEOUT))?;
         let mut answer = String::new();
         match reader.read_line(&mut answer) {
-            Ok(0) => return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "the app closed the connection after the token")),
-            Ok(_) => {
-                let reason =
-                    serde_json::from_str::<Value>(answer.trim()).ok().and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_string));
-                return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, reason.unwrap_or_else(|| answer.trim().to_string())));
+            Ok(0) => return Err(closed_after_token()),
+            Ok(_) => check_acknowledgement(&answer)?,
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted) => {
+                return Err(closed_after_token());
             }
-            Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!("the app did not answer the token within {} s", AUTH_ANSWER_TIMEOUT.as_secs()),
+                ));
+            }
             Err(e) => return Err(e),
         }
         // The app answers a request within 60 s (its own timeout); leave headroom.

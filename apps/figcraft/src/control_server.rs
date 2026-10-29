@@ -19,6 +19,11 @@ const TOKEN_BYTES: usize = 32;
 const MAX_CONNECTIONS: usize = 8;
 const MAX_QUEUED_REQUESTS: usize = 8;
 const TIMEOUT: Duration = Duration::from_secs(60);
+/// How long a new connection has to send its token line: far shorter than a request's wait, so a
+/// silent client cannot hold one of the few connection slots for a minute.
+const AUTH_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long the refusal sent to a client over the connection limit may take to write.
+const REFUSAL_TIMEOUT: Duration = Duration::from_secs(1);
 /// How long the accepting thread waits after a failed accept. Accepting can keep failing, for
 /// example while the process has no file descriptors left, and retrying at once would keep a
 /// core busy until it recovers.
@@ -147,6 +152,7 @@ fn spawn_connection(
 ) {
     workers.retain(|worker| !worker.is_finished());
     if workers.len() >= MAX_CONNECTIONS {
+        refuse(stream);
         return;
     }
     match std::thread::Builder::new().name("figcraft-control-conn".into()).spawn(move || {
@@ -154,6 +160,17 @@ fn spawn_connection(
     }) {
         Ok(worker) => workers.push(worker),
         Err(e) => log::error!("control connection thread: {e}"),
+    }
+}
+
+/// Tell a client the app has no connection left for it, then close: the answer lets it report why
+/// instead of a bare closed connection. Best effort, since the client may already be gone.
+fn refuse(mut stream: TcpStream) {
+    let refusal = stream
+        .set_write_timeout(Some(REFUSAL_TIMEOUT))
+        .and_then(|()| writeln!(stream, "{}", json!({"id": null, "ok": false, "error": "too many connections"})));
+    if let Err(e) = refusal {
+        log::debug!("control connection refused without telling the client why: {e}");
     }
 }
 
@@ -183,11 +200,15 @@ fn read_frame(reader: &mut BufReader<TcpStream>, line: &mut Vec<u8>, limit: usiz
     }
 }
 
-/// The first line of a connection must be `{"auth": "<token>"}`. Anything else ends it before any
-/// request is read.
+/// The first line of a connection must be `{"auth": "<token>"}` and is answered with one
+/// acknowledgement line. Anything else ends the connection before any request is read.
 fn authenticated(reader: &mut BufReader<TcpStream>, out: &mut TcpStream, timeout: Duration, token: &str) -> std::io::Result<bool> {
     let mut line = Vec::new();
     if read_frame(reader, &mut line, MAX_AUTH_LINE, timeout)? == 0 {
+        return Ok(false);
+    }
+    if line.len() > MAX_AUTH_LINE && line.last() != Some(&b'\n') {
+        let _ = writeln!(out, "{}", json!({"id": null, "ok": false, "error": "authentication failed: the first line is longer than 1 KiB"}));
         return Ok(false);
     }
     let given = std::str::from_utf8(&line).ok().and_then(|l| serde_json::from_str::<Value>(l).ok()).and_then(|v| match v {
@@ -195,20 +216,21 @@ fn authenticated(reader: &mut BufReader<TcpStream>, out: &mut TcpStream, timeout
         _ => None,
     });
     if given.is_some_and(|given| token_matches(token, &given)) {
+        writeln!(out, "{}", json!({"id": null, "ok": true, "result": "authenticated"}))?;
         return Ok(true);
     }
     let _ = writeln!(out, "{}", json!({"id": null, "ok": false, "error": "authentication failed: the first line must be {\"auth\": \"<token>\"}"}));
     Ok(false)
 }
 
-/// Serve one control connection: check the token, then read bounded JSON lines, reject oversized
+/// Serve one control connection: check the token (within [`AUTH_TIMEOUT`], or `timeout` if shorter) and acknowledge it, then read bounded JSON lines, reject oversized
 /// frames and a full queue, queue one request, wait under its gate, and write one reply. Non-JSON
 /// input answers with an error and closes the connection so HTTP body lines cannot become commands.
 fn serve(mut out: TcpStream, queue: Queue, ctx: CtxSlot, timeout: Duration, token: &str) -> std::io::Result<()> {
     out.set_read_timeout(Some(timeout))?;
     out.set_write_timeout(Some(timeout))?;
     let mut reader = BufReader::new(out.try_clone()?);
-    if !authenticated(&mut reader, &mut out, timeout, token)? {
+    if !authenticated(&mut reader, &mut out, timeout.min(AUTH_TIMEOUT), token)? {
         return Ok(());
     }
     let mut line = Vec::new();
@@ -273,6 +295,9 @@ fn serve(mut out: TcpStream, queue: Queue, ctx: CtxSlot, timeout: Duration, toke
     Ok(())
 }
 
+#[cfg(test)]
+#[path = "control_server_auth_tests.rs"]
+mod auth_tests;
 #[cfg(test)]
 #[path = "control_server_tests.rs"]
 mod tests;

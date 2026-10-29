@@ -7,7 +7,8 @@
 //! - [`Headless`] hosts an in-process [`figcraft_engine::Session`] and answers the control-channel
 //!   methods itself (rendering with `figcraft-render`), so agents can design without a window.
 //! - [`Attached`] talks to a running desktop app through its loopback JSON-lines control channel
-//!   (`uigen --control PORT`, which needs a file root and gives a session token): one `{"id","method","params"}` line in, one
+//!   (`uigen --control PORT`, which needs a file root and gives a session token, sent as a first
+//!   `{"auth"}` line that the app acknowledges): one `{"id","method","params"}` line in, one
 //!   `{"id","ok","result"|"error"}` line out.
 //!
 //! Entry points: [`Server::serve`] (stdio loop) and [`Server::handle_line`] (one message).

@@ -21,14 +21,18 @@ its configuration folder (`%APPDATA%\FigCraft`, `~/Library/Application Support/F
 Starting again replaces the token. If the system has no secure random numbers the channel does not
 start.
 
-The **first line** of every connection must be exactly `{"auth": "<token>"}`. The app answers
-nothing when it matches and the connection then takes requests as below. Any other first line (a
-command, a wrong token, an HTTP request) gets `{"id": null, "ok": false, "error": "authentication
-failed: …"}` and the connection is closed without reading or running anything else. The token is
-compared in constant time, and the first line is limited to 1 KiB.
+The **first line** of every connection must be exactly `{"auth": "<token>"}`, and must arrive within
+**5 s** of the connection opening. When it matches, the app answers one acknowledgement line,
+`{"id": null, "ok": true, "result": "authenticated"}`, and the connection then takes requests as below;
+a client reads that line before its first request (it may already have written the request: the app
+reads it only after the acknowledgement). Any other first line (a command, a wrong token, an HTTP
+request) gets `{"id": null, "ok": false, "error": "authentication failed: …"}` and the connection is
+closed without reading or running anything else. The token is compared in constant time, and the
+first line is limited to 1 KiB (a longer one is refused, whatever it holds).
 
 ```text
 {"auth": "<token>"}
+{"id": null, "ok": true, "result": "authenticated"}
 {"id": 1, "method": "ui.inspect", "params": {}}
 ```
 
@@ -50,8 +54,9 @@ HTTP request a web page makes the browser send here never runs). The implementat
 A request line is limited to **32 MiB before the newline**, including whitespace. The reader stops
 at the first excess byte, replies `{"id": null, "ok": false, "error": "message too large"}`, then
 closes the connection without consuming the rest of the frame. The server accepts at most **8
-active connections**; additional connections are closed immediately. Waiting for a line (the
-first one included) has a **60 s deadline in total**, fixed when the wait starts and not restarted by
+active connections**; an additional connection is answered
+`{"id": null, "ok": false, "error": "too many connections"}` (when the client is still there to read
+it) and closed immediately. Waiting for a request line has a **60 s deadline in total**, fixed when the wait starts and not restarted by
 each byte, so a client that trickles bytes cannot hold a worker; a write that makes no progress for
 60 s also ends the connection.
 Clients can reconnect after an idle timeout (the attached MCP backend already does).
