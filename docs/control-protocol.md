@@ -402,8 +402,12 @@ Close the app (every window, without asking about unsaved changes).
 
 ```sh
 port=7979
-figcraft --control $port &
+uigen --control $port --automation-write-root /tmp &
+sleep 2   # the token file appears once the channel is listening
+token=$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/FigCraft/control-token-$port")
 exec 3<>/dev/tcp/127.0.0.1/$port
+echo "{\"auth\":\"$token\"}" >&3
+read -r ack <&3; echo "$ack"   # {"id":null,"ok":true,"result":"authenticated"}
 echo '{"id":1,"method":"engine.execute","params":{"command":"frame.create","params":{"preset":"iPhone 16","x":0,"y":0}}}' >&3
 read -r reply <&3; echo "$reply"
 echo '{"id":2,"method":"ui.screenshot","params":{"path":"/tmp/figcraft.png"}}' >&3
