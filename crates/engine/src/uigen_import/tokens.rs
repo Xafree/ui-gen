@@ -13,7 +13,7 @@ use super::pending::COMMAND;
 use super::plan::Theme;
 use crate::{Result, Session, bad};
 
-const NOTE_PREFIX: &str = "UIGEN import: ";
+pub(super) const NOTE_PREFIX: &str = "UIGEN import: ";
 const PATH_SEPARATOR: &str = " / ";
 const AXES: usize = 3;
 const NUMBER_STEP: f64 = 1e-3;

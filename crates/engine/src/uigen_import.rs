@@ -2,6 +2,7 @@
 //! per variant and theme) and, once every render is back, the component set written in one undo step.
 
 mod assemble;
+mod motion;
 mod pending;
 mod plan;
 mod tokens;

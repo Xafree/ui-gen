@@ -6,6 +6,7 @@ use figcraft_dom::{ImportError, LayerFacts, Snapshot, TranslateOptions};
 use figcraft_geom::Affine;
 use serde_json::{Value, json};
 
+use super::motion;
 use super::pending::{COMMAND, Destination, Request};
 use super::plan::State;
 use super::tokens::{self, VariantTokens};
@@ -98,6 +99,20 @@ fn build(s: &mut Session, request: &Request, destination: &Destination, finished
     let source = json!({"package": request.package, "version": request.version, "component": request.component});
     node.plugin_data.insert(SOURCE_KEY.to_string(), source.to_string());
     tokens::apply(s, &collection, &request.themes, &themed)?;
+    let linked: Vec<motion::Variant> = finished
+        .variants
+        .iter()
+        .zip(&placed)
+        .zip(&themed)
+        .map(|((variant, (id, ..)), themed)| motion::Variant {
+            id: *id,
+            style: variant.style.as_deref(),
+            size: variant.size.as_deref(),
+            state: variant.state,
+            layers: &themed.layers,
+        })
+        .collect();
+    motion::apply(s.doc_mut()?, &linked)?;
     s.set_selection(vec![set]);
     Ok(json!({"set": set, "collection": collection, "variants": placed.len(), "warnings": warnings}))
 }
