@@ -166,6 +166,14 @@ params: {job?}}` until the job is `done` or `failed` (`error` carries the servic
 with `project.info`. Without a capture service (no Node, or the browser build) the three commands answer `bad`. The
 service and its protocol are described in [UIGEN: Service de capture](uigen/plan-import.md#service-de-capture).
 
+`uigen.importComponent {package, component, styleProp?, sizeProp?, styles?, sizes?, states?, themes?, parent?, x?, y?}`
+([MCP: Component import](mcp.md#component-import)) works the same way: it returns `{job}` (the `inspect` job) at once,
+the renders follow as the app pumps the capture service, and the component set is written in one undo step when
+the last one is back. Poll `capture.status {job}` until that job is `done` or `failed` (`error` names the step that
+failed, e.g. `inspect: component "Nope" not found in @mui/material`), then find the new component set with
+`document.inspect` (it is selected). `uigen.importDom {snapshot, parent?, x?, y?, full?}` takes a snapshot you
+hold yourself and answers `{root, warnings}` directly; `full: true` asks for the complete translation.
+
 ### `engine.commands {}`
 
 Every command: `[{id, label, params, menu, shortcut, undoable}]`.
