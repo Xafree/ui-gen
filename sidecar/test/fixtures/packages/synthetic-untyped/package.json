@@ -1,0 +1,14 @@
+{
+  "name": "synthetic-untyped",
+  "version": "0.9.0",
+  "description": "Synthetic fixture: React components published without type declarations",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  }
+}
