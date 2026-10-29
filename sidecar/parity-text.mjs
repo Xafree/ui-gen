@@ -56,34 +56,63 @@ function familyMatches(style, layer) {
   return style.platformFont !== undefined && expected.startsWith(actual) && STYLE_WORDS.test(expected.slice(actual.length));
 }
 
-function compareText(text, layer, origin) {
+const isMissing = (layer, engine) => engine.missingFamilies.some((family) => squash(family) === squash(layer.fontFamily ?? ''));
+
+function compareText(text, layer, origin, engine) {
   const expected = text.lineBox ?? text.box;
   const actual = layer.absoluteBounds;
   return {
     familyOk: familyMatches(text.style, layer),
     sizeOk: Math.abs(Number.parseFloat(text.style.fontSize) - layer.fontSize) < EPSILON,
     weightOk: weightChromiumUsed(text.style) === weightOfFontStyle(layer.fontStyle ?? ''),
+    installedOk: engine === undefined || !isMissing(layer, engine),
+    measuredOk: engine === undefined || layer.textAutoResize === 'widthAndHeight',
+    family: layer.fontFamily ?? '',
     dx: actual.x - (expected.x - origin.x),
     dy: actual.y - (expected.y - origin.y),
     dwidth: actual.width - expected.width,
+    widths: { chromium: expected.width, uigen: actual.width },
   };
 }
 
 const maxAbs = (values) => values.reduce((worst, value) => (Math.abs(value) > Math.abs(worst) ? value : worst), 0);
 
-export function textGeometryVerdict(texts, layers, origin) {
+export function missingFamiliesOf(steps) {
+  const step = steps.find((candidate) => candidate.command === 'text.missingFonts');
+  const families = step?.result?.families;
+  if (!Array.isArray(families)) {
+    throw new Error(`text.missingFonts sans réponse : ${step === undefined ? 'étape absente' : (step.error ?? 'réponse inattendue')}`);
+  }
+  return families.map((entry) => entry.family);
+}
+
+function failureReason(matches, installedOk, measuredOk) {
+  const reasons = [];
+  if (!installedOk) {
+    const families = [...new Set(matches.filter((match) => !match.installedOk).map((match) => match.family))];
+    reasons.push(`police absente : ${families.join(', ')}`);
+  }
+  if (!measuredOk) {
+    reasons.push("largeur non mesurée par UIGEN (le calque texte n'est pas à taille automatique)");
+  }
+  return reasons.join(' ; ');
+}
+
+export function textGeometryVerdict(texts, layers, origin, engine) {
   if (texts.length !== layers.length) {
     const reason = `${texts.length} textes capturés, ${layers.length} calque(s) texte importé(s)`;
-    return { verdict: 'KO', reason, familyOk: false, sizeOk: false, weightOk: false, maxDx: 0, maxDy: 0, maxDwidth: 0, matches: [] };
+    return { verdict: 'KO', reason, familyOk: false, sizeOk: false, weightOk: false, installedOk: false, measuredOk: false, maxDx: 0, maxDy: 0, maxDwidth: 0, matches: [] };
   }
-  const matches = texts.map((text, index) => compareText(text, layers[index], origin));
+  const matches = texts.map((text, index) => compareText(text, layers[index], origin, engine));
   const maxDx = maxAbs(matches.map((match) => match.dx));
   const maxDy = maxAbs(matches.map((match) => match.dy));
   const maxDwidth = maxAbs(matches.map((match) => match.dwidth));
   const familyOk = matches.every((match) => match.familyOk);
   const sizeOk = matches.every((match) => match.sizeOk);
   const weightOk = matches.every((match) => match.weightOk);
+  const installedOk = matches.every((match) => match.installedOk);
+  const measuredOk = matches.every((match) => match.measuredOk);
   const withinTolerance = [maxDx, maxDy, maxDwidth].every((value) => Math.abs(value) <= GEOMETRY_TOLERANCE_PX + EPSILON);
-  const verdict = familyOk && sizeOk && weightOk && withinTolerance ? 'OK' : 'KO';
-  return { verdict, reason: '', familyOk, sizeOk, weightOk, maxDx, maxDy, maxDwidth, matches };
+  const verdict = familyOk && sizeOk && weightOk && installedOk && measuredOk && withinTolerance ? 'OK' : 'KO';
+  return { verdict, reason: failureReason(matches, installedOk, measuredOk), familyOk, sizeOk, weightOk, installedOk, measuredOk, maxDx, maxDy, maxDwidth, matches };
 }
