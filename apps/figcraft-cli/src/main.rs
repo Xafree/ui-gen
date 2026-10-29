@@ -54,7 +54,8 @@ confined by the app it attaches to, not by flags passed to the CLI: start that a
 refuses `--control` without a root) and the roots you want (`--attach` refuses them). The app prints
 a session token and writes it to `control-token-PORT` in its configuration folder; `mcp --attach`
 reads it there, or from the FIGCRAFT_CONTROL_TOKEN environment variable when that is set, and sends
-it as the first line of the connection. Without a token it stops before connecting.
+it as the first line of the connection. For a HOST:PORT that is not this machine it reads the
+variable only, never the file. Without a token it stops before connecting.
 See docs/cli.md and docs/mcp.md.";
 
 /// The automation roots a file subcommand was given, if any. Omitting both leaves the run
@@ -284,7 +285,7 @@ fn mcp(attach: Option<&str>, roots: Option<figcraft_engine::file_access::Roots>)
                 .rsplit_once(':')
                 .and_then(|(_, port)| port.parse::<u16>().ok())
                 .ok_or_else(|| CliError::Usage(format!("--attach needs a port number or HOST:PORT, got `{p}`")))?;
-            let token = figcraft_mcp::control_token(port)?;
+            let token = figcraft_mcp::attach_token(&addr, port)?;
             let b = figcraft_mcp::Attached::connect(&addr, &token).map_err(|e| {
                 if e.kind() == std::io::ErrorKind::PermissionDenied {
                     format!(

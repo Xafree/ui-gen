@@ -24,7 +24,10 @@ mod tools;
 #[cfg(test)]
 mod gradient_tests;
 
-pub use backend::{Attached, Backend, START_HINT, TOKEN_ENV, control_token, control_token_from, decode_data, page_children};
+pub use backend::{
+    Attached, Backend, START_HINT, TOKEN_ENV, attach_token, attach_token_from, control_token, control_token_from, decode_data, is_loopback_addr,
+    page_children,
+};
 pub use headless::Headless;
 pub use prompts::{PROMPTS, PromptArg, PromptDef};
 pub use resources::{COMMAND_TEMPLATE, COMMANDS_URI, DOC_URI, NODE_TEMPLATE};

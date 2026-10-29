@@ -217,8 +217,9 @@ Serve MCP on stdio: headless by default, or attached to a running app started wi
 `uigen --control PORT --automation-read-root DIR` (and/or `--automation-write-root DIR`: the app refuses
 `--control` without a root). The app makes a session token and writes it to `control-token-PORT` in its
 configuration folder; `mcp --attach` reads it there, or from the `FIGCRAFT_CONTROL_TOKEN` environment
-variable when that is set, and sends it as the first line of the connection. Without a token it stops
-before connecting, naming the file it expected. See [mcp.md](mcp.md). The automation roots (each repeatable; existing
+variable when that is set, and sends it as the first line of the connection. For a `HOST:PORT` that is not
+this machine it reads the variable only, never the file. Without a token it stops before connecting,
+naming the file it expected. See [mcp.md](mcp.md). The automation roots (each repeatable; existing
 folders) confine the files the agent's calls read (inside a read or write root) and write (inside a
 write root); everything else is refused ([mcp.md › Confining file access](mcp.md#confining-file-access)).
 They apply to the headless session only, and that is why `--attach` refuses them: an attached server

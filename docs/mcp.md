@@ -26,9 +26,10 @@ on stderr and writes it to `control-token-<port>` in its configuration folder (`
 must begin with `{"auth": "<token>"}` ([Control protocol](control-protocol.md#authentication)).
 `figcraft-cli mcp --attach <port>` does that for you: it reads the token from the `FIGCRAFT_CONTROL_TOKEN`
 environment variable when that is set and not empty, else from the `control-token-<port>` file of the same
-configuration folder. With neither it stops before connecting and says which file it expected. A server
-started by another user or on another machine has its own configuration folder: pass its token in
-`FIGCRAFT_CONTROL_TOKEN`.
+configuration folder. With neither it stops before connecting and says which file it expected. The file is
+only read for a local address (`127.0.0.1`, `::1`, `localhost`): it is the token of an app on this machine and is
+never sent to another host. A server started by another user or on another machine has its own
+configuration folder: pass its token in `FIGCRAFT_CONTROL_TOKEN`, which is then the only source.
 
 Attached calls are never automatically replayed after a transport failure: the app may have
 applied the request before its reply was lost. The error reports that the operation may have

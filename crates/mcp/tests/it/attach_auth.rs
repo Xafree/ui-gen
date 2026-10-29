@@ -4,7 +4,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::time::{Duration, Instant};
 
-use figcraft_mcp::Attached;
+use figcraft_engine::control_token::control_token_path;
+use figcraft_mcp::{Attached, attach_token_from, is_loopback_addr};
 
 fn app_answering(answer: Option<&'static str>, delay: Duration) -> (u16, std::thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -75,4 +76,31 @@ fn an_app_that_never_answers_ends_the_wait_after_a_few_seconds() {
     assert_eq!(error.kind(), std::io::ErrorKind::TimedOut, "{error}");
     assert!(started.elapsed() < Duration::from_secs(9), "{:?}", started.elapsed());
     drop(app);
+}
+
+// covers: K4
+#[test]
+fn loopback_addresses_are_this_machine_and_other_hosts_are_not() {
+    for local in ["127.0.0.1:7979", "localhost:7979", "LOCALHOST:7979", "[::1]:7979", "127.1.2.3:1"] {
+        assert!(is_loopback_addr(local), "{local}");
+    }
+    for remote in ["192.168.1.20:7979", "example.com:7979", "[2001:db8::1]:7979", "0.0.0.0:7979", "localhost.example.com:1"] {
+        assert!(!is_loopback_addr(remote), "{remote}");
+    }
+}
+
+// covers: K4
+#[test]
+fn a_remote_host_never_gets_the_local_token_file() {
+    let dir = std::env::temp_dir().join(format!("figcraft-mcp-remote-token-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(control_token_path(&dir, 7979), "local-file-token\n").unwrap();
+    let error = attach_token_from("192.168.1.20:7979", None, Some(&dir), 7979).unwrap_err();
+    assert!(error.contains("FIGCRAFT_CONTROL_TOKEN"), "{error}");
+    assert!(!error.contains("local-file-token"), "{error}");
+    assert_eq!(attach_token_from("192.168.1.20:7979", Some(" from-env "), Some(&dir), 7979).unwrap(), "from-env");
+    assert!(attach_token_from("192.168.1.20:7979", Some("  "), Some(&dir), 7979).is_err(), "an empty variable is no token");
+    assert_eq!(attach_token_from("127.0.0.1:7979", None, Some(&dir), 7979).unwrap(), "local-file-token");
+    assert_eq!(attach_token_from("localhost:7979", None, Some(&dir), 7979).unwrap(), "local-file-token");
+    std::fs::remove_dir_all(dir).unwrap();
 }

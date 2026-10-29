@@ -140,6 +140,30 @@ fn check_acknowledgement(answer: &str) -> std::io::Result<()> {
     Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, message))
 }
 
+/// Whether `addr` (`HOST:PORT`) names this machine: an IP loopback address or `localhost`.
+pub fn is_loopback_addr(addr: &str) -> bool {
+    let host = addr.rsplit_once(':').map_or(addr, |(host, _)| host).trim_start_matches('[').trim_end_matches(']');
+    host.eq_ignore_ascii_case("localhost") || host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
+}
+
+/// The session token for the app at `addr`. The token file in the local configuration folder is the
+/// token of an app on this machine, so it is read only for a loopback `addr`; any other host gets
+/// the token from `env` (the value of [`TOKEN_ENV`]) or none, and the local file is never sent to it.
+pub fn attach_token_from(addr: &str, env: Option<&str>, config_dir: Option<&Path>, port: u16) -> Result<String, String> {
+    if is_loopback_addr(addr) {
+        return control_token_from(env, config_dir, port);
+    }
+    env.map(str::trim).filter(|t| !t.is_empty()).map(str::to_string).ok_or_else(|| {
+        format!("no control token for {addr}: the control-token-{port} file of this machine belongs to a local app, never to another host; set {TOKEN_ENV} to the session token of the app at {addr}")
+    })
+}
+
+/// [`attach_token_from`] with the real environment and the app's real configuration folder.
+pub fn attach_token(addr: &str, port: u16) -> Result<String, String> {
+    let env = std::env::var(TOKEN_ENV).ok();
+    attach_token_from(addr, env.as_deref(), figcraft_engine::control_token::config_dir().as_deref(), port)
+}
+
 /// A running FigCraft app, reached through its loopback control port (`uigen --control PORT`),
 /// which answers only a connection whose first line is `{"auth": "<session token>"}`.
 pub struct Attached {
