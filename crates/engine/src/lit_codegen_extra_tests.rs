@@ -1,9 +1,9 @@
 //! Lit codegen beyond the locked tests: tag names, member and attribute uniqueness, instances
 //! with slots and swaps, escaping in attribute values, and the `prefix` parameter.
 
-use crate::{EngineError, Session};
 use crate::components::tests::{ex, idv};
 use crate::lit::{self, LitOptions, TagIssue};
+use crate::{EngineError, Session};
 use figcraft_doc::*;
 use serde_json::{Value, json};
 
