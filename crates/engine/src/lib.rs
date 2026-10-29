@@ -324,6 +324,8 @@ mod library_variables_tests;
 #[cfg(test)]
 mod line_endings_tests;
 #[cfg(test)]
+mod lit_codegen_tests;
+#[cfg(test)]
 mod live_access_tests;
 #[cfg(test)]
 mod live_docs_tests;
