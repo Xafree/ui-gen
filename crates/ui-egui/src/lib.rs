@@ -198,6 +198,8 @@ mod titlebar_tests;
 mod toast_action_tests;
 
 #[cfg(test)]
+mod project_divider_ui_tests;
+#[cfg(test)]
 mod project_open_tests;
 #[cfg(test)]
 mod project_pages_ui_tests;
