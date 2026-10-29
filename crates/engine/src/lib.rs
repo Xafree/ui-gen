@@ -531,3 +531,6 @@ mod project_tests;
 
 #[cfg(test)]
 mod project_pages_tests;
+
+#[cfg(test)]
+mod project_ui_requests_tests;

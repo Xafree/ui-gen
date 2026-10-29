@@ -196,6 +196,9 @@ mod text_enter_tests;
 mod titlebar_tests;
 #[cfg(test)]
 mod toast_action_tests;
+
+#[cfg(test)]
+mod project_open_tests;
 #[cfg(test)]
 mod ui_scale_tests;
 #[cfg(test)]
