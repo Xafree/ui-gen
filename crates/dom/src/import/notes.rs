@@ -2,7 +2,7 @@
 
 use figcraft_doc::{Annotation, Document, NodeId};
 
-pub(super) const NOTE_PREFIX: &str = "UIGEN import: ";
+pub const NOTE_PREFIX: &str = "UIGEN import: ";
 
 pub(super) fn annotations(messages: Vec<String>) -> Vec<Annotation> {
     messages.into_iter().map(|message| Annotation { label: format!("{NOTE_PREFIX}{message}"), ..Annotation::default() }).collect()

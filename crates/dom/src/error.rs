@@ -1,7 +1,9 @@
 use figcraft_doc::{DocError, NodeId};
 use thiserror::Error;
 
-use crate::{MAX_ANIMATIONS, MAX_DEPTH, MAX_JSON_BYTES, MAX_MARKUP_BYTES, MAX_NODES, MAX_VAR_NAME_CHARS, MAX_VARS, SUPPORTED_VERSION};
+use crate::{
+    MAX_ANIMATION_PROPERTIES, MAX_ANIMATIONS, MAX_DEPTH, MAX_JSON_BYTES, MAX_MARKUP_BYTES, MAX_NODES, MAX_VAR_NAME_CHARS, MAX_VARS, SUPPORTED_VERSION,
+};
 
 const MAX_JSON_MESSAGE_CHARS: usize = 200;
 
@@ -31,6 +33,10 @@ pub enum SnapshotError {
     TooManyVars { node: String, count: usize },
     #[error("{node} has {count} animations, over the {MAX_ANIMATIONS} limit")]
     TooManyAnimations { node: String, count: usize },
+    #[error("{node} has an animation with {count} properties, over the {MAX_ANIMATION_PROPERTIES} limit")]
+    TooManyProperties { node: String, count: usize },
+    #[error("{field} of {node} is {size} characters, over the {limit} characters limit")]
+    FieldTooLong { node: String, field: &'static str, size: usize, limit: usize },
     #[error("invalid box on {node}: x and y must be finite, width and height finite and not negative")]
     InvalidBox { node: String },
 }

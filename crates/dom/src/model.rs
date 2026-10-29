@@ -133,4 +133,6 @@ pub struct SvgNode {
     pub markup: String,
     #[serde(rename = "box")]
     pub r#box: DomBox,
+    #[serde(default)]
+    pub animations: Vec<DomAnimation>,
 }

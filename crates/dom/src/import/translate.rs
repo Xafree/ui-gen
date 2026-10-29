@@ -80,7 +80,7 @@ pub fn translate_snapshot(
     }
     let mut walk = Walk::new(doc, true);
     let root = walk.run(&snapshot.root, parent, (finite_or_zero(x), finite_or_zero(y)))?;
-    let Walk { doc, mut warnings, elements, .. } = walk;
+    let Walk { doc, mut warnings, elements, svgs, .. } = walk;
     let sources: BTreeMap<_, _> = elements.into_iter().collect();
     if options.cleanup {
         cleanup::run(doc, root, &sources)?;
@@ -91,6 +91,6 @@ pub fn translate_snapshot(
     }
     let mut layers = names::facts(doc, root);
     facts::fill(doc, &sources, &mut layers);
-    motion::apply(doc, &sources, &mut warnings, &mut layers);
+    motion::apply(doc, &sources, &svgs.into_iter().collect(), &mut warnings, &mut layers);
     Ok(Translated { root, warnings: warnings.into_messages(), layers })
 }

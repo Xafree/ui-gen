@@ -9,7 +9,7 @@ use figcraft_doc::{Document, NodeId};
 use super::css::{Style, get, split_outside};
 use super::translate::{Effect, LayerFacts, TransitionFact};
 use super::{Report, Warnings, cleanup, notes, shortened};
-use crate::model::{DomAnimation, Element};
+use crate::model::{DomAnimation, Element, SvgNode};
 
 const EFFECT_KEY: &str = "uigen.effect";
 const MAX_MS: f64 = 600_000.0;
@@ -36,14 +36,28 @@ fn cubic_bezier(value: &str) -> Option<Easing> {
     ((0.0..=1.0).contains(&x1) && (0.0..=1.0).contains(&x2)).then_some(Easing::CustomBezier { x1, y1, x2, y2 })
 }
 
-pub(super) fn apply(doc: &mut Document, sources: &BTreeMap<NodeId, &Element>, warnings: &mut Warnings, layers: &mut [LayerFacts]) {
+pub(super) fn apply(
+    doc: &mut Document,
+    sources: &BTreeMap<NodeId, &Element>,
+    svgs: &BTreeMap<NodeId, &SvgNode>,
+    warnings: &mut Warnings,
+    layers: &mut [LayerFacts],
+) {
     for layer in layers {
-        let Some(element) = sources.get(&layer.id) else { continue };
+        let element = sources.get(&layer.id);
+        let svg = svgs.get(&layer.id);
+        if element.is_none() && svg.is_none() {
+            continue;
+        }
         let name = doc.node(layer.id).map(|node| node.name.clone()).unwrap_or_default();
         {
             let mut report = Report::new(&name, warnings);
-            layer.transition = transition(&element.style, &mut report);
-            layer.effect = effect(element, &mut report);
+            if let Some(element) = element {
+                layer.transition = transition(&element.style, &mut report);
+                layer.effect = effect(element, &mut report);
+            } else if let Some(svg) = svg {
+                layer.effect = spinner(&svg.animations, &mut report);
+            }
         }
         notes::attach(doc, layer.id, warnings.take_fresh());
         if let (Some(effect), Some(node)) = (layer.effect, doc.node_mut(layer.id)) {
@@ -143,8 +157,12 @@ fn effect(element: &Element, report: &mut Report) -> Option<Effect> {
     if cleanup::is_ripple(element) {
         return Some(Effect::Ripple);
     }
+    spinner(&element.animations, report)
+}
+
+fn spinner(animations: &[DomAnimation], report: &mut Report) -> Option<Effect> {
     let mut found = None;
-    for animation in &element.animations {
+    for animation in animations {
         if found.is_none() && turns_forever(animation) {
             found = Some(Effect::Spinner);
         } else {
@@ -155,5 +173,6 @@ fn effect(element: &Element, report: &mut Report) -> Option<Effect> {
 }
 
 fn turns_forever(animation: &DomAnimation) -> bool {
-    animation.iterations.is_none() && animation.properties.iter().any(|property| property.eq_ignore_ascii_case("transform"))
+    animation.iterations.is_none()
+        && animation.properties.iter().any(|property| property.eq_ignore_ascii_case("transform") || property.eq_ignore_ascii_case("rotate"))
 }

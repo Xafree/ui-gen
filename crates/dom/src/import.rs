@@ -33,6 +33,8 @@ mod motion_tests;
 #[cfg(test)]
 mod notes_tests;
 #[cfg(test)]
+mod review_tests;
+#[cfg(test)]
 mod shadow_tests;
 #[cfg(test)]
 mod support;
@@ -48,10 +50,11 @@ mod walk_tests;
 use figcraft_doc::{Annotation, Document, NodeId};
 
 use crate::error::ImportError;
-use crate::model::{DomBox, DomNode, Element, Snapshot};
+use crate::model::{DomBox, DomNode, Element, Snapshot, SvgNode};
 
 pub use fonts::nearest_weight;
 pub use motion::css_easing;
+pub use notes::NOTE_PREFIX;
 pub use translate::{Effect, LayerFacts, TokenFact, TokenValue, TransitionFact, TranslateOptions, Translated, translate_snapshot};
 
 const MAX_WARNINGS: usize = 200;
@@ -188,11 +191,12 @@ struct Walk<'d, 's> {
     warnings: Warnings,
     annotate: bool,
     elements: Vec<(NodeId, &'s Element)>,
+    svgs: Vec<(NodeId, &'s SvgNode)>,
 }
 
 impl<'d, 's> Walk<'d, 's> {
     fn new(doc: &'d mut Document, annotate: bool) -> Self {
-        Self { doc, warnings: Warnings::default(), annotate, elements: Vec::new() }
+        Self { doc, warnings: Warnings::default(), annotate, elements: Vec::new(), svgs: Vec::new() }
     }
 
     fn take_notes(&mut self) -> Vec<Annotation> {
@@ -229,6 +233,7 @@ impl<'d, 's> Walk<'d, 's> {
                 if let Some(node) = id.and_then(|id| self.doc.node_mut(id)) {
                     node.annotations = notes;
                 }
+                self.svgs.extend(id.map(|id| (id, svg)));
                 Ok(id)
             }
         }

@@ -27,13 +27,19 @@ fn first_free(name: &str, taken: &BTreeSet<String>) -> String {
     (2u32..).map(|number| format!("{name} {number}")).find(|candidate| !taken.contains(candidate)).unwrap_or_else(|| name.to_owned())
 }
 
+/// A slash inside a name is escaped so that the separator alone splits a path and two distinct layers never share one.
+fn escaped(name: &str) -> String {
+    name.replace('\\', "\\\\").replace('/', "\\/")
+}
+
 pub(super) fn facts(doc: &Document, root: NodeId) -> Vec<LayerFacts> {
     let mut paths: BTreeMap<NodeId, String> = BTreeMap::new();
     let mut layers = Vec::new();
     for id in doc.subtree(root) {
         let Some(node) = doc.node(id) else { continue };
         let parent_path = node.parent.filter(|_| id != root).and_then(|parent| paths.get(&parent));
-        let path = parent_path.map_or_else(|| node.name.clone(), |parent| format!("{parent}{SEPARATOR}{}", node.name));
+        let name = escaped(&node.name);
+        let path = parent_path.map_or_else(|| name.clone(), |parent| format!("{parent}{SEPARATOR}{name}"));
         paths.insert(id, path.clone());
         layers.push(LayerFacts { id, path, tokens: Vec::new(), transition: None, effect: None });
     }
