@@ -330,6 +330,8 @@ mod lit_codegen_extra_tests;
 #[cfg(test)]
 mod lit_codegen_tests;
 #[cfg(test)]
+mod lit_effects_tests;
+#[cfg(test)]
 mod lit_states_extra_tests;
 #[cfg(test)]
 mod lit_states_tests;
