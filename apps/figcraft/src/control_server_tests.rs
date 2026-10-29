@@ -16,9 +16,16 @@ fn pair() -> (TcpStream, TcpStream) {
 
 const TOKEN: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-/// The first line every connection must send.
+/// The first line every connection must send, and the acknowledgement the app answers with.
 fn authenticate(client: &mut TcpStream) {
     writeln!(client, "{}", json!({"auth": TOKEN})).unwrap();
+    let mut line = Vec::new();
+    let mut byte = [0u8];
+    while client.read_exact(&mut byte).is_ok() && byte[0] != b'\n' {
+        line.push(byte[0]);
+    }
+    let ack: Value = serde_json::from_slice(&line).unwrap();
+    assert_eq!(ack, json!({"id": null, "ok": true, "result": "authenticated"}));
 }
 
 fn queue() -> Queue {
@@ -216,7 +223,9 @@ fn connection_limit_rejects_excess_clients_and_reuses_finished_slots() {
     assert_eq!(workers.len(), MAX_CONNECTIONS);
     let (mut extra, server) = pair();
     spawn_connection(server, pending.clone(), ctx.clone(), &mut workers, Duration::from_secs(5), Arc::from(TOKEN));
-    assert_eq!(extra.read(&mut [0]).unwrap(), 0);
+    let mut refusal = String::new();
+    extra.read_to_string(&mut refusal).unwrap();
+    assert_eq!(serde_json::from_str::<Value>(&refusal).unwrap(), json!({"id": null, "ok": false, "error": "too many connections"}));
     assert_eq!(workers.len(), MAX_CONNECTIONS);
     for client in clients {
         client.shutdown(Shutdown::Both).unwrap();

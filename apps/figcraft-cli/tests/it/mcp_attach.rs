@@ -1,6 +1,6 @@
 //! `uigen-cli mcp --attach PORT` against the control channel's session token.
 
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::process::{Command, Output, Stdio};
 
@@ -54,6 +54,7 @@ fn first_line_received(port_listener: TcpListener) -> std::thread::JoinHandle<Va
         let mut reader = BufReader::new(stream);
         let mut line = String::new();
         reader.read_line(&mut line).unwrap();
+        writeln!(reader.get_mut(), r#"{{"id":null,"ok":true,"result":"authenticated"}}"#).unwrap();
         // The app keeps the connection until the client leaves, as the real one does.
         let mut rest = String::new();
         assert_eq!(reader.read_line(&mut rest).unwrap(), 0, "nothing follows the token: {rest}");

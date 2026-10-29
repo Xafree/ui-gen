@@ -10,6 +10,7 @@ use figcraft_mcp::{Attached, Backend, Headless, Server, control_token_from};
 use serde_json::{Value, json};
 
 const TOKEN: &str = "5ec2e7e6c1f84a0e9d3b7a6f1c0d8e42";
+const ACK: &str = r#"{"id":null,"ok":true,"result":"authenticated"}"#;
 
 fn accept_authenticated(listener: &TcpListener) -> (TcpStream, BufReader<TcpStream>) {
     let (stream, _) = listener.accept().unwrap();
@@ -19,6 +20,7 @@ fn accept_authenticated(listener: &TcpListener) -> (TcpStream, BufReader<TcpStre
     reader.read_line(&mut first).unwrap();
     let first: Value = serde_json::from_str(&first).unwrap();
     assert_eq!(first, json!({"auth": TOKEN}), "the token is the first line of a connection");
+    writeln!(&stream, "{ACK}").unwrap();
     (stream, reader)
 }
 
@@ -39,6 +41,7 @@ fn fake_app() -> u16 {
                 );
                 continue;
             }
+            let _ = writeln!(out, "{ACK}");
             for line in lines {
                 let Ok(line) = line else { break };
                 let v: Value = serde_json::from_str(&line).unwrap_or(Value::Null);
@@ -163,8 +166,10 @@ fn a_connection_the_app_closed_while_idle_is_replaced_before_sending() {
 #[test]
 fn reconnect_failure_reports_request_not_sent() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let mut backend = Attached::port(listener.local_addr().unwrap().port(), TOKEN).unwrap();
-    drop(listener);
+    let port = listener.local_addr().unwrap().port();
+    let app = std::thread::spawn(move || drop(accept_authenticated(&listener)));
+    let mut backend = Attached::port(port, TOKEN).unwrap();
+    app.join().unwrap();
     assert!(backend.call("document.inspect", json!({})).is_err());
     let error = backend.call("document.inspect", json!({})).unwrap_err();
     assert!(error.contains("request was not sent"), "{error}");
