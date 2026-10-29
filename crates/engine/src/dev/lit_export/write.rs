@@ -21,7 +21,7 @@ const MAX_MANIFEST: u64 = 4 << 20;
 const MAX_FILE: u64 = 64 << 20;
 const MAX_WALKED: usize = 10_000;
 const MAX_DEPTH: usize = 8;
-const NOT_WALKED: [&str; 2] = ["node_modules", ".git"];
+const NOT_WALKED: [&str; 3] = ["node_modules", "dist", ".git"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -108,7 +108,20 @@ fn put(path: &Path, bytes: &[u8]) -> Result<()> {
     file_access::write(path, bytes)
 }
 
-fn kept_files(dir: &Path, known: &BTreeSet<&str>) -> Result<Vec<String>> {
+fn fold(path: &str) -> String {
+    if cfg!(windows) { path.to_ascii_lowercase() } else { path.to_string() }
+}
+
+fn through_link(root: &Path, rel: &str) -> bool {
+    let mut at = root.to_path_buf();
+    rel.split('/').any(|part| {
+        at.push(part);
+        file_access::is_link(&at)
+    })
+}
+
+/// The files of `dir` the export did not generate, and whether the walk stopped early.
+fn kept_files(dir: &Path, known: &BTreeSet<String>) -> Result<(Vec<String>, bool)> {
     let mut found = Vec::new();
     let mut pending = vec![String::new()];
     let mut walked = 0;
@@ -118,22 +131,24 @@ fn kept_files(dir: &Path, known: &BTreeSet<&str>) -> Result<Vec<String>> {
             walked += 1;
             if walked > MAX_WALKED {
                 found.sort();
-                return Ok(found);
+                return Ok((found, true));
             }
             let Some(name) = entry.file_name().map(|n| n.to_string_lossy().into_owned()) else { continue };
             let path = if rel.is_empty() { name } else { format!("{rel}/{name}") };
-            if file_access::is_dir(dir.join(&path)) {
-                let skip = NOT_WALKED.contains(&name_of(&path)) || path == ".uigen" || path.matches('/').count() >= MAX_DEPTH;
+            let folded = fold(&path);
+            let linked = file_access::is_link(dir.join(&path));
+            if !linked && file_access::is_dir(dir.join(&path)) {
+                let skip = NOT_WALKED.contains(&fold(name_of(&path)).as_str()) || folded == ".uigen" || path.matches('/').count() >= MAX_DEPTH;
                 if !skip {
                     pending.push(path);
                 }
-            } else if !known.contains(path.as_str()) {
+            } else if !known.contains(&folded) {
                 found.push(path);
             }
         }
     }
     found.sort();
-    Ok(found)
+    Ok((found, false))
 }
 
 fn name_of(path: &str) -> &str {
@@ -145,6 +160,9 @@ fn name_of(path: &str) -> &str {
 /// with `force`; `plan` must be [ready](ExportPlan::ready).
 pub fn write(plan: &ExportPlan, dir: &str, force: bool) -> Result<WriteReport> {
     let root = Path::new(dir);
+    if let Some(path) = plan.files.iter().map(|f| f.path.as_str()).chain([MANIFEST]).find(|path| through_link(root, path)) {
+        return Err(EngineError::Other(format!("{path}: a link inside {dir} leads out of it, nothing was written")));
+    }
     file_access::create_dir_all(root)?;
     let manifest_path = root.join(MANIFEST);
     let before = if file_access::exists(&manifest_path) { Some(file_access::read_capped(&manifest_path, MAX_MANIFEST)) } else { None };
@@ -191,8 +209,17 @@ pub fn write(plan: &ExportPlan, dir: &str, force: bool) -> Result<WriteReport> {
             entries.insert(path.clone(), old.clone());
         }
     }
-    let known: BTreeSet<&str> = planned.iter().copied().chain(report.stale.iter().map(String::as_str)).collect();
-    report.kept = kept_files(root, &known)?;
+    let known: BTreeSet<String> = planned.iter().copied().chain(report.stale.iter().map(String::as_str)).map(fold).collect();
+    let (kept, truncated) = kept_files(root, &known)?;
+    report.kept = kept;
+    if truncated {
+        report.notes.push(Note {
+            code: "kept-truncated",
+            component: String::new(),
+            layer: None,
+            message: format!("The folder has more than {MAX_WALKED} entries: the list of files the export did not generate is partial"),
+        });
+    }
 
     for file in to_write {
         put(&root.join(&file.path), file.text.as_bytes())?;

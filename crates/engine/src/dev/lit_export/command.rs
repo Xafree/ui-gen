@@ -101,10 +101,17 @@ fn flag(p: &Value, key: &str) -> Result<bool> {
     }
 }
 
+fn folder(p: &Value) -> Result<Option<String>> {
+    match text(p, "path")? {
+        Some(dir) if dir.trim().is_empty() => Err(bad(CMD, "`path` must name a folder")),
+        other => Ok(other),
+    }
+}
+
 fn run(doc: &Document, p: &Value) -> Result<Value> {
     let plan = plan(doc, &options(doc, p)?);
     let force = flag(p, "force")?;
-    let report = match text(p, "path")? {
+    let report = match folder(p)? {
         None => None,
         Some(_) if !plan.ready() => {
             return Err(bad(CMD, format!("nothing was written; fix these components first: {}", plan.blockers().join(", "))));
