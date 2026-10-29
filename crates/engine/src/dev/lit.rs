@@ -3,16 +3,20 @@
 //! a member of `HTMLElement` or `LitElement` gets a `Variant` or `Value` suffix), its slots and
 //! instance swaps are named `<slot>` elements holding their default content, the differences
 //! between variants are `:host([attribute="value"])` rules, and an instance is the custom element
-//! with the values that differ from the defaults. Built on the same walk as the React, Vue and
+//! with the values that differ from the defaults. Interaction states (hover, focus, pressed,
+//! disabled, loading) are CSS pseudo-classes and reflected booleans rather than a `state` property.
+//! Built on the same walk as the React, Vue and
 //! Leptos output ([`crate::component_codegen`], [`crate::codegen::Markup`]).
+
+use std::collections::BTreeMap;
 
 use figcraft_doc::{Document, NodeId, NodeKind};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::codegen::{CodeLang, Ctx, Markup, class_name};
 use crate::component_codegen::{Component, Param, ParamKind, js_string, web};
-use crate::components::{slots_of, variant_set};
+use crate::components::{slots_of, variant_props, variant_set};
 use crate::params::id_of;
 
 /// Longest custom element name (chars).
@@ -200,6 +204,8 @@ pub struct Member {
     pub ident: String,
     pub attribute: Option<String>,
     pub reflect: bool,
+    /// A state property whose values are all pseudo-classes or booleans: the class has no member.
+    pub hidden: bool,
 }
 
 fn is_property(p: &Param) -> bool {
@@ -243,14 +249,23 @@ fn kebab(ident: &str) -> String {
 
 /// One [`Member`] per parameter of `c`, in order, with unique member and attribute names.
 pub fn members(c: &Component) -> Vec<Member> {
-    let mut used: Vec<String> = c.params.iter().filter(|p| prop_name(p) == p.ident).map(|p| p.ident.clone()).collect();
+    layout(c).members
+}
+
+fn named_members(c: &Component, hidden: Option<usize>) -> Vec<Member> {
+    let mut used: Vec<String> =
+        c.params.iter().enumerate().filter(|(i, p)| Some(*i) != hidden && prop_name(p) == p.ident).map(|(_, p)| p.ident.clone()).collect();
     let mut attributes: Vec<String> = Vec::new();
     c.params
         .iter()
-        .map(|p| {
+        .enumerate()
+        .map(|(i, p)| {
+            if Some(i) == hidden {
+                return Member { ident: p.ident.clone(), attribute: None, reflect: false, hidden: true };
+            }
             let ident = if prop_name(p) == p.ident { p.ident.clone() } else { unique(&prop_name(p), "", &mut used) };
             let attribute = is_property(p).then(|| unique(&kebab(&ident), "-", &mut attributes));
-            Member { ident, attribute, reflect: matches!(p.kind, ParamKind::Variant(_)) }
+            Member { ident, attribute, reflect: matches!(p.kind, ParamKind::Variant(_)), hidden: false }
         })
         .collect()
 }
@@ -262,6 +277,7 @@ pub(crate) fn member(c: &Component, p: &Param) -> Member {
         ident: p.ident.clone(),
         attribute: None,
         reflect: false,
+        hidden: false,
     })
 }
 
@@ -275,6 +291,290 @@ pub(crate) fn slot_name(c: &Component, p: &Param) -> String {
         }
     }
     class_name(&p.ident, "slot", &mut Vec::new())
+}
+
+// ------------------------------------------------------------------ states
+
+/// What a value of a state property is on the web.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StateKind {
+    Rest,
+    Hover,
+    FocusVisible,
+    Active,
+    Disabled,
+    Loading,
+    Other,
+}
+
+const STATE_PROPERTIES: &[&str] = &["state", "status", "etat"];
+
+fn fold(s: &str) -> String {
+    deunicode::deunicode(s).trim().to_lowercase()
+}
+
+/// What `value` of the variant property `prop` means as an interaction state (`None` when `prop`
+/// is not called State, Status or État; English and French, accents and case ignored).
+pub fn state_kind(prop: &str, value: &str) -> Option<StateKind> {
+    if !STATE_PROPERTIES.contains(&fold(prop).as_str()) {
+        return None;
+    }
+    Some(match fold(value).as_str() {
+        "default" | "rest" | "normal" | "enabled" | "repos" | "defaut" => StateKind::Rest,
+        "hover" | "hovered" | "survol" | "survole" => StateKind::Hover,
+        "focus" | "focused" | "focus-visible" | "focus clavier" => StateKind::FocusVisible,
+        "pressed" | "press" | "active" | "down" | "appuye" | "enfonce" => StateKind::Active,
+        "disabled" | "desactive" | "inactive" => StateKind::Disabled,
+        "loading" | "chargement" => StateKind::Loading,
+        _ => StateKind::Other,
+    })
+}
+
+/// A layer's rules: (path, class, declarations).
+pub(crate) type Rule = (String, String, String);
+
+/// The state property of a component: where it is, what its values mean.
+struct StateSet {
+    index: usize,
+    prop: String,
+    values: Vec<(String, StateKind)>,
+    /// Every value is recognised: no `state` property is left.
+    hidden: bool,
+    /// The Disabled and Loading booleans: (kind, member name, attribute).
+    booleans: Vec<(StateKind, String, String)>,
+}
+
+impl StateSet {
+    fn kind(&self, value: &str) -> StateKind {
+        self.values.iter().find(|(v, _)| v == value).map_or(StateKind::Other, |(_, k)| *k)
+    }
+
+    fn has(&self, kind: StateKind) -> bool {
+        self.values.iter().any(|(_, k)| *k == kind)
+    }
+
+    fn boolean(&self, kind: StateKind) -> Option<&(StateKind, String, String)> {
+        self.booleans.iter().find(|(k, ..)| *k == kind)
+    }
+}
+
+/// A boolean the state set needs and the component doesn't declare.
+struct Extra {
+    kind: StateKind,
+    param: Param,
+    member: Member,
+}
+
+struct Layout {
+    members: Vec<Member>,
+    state: Option<StateSet>,
+    extras: Vec<Extra>,
+}
+
+fn state_set(c: &Component) -> Option<StateSet> {
+    c.set?;
+    let (index, p, options) = c.params.iter().enumerate().find_map(|(i, p)| match &p.kind {
+        ParamKind::Variant(options) if state_kind(&p.prop, "").is_some() => Some((i, p, options)),
+        _ => None,
+    })?;
+    let values: Vec<(String, StateKind)> = options.iter().map(|o| (o.clone(), state_kind(&p.prop, o).unwrap_or(StateKind::Other))).collect();
+    let hidden = !values.is_empty() && values.iter().all(|(_, k)| *k != StateKind::Other);
+    Some(StateSet { index, prop: p.prop.clone(), values, hidden, booleans: Vec::new() })
+}
+
+fn layout(c: &Component) -> Layout {
+    let Some(mut state) = state_set(c) else { return Layout { members: named_members(c, None), state: None, extras: Vec::new() } };
+    let mut members = named_members(c, state.hidden.then_some(state.index));
+    let mut extras = Vec::new();
+    let mut used: Vec<String> = members.iter().filter(|m| !m.hidden).map(|m| m.ident.clone()).collect();
+    let mut attributes: Vec<String> = members.iter().filter_map(|m| m.attribute.clone()).collect();
+    for (kind, name) in [(StateKind::Disabled, "disabled"), (StateKind::Loading, "loading")] {
+        if !state.has(kind) {
+            continue;
+        }
+        let declared = c.params.iter().position(|p| p.kind == ParamKind::Boolean && fold(&p.prop) == name);
+        if let Some(i) = declared
+            && let Some(m) = members.get_mut(i)
+        {
+            m.reflect = true;
+            state.booleans.push((kind, m.ident.clone(), m.attribute.clone().unwrap_or_else(|| name.to_string())));
+            continue;
+        }
+        let ident = unique(name, "", &mut used);
+        let attribute = unique(&kebab(&ident), "-", &mut attributes);
+        state.booleans.push((kind, ident.clone(), attribute.clone()));
+        let param = Param { prop: name.to_string(), ident: ident.clone(), kind: ParamKind::Boolean, default: json!(false), enum_name: String::new() };
+        extras.push(Extra { kind, param, member: Member { ident, attribute: Some(attribute), reflect: true, hidden: false } });
+    }
+    Layout { members, state: Some(state), extras }
+}
+
+/// A property of the Lit class, for `inspect.componentCode`.
+pub struct Exposed {
+    pub name: String,
+    pub param: String,
+    pub kind: &'static str,
+    pub default: Value,
+    pub value: Option<Value>,
+    pub member: Member,
+}
+
+/// The properties the Lit class has: the parameters but a state property made only of
+/// pseudo-classes, then the booleans the states add. `values`: an instance's, in parameter order.
+pub fn exposed(c: &Component, values: Option<&[(String, Value)]>) -> Vec<Exposed> {
+    let lay = layout(c);
+    let in_state = |kind: StateKind| {
+        let active = lay
+            .state
+            .as_ref()
+            .is_some_and(|s| values.is_some_and(|all| all.iter().any(|(name, v)| *name == s.prop && v.as_str().is_some_and(|v| s.kind(v) == kind))));
+        json!(active)
+    };
+    let mut out: Vec<Exposed> = c
+        .params
+        .iter()
+        .zip(&lay.members)
+        .filter(|(_, m)| !m.hidden)
+        .map(|(p, m)| Exposed {
+            name: p.prop.clone(),
+            param: p.ident.clone(),
+            kind: p.kind.id(),
+            default: p.default.clone(),
+            value: values.map(|all| all.iter().find(|(name, _)| *name == p.prop).map_or(Value::Null, |(_, x)| x.clone())),
+            member: m.clone(),
+        })
+        .collect();
+    out.extend(lay.extras.iter().map(|e| Exposed {
+        name: e.param.prop.clone(),
+        param: e.param.ident.clone(),
+        kind: e.param.kind.id(),
+        default: e.param.default.clone(),
+        value: values.map(|_| in_state(e.kind)),
+        member: e.member.clone(),
+    }));
+    out
+}
+
+/// The attribute an instance showing the state `value` sets (Disabled, Loading), if any.
+fn state_attribute(lay: &Layout, value: &Value) -> Option<String> {
+    let state = lay.state.as_ref()?;
+    let kind = state.kind(value.as_str()?);
+    state.boolean(kind).map(|(_, _, attribute)| attribute.clone())
+}
+
+/// `p`, parameter `i`, as a field: a state property keeps its unrecognised values and its default.
+fn field_param(lay: &Layout, i: usize, p: &Param) -> Param {
+    let (Some(state), ParamKind::Variant(options)) = (&lay.state, &p.kind) else { return p.clone() };
+    if state.index != i {
+        return p.clone();
+    }
+    let kept = options.iter().filter(|o| state.kind(o) == StateKind::Other || p.default.as_str() == Some(o.as_str())).cloned().collect();
+    Param { kind: ParamKind::Variant(kept), ..p.clone() }
+}
+
+/// The rules of the other variants of a set, on the host: what differs from the default variant,
+/// or, for a pseudo-class state or an unrecognised one, from the variant with the same other values
+/// at rest. `main` are the default variant's rules, `pass` those of a variant.
+pub(crate) fn variant_rules(doc: &Document, c: &Component, main: &[Rule], pass: &dyn Fn(NodeId) -> Vec<Rule>) -> String {
+    let lay = layout(c);
+    let children = c.set.and_then(|s| doc.node(s)).map(|s| s.children.clone()).unwrap_or_default();
+    let siblings: Vec<(NodeId, BTreeMap<String, String>)> = children
+        .into_iter()
+        .filter_map(|v| doc.node(v).filter(|n| matches!(n.kind, NodeKind::Component { .. })).map(|n| (v, variant_props(&n.name))))
+        .take(256)
+        .collect();
+    let kind_of = |pairs: &BTreeMap<String, String>| match &lay.state {
+        Some(s) => pairs.get(&s.prop).map_or(StateKind::Rest, |v| s.kind(v)),
+        None => StateKind::Rest,
+    };
+    let is_state = |i: usize| lay.state.as_ref().is_some_and(|s| s.index == i);
+    let attributes = |pairs: &BTreeMap<String, String>| -> String {
+        c.params
+            .iter()
+            .zip(&lay.members)
+            .enumerate()
+            .filter(|(_, (p, _))| matches!(p.kind, ParamKind::Variant(_)))
+            .filter_map(|(i, (p, m))| {
+                let value = pairs.get(&p.prop)?;
+                if is_state(i) && kind_of(pairs) != StateKind::Other {
+                    return None;
+                }
+                Some(format!("[{}=\"{}\"]", m.attribute.as_deref()?, css_string(value)))
+            })
+            .collect()
+    };
+    let same_axes = |a: &BTreeMap<String, String>, b: &BTreeMap<String, String>| {
+        c.params
+            .iter()
+            .enumerate()
+            .filter(|(i, p)| matches!(p.kind, ParamKind::Variant(_)) && !is_state(*i))
+            .all(|(_, p)| a.get(&p.prop) == b.get(&p.prop))
+    };
+    let mut out = String::new();
+    let mut written: Vec<(String, String)> = Vec::new();
+    for (v, pairs) in siblings.iter().filter(|(v, _)| *v != c.comp).take(64) {
+        let kind = kind_of(pairs);
+        let pseudo = match kind {
+            StateKind::Hover => ":hover".to_string(),
+            StateKind::FocusVisible => ":focus-visible".to_string(),
+            StateKind::Active => ":active".to_string(),
+            StateKind::Disabled | StateKind::Loading => {
+                lay.state.as_ref().and_then(|s| s.boolean(kind)).map(|(_, _, attribute)| format!("[{attribute}]")).unwrap_or_default()
+            }
+            StateKind::Rest | StateKind::Other => String::new(),
+        };
+        let selector = format!(":host({}{pseudo})", attributes(pairs));
+        if selector == ":host()" {
+            continue;
+        }
+        let at_rest = (kind != StateKind::Rest)
+            .then(|| siblings.iter().find(|(w, wp)| w != v && same_axes(pairs, wp) && kind_of(wp) == StateKind::Rest))
+            .flatten()
+            .map(|(w, _)| *w)
+            .filter(|w| *w != c.comp);
+        let reference = at_rest.map(pass);
+        let reference: &[Rule] = reference.as_deref().unwrap_or(main);
+        for (path, _, decls) in pass(*v) {
+            let Some((_, class, base)) = main.iter().find(|(p, _, _)| *p == path) else { continue };
+            let base = reference.iter().find(|(p, _, _)| *p == path).map_or(base, |(_, _, d)| d);
+            let base_lines: Vec<&str> = base.lines().collect();
+            let diff: Vec<&str> = decls.lines().filter(|l| !base_lines.contains(l)).collect();
+            if diff.is_empty() || written.contains(&(selector.clone(), class.clone())) {
+                continue;
+            }
+            written.push((selector.clone(), class.clone()));
+            out.push_str(&format!("{selector} .{class} {{\n{}}}\n", diff.iter().map(|l| format!("  {l}\n")).collect::<String>()));
+        }
+    }
+    out
+}
+
+/// One note per value of the state property that is no known interaction state.
+fn state_notes(c: &Component, lay: &Layout) -> Vec<Note> {
+    let Some(state) = lay.state.as_ref() else { return Vec::new() };
+    state
+        .values
+        .iter()
+        .filter(|(_, k)| *k == StateKind::Other)
+        .map(|(value, _)| Note {
+            code: "unrecognized-state",
+            component: c.type_name.clone(),
+            layer: None,
+            message: format!("{} \"{value}\" is not a known interaction state: it stays a property", state.prop),
+        })
+        .collect()
+}
+
+/// A component with a Focus state takes the keyboard focus, and not while it is disabled.
+fn focus_methods(lay: &Layout) -> String {
+    let Some(state) = lay.state.as_ref().filter(|s| s.has(StateKind::FocusVisible)) else { return String::new() };
+    let Some((_, disabled, _)) = state.boolean(StateKind::Disabled) else {
+        return "  connectedCallback() {\n    super.connectedCallback();\n    if (!this.hasAttribute(\"tabindex\")) this.setAttribute(\"tabindex\", \"0\");\n  }\n\n"
+            .to_string();
+    };
+    format!(
+        "  connectedCallback() {{\n    super.connectedCallback();\n    this.syncFocus();\n  }}\n\n  updated(changed: Map<PropertyKey, unknown>) {{\n    if (changed.has(\"{disabled}\")) this.syncFocus();\n  }}\n\n  private syncFocus() {{\n    this.setAttribute(\"tabindex\", this.{disabled} ? \"-1\" : \"0\");\n    this.setAttribute(\"aria-disabled\", String(this.{disabled}));\n  }}\n\n"
+    )
 }
 
 // ------------------------------------------------------------------ text
@@ -345,7 +645,16 @@ pub fn definition(doc: &Document, c: &Component, opts: &LitOptions) -> LitOutput
     let mut out =
         String::from("import { LitElement, css, html, nothing } from \"lit\";\nimport { customElement, property } from \"lit/decorators.js\";\n\n");
     out.push_str(&format!("@customElement(\"{tag}\")\nexport class {class} extends LitElement {{\n"));
-    let fields: Vec<String> = c.params.iter().zip(members(c)).filter_map(|(p, m)| field(p, &m)).collect();
+    let lay = layout(c);
+    let mut fields: Vec<String> = c
+        .params
+        .iter()
+        .zip(&lay.members)
+        .enumerate()
+        .filter(|(_, (_, m))| !m.hidden)
+        .filter_map(|(i, (p, m))| field(&field_param(&lay, i, p), m))
+        .collect();
+    fields.extend(lay.extras.iter().filter_map(|e| field(&e.param, &e.member)));
     for f in &fields {
         out.push_str(&format!("  {f}\n"));
     }
@@ -356,9 +665,11 @@ pub fn definition(doc: &Document, c: &Component, opts: &LitOptions) -> LitOutput
     for line in template_text(&css).lines() {
         out.push_str(&if line.is_empty() { "\n".to_string() } else { format!("    {line}\n") });
     }
-    out.push_str(&format!("  `;\n\n  render() {{\n    return html`\n{markup}    `;\n  }}\n}}\n\n"));
+    out.push_str("  `;\n\n");
+    out.push_str(&focus_methods(&lay));
+    out.push_str(&format!("  render() {{\n    return html`\n{markup}    `;\n  }}\n}}\n\n"));
     out.push_str(&format!("declare global {{\n  interface HTMLElementTagNameMap {{\n    \"{tag}\": {class};\n  }}\n}}\n"));
-    LitOutput { tag, class_name: class, ts: out, notes: Vec::new() }
+    LitOutput { tag, class_name: class, ts: out, notes: state_notes(c, &lay) }
 }
 
 // ------------------------------------------------------------------ instances
@@ -401,8 +712,22 @@ pub(crate) fn usage(
     let pad = "  ".repeat(depth);
     let tag = tag_for(doc, c, opts);
     let slots = slots_of(doc, id);
-    let (mut attrs, mut children, mut css) = (String::new(), String::new(), String::new());
-    for ((p, m), (_, v)) in c.params.iter().zip(members(c)).zip(values) {
+    let lay = layout(c);
+    let (mut attrs, mut children, mut css) = (Vec::<String>::new(), String::new(), String::new());
+    let mut attr = |text: String| {
+        if !attrs.contains(&text) {
+            attrs.push(text);
+        }
+    };
+    for (i, ((p, m), (_, v))) in c.params.iter().zip(&lay.members).zip(values).enumerate() {
+        if let Some(state) = lay.state.as_ref().filter(|s| s.index == i) {
+            if let Some(a) = state_attribute(&lay, v) {
+                attr(format!(" {a}"));
+            }
+            if m.hidden || v.as_str().is_some_and(|v| state.kind(v) != StateKind::Other) {
+                continue;
+            }
+        }
         match &p.kind {
             ParamKind::Slot => {
                 if v.as_bool() == Some(true)
@@ -422,19 +747,16 @@ pub(crate) fn usage(
             }
             _ if *v == p.default => {}
             ParamKind::Boolean => {
-                let Some(attr) = m.attribute else { continue };
-                if v.as_bool() == Some(true) {
-                    attrs.push_str(&format!(" {attr}"));
-                } else {
-                    attrs.push_str(&format!(" {attr}=\"false\""));
-                }
+                let Some(name) = m.attribute.as_deref() else { continue };
+                attr(if v.as_bool() == Some(true) { format!(" {name}") } else { format!(" {name}=\"false\"") });
             }
             ParamKind::Text | ParamKind::Variant(_) => {
-                let Some(attr) = m.attribute else { continue };
-                attrs.push_str(&format!(" {attr}=\"{}\"", attribute_value(v.as_str().unwrap_or(""), template)));
+                let Some(name) = m.attribute.as_deref() else { continue };
+                attr(format!(" {name}=\"{}\"", attribute_value(v.as_str().unwrap_or(""), template)));
             }
         }
     }
+    let attrs = attrs.concat();
     let code = if children.is_empty() { format!("{pad}<{tag}{attrs}></{tag}>\n") } else { format!("{pad}<{tag}{attrs}>\n{children}{pad}</{tag}>\n") };
     (code, css)
 }

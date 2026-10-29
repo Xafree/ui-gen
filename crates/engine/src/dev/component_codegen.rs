@@ -89,23 +89,31 @@ pub fn specs() -> Vec<CommandSpec> {
             let doc = s.doc()?;
             let c = main_of(doc, id).and_then(|m| describe(doc, m)).ok_or_else(|| bad(cmd, "not a component, set or instance"))?;
             let values = instance_values(doc, id, &c);
-            let members = crate::lit::members(&c);
-            let properties: Vec<Value> = c
-                .params
-                .iter()
-                .zip(&members)
-                .map(|(p, m)| {
-                    let mut v = json!({"name": p.prop, "param": p.ident, "type": p.kind.id(), "default": p.default});
-                    if let Some(vals) = &values {
-                        v["value"] = vals.iter().find(|(name, _)| *name == p.prop).map_or(Value::Null, |(_, x)| x.clone());
-                    }
-                    if lang == CodeLang::Lit {
-                        v["attribute"] = json!(m.attribute);
-                        v["reflect"] = json!(m.reflect);
-                    }
-                    v
-                })
-                .collect();
+            let properties: Vec<Value> = if lang == CodeLang::Lit {
+                crate::lit::exposed(&c, values.as_deref())
+                    .into_iter()
+                    .map(|e| {
+                        let mut v = json!({"name": e.name, "param": e.param, "type": e.kind, "default": e.default});
+                        if let Some(value) = e.value {
+                            v["value"] = value;
+                        }
+                        v["attribute"] = json!(e.member.attribute);
+                        v["reflect"] = json!(e.member.reflect);
+                        v
+                    })
+                    .collect()
+            } else {
+                c.params
+                    .iter()
+                    .map(|p| {
+                        let mut v = json!({"name": p.prop, "param": p.ident, "type": p.kind.id(), "default": p.default});
+                        if let Some(vals) = &values {
+                            v["value"] = vals.iter().find(|(name, _)| *name == p.prop).map_or(Value::Null, |(_, x)| x.clone());
+                        }
+                        v
+                    })
+                    .collect()
+            };
             let lit = (lang == CodeLang::Lit).then(|| crate::lit::definition(doc, &c, &opts));
             let mut out = json!({
                 "component": c.comp, "name": c.type_name, "set": c.set, "properties": properties,
@@ -812,11 +820,7 @@ pub(crate) fn web(doc: &Document, c: &Component, lang: CodeLang, lit: &LitOption
     let root_name = c.set.and_then(|s| doc.node(s)).or_else(|| doc.node(c.comp)).map(|n| n.name.clone()).unwrap_or_default();
     let root_class = class_name(&root_name, "component", &mut Vec::new());
     let variants: Vec<&Param> = c.params.iter().filter(|p| matches!(p.kind, ParamKind::Variant(_))).collect();
-    let attr_names: Vec<String> = if lit_lang {
-        variants.iter().map(|p| crate::lit::member(c, p).attribute.unwrap_or_else(|| p.ident.clone())).collect()
-    } else {
-        data_attrs(&variants)
-    };
+    let attr_names: Vec<String> = if lit_lang { Vec::new() } else { data_attrs(&variants) };
     let pass = |root: NodeId| {
         let vctx = Ctx { doc, root, comp: Some(c), base: start };
         let mut m = Markup::new(&vctx, lang);
@@ -844,19 +848,17 @@ pub(crate) fn web(doc: &Document, c: &Component, lang: CodeLang, lit: &LitOption
     m.node(c.comp, None, start, "");
     // Other variants: what differs from this one, layer by layer.
     let mut variant_rules = String::new();
+    if lit_lang {
+        variant_rules = crate::lit::variant_rules(doc, c, &m.rules, &pass);
+    }
     let others: Vec<NodeId> = c.set.and_then(|s| doc.node(s)).map(|s| s.children.clone()).unwrap_or_default();
-    for v in others.into_iter().filter(|v| *v != c.comp && is_component(doc, *v)).take(64) {
+    for v in others.into_iter().filter(|v| !lit_lang && *v != c.comp && is_component(doc, *v)).take(64) {
         let Some(vn) = doc.node(v) else { continue };
         let pairs = variant_props(&vn.name);
         let attrs: String = variants
             .iter()
             .zip(&attr_names)
-            .filter_map(|(p, attr)| {
-                pairs.get(&p.prop).map(|val| {
-                    let val = if lit_lang { crate::lit::css_string(val) } else { val.replace(['"', '\\'], "") };
-                    format!("[{attr}=\"{val}\"]")
-                })
-            })
+            .filter_map(|(p, attr)| pairs.get(&p.prop).map(|val| format!("[{attr}=\"{}\"]", val.replace(['"', '\\'], ""))))
             .collect();
         for (path, _, decls) in pass(v) {
             let Some((_, class, base)) = m.rules.iter().find(|(p, _, _)| *p == path) else { continue };
@@ -865,11 +867,7 @@ pub(crate) fn web(doc: &Document, c: &Component, lang: CodeLang, lit: &LitOption
             if diff.is_empty() {
                 continue;
             }
-            let sel = match (lit_lang, path.is_empty()) {
-                (true, _) => format!(":host({attrs}) .{class}"),
-                (false, true) => format!(".{root_class}{attrs}"),
-                (false, false) => format!(".{root_class}{attrs} .{class}"),
-            };
+            let sel = if path.is_empty() { format!(".{root_class}{attrs}") } else { format!(".{root_class}{attrs} .{class}") };
             variant_rules.push_str(&format!("{sel} {{\n{}}}\n", diff.iter().map(|l| format!("  {l}\n")).collect::<String>()));
         }
     }
