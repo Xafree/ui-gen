@@ -235,28 +235,45 @@ fn detach(command: &mut Command) {
 }
 
 #[cfg(windows)]
-fn kill_descendants(pid: u32) {
+fn kill_descendants(pid: u32, parent_alive: bool) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let _ = Command::new("taskkill")
-        .args(["/T", "/F", "/PID", &pid.to_string()])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW)
-        .status();
+    let mut command = if parent_alive {
+        let mut command = Command::new("taskkill");
+        command.args(["/T", "/F", "/PID", &pid.to_string()]);
+        command
+    } else {
+        let mut command = Command::new("powershell");
+        command.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            &format!("Get-CimInstance Win32_Process -Filter 'ParentProcessId={pid}' | ForEach-Object {{ taskkill /T /F /PID $_.ProcessId }}"),
+        ]);
+        command
+    };
+    let _ = command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).creation_flags(CREATE_NO_WINDOW).status();
 }
 
 #[cfg(unix)]
-fn kill_descendants(pid: u32) {
+fn kill_descendants(pid: u32, _parent_alive: bool) {
     let _ = Command::new("kill").args(["-KILL", "--", &format!("-{pid}")]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
 }
 
-fn kill_tree(child: &mut Child) {
-    if matches!(child.try_wait(), Ok(Some(_))) {
+pub(crate) fn must_kill_tree(exit: Option<ExitStatus>) -> bool {
+    !exit.is_some_and(|status| status.success())
+}
+
+/// Windows keeps the parent id of an orphan, so a dead service's leftovers are found by it; the
+/// id may have been reused by then. A clean exit (code 0) has already stopped its own npm and Chromium.
+pub(crate) fn kill_tree(child: &mut Child) {
+    let exit = child.try_wait().ok().flatten();
+    if !must_kill_tree(exit) {
         return;
     }
-    kill_descendants(child.id());
-    let _ = child.kill();
-    let _ = child.wait();
+    kill_descendants(child.id(), exit.is_none());
+    if exit.is_none() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
 }
