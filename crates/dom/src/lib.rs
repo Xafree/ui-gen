@@ -23,4 +23,6 @@ pub const MAX_MARKUP_BYTES: usize = 1024 * 1024;
 #[cfg(test)]
 mod import_tests;
 #[cfg(test)]
+mod parse_message_tests;
+#[cfg(test)]
 mod snapshot_tests;

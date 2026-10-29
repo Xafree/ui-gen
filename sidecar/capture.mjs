@@ -12,6 +12,8 @@ const VIEWPORT = { width: 400, height: 200 };
 const TRANSITION_MARGIN_MS = 50;
 const READY_TIMEOUT_MS = 15000;
 
+// Theme variables copied from shadcn/ui (https://github.com/shadcn-ui/ui), MIT, Copyright (c) 2023 shadcn;
+// the licence text is in NOTICE and in fixtures-src/shadcn.jsx.
 const TAILWIND_SHADCN_THEME = `
 @import "tailwindcss";
 @theme inline {
@@ -135,7 +137,7 @@ async function waitForRender(page, pageErrors) {
 
 function settleTransitions(page) {
   return page.evaluate(
-    async ([selector, margin]) => {
+    async ([selector, margin, cap]) => {
       const seconds = (value) => value.split(',').map((part) => Number.parseFloat(part) || 0);
       const root = document.querySelector(selector);
       let longest = 0;
@@ -146,9 +148,9 @@ function settleTransitions(page) {
           longest = Math.max(longest, duration + delays[index % delays.length]);
         });
       }
-      await new Promise((done) => setTimeout(done, longest * 1000 + margin));
+      await new Promise((done) => setTimeout(done, Math.min(longest * 1000 + margin, cap)));
     },
-    [ROOT_SELECTOR, TRANSITION_MARGIN_MS],
+    [ROOT_SELECTOR, TRANSITION_MARGIN_MS, READY_TIMEOUT_MS],
   );
 }
 
@@ -166,9 +168,9 @@ async function capture({ lib, state, outDir }) {
   const htmlPath = resolve(buildDir, `${lib}.html`);
   await writeFile(htmlPath, pageHtml(lib));
 
-  const browser = await chromium.launch({ args: ['--disable-lcd-text'] });
+  const browser = await chromium.launch({ chromiumSandbox: true, args: ['--disable-lcd-text'] });
   try {
-    const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1 });
+    const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, offline: true });
     const page = await context.newPage();
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -181,7 +183,7 @@ async function capture({ lib, state, outDir }) {
 
     const source = { package: config.package, version, component: 'Button', props: config.props, state };
     const snapshot = await captureSnapshot(page, ROOT_SELECTOR, source);
-    await writeFile(resolve(outDir, `${lib}-${state}.json`), `${JSON.stringify(snapshot, null, 2)}\n`);
+    await writeFile(resolve(outDir, `${lib}-${state}.json`), JSON.stringify(snapshot));
     await page.locator(ROOT_SELECTOR).screenshot({ path: resolve(outDir, `${lib}-${state}.png`), omitBackground: false });
     return snapshot;
   } finally {

@@ -15,6 +15,12 @@ MIT OR Apache-2.0. No third-party icon sets are used.
 | `docs/images/` (all screenshots and exports: `shot-*.png`, `art-*.png`) | FigCraft contributors | Screenshots of FigCraft showing synthetic demo documents made in FigCraft, and PNG exports of those documents by FigCraft's renderer | MIT OR Apache-2.0 | No third-party artwork |
 | `examples/*.figcraft` | FigCraft contributors | Synthetic demo documents built through FigCraft's command API; invented copy, shapes and vectors drawn from scratch, no images or embedded fonts | MIT OR Apache-2.0 | Text uses Inter (OFL, from craft-fonts or the system); no third-party artwork |
 
+## Code copied from third-party projects (not shipped)
+
+| Path | Author | Source | Licence | Notes |
+|---|---|---|---|---|
+| `sidecar/fixtures-src/shadcn.jsx`, `TAILWIND_SHADCN_THEME` in `sidecar/capture.mjs` | shadcn | [shadcn/ui](https://github.com/shadcn-ui/ui) | MIT, Copyright (c) 2023 shadcn; full text in [`NOTICE`](NOTICE) | Button and theme variables, test fixture of the capture service; never bundled or shipped with UIGEN |
+
 ## Fonts (build input, not in this repository)
 
 Release builds embed fonts from the optional craft-fonts build input
