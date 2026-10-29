@@ -19,11 +19,15 @@ mod cleanup_tests;
 #[cfg(test)]
 mod css_tests;
 #[cfg(test)]
+mod facts_tests;
+#[cfg(test)]
 mod fidelity_tests;
 #[cfg(test)]
 mod frame_tests;
 #[cfg(test)]
 mod layout_tests;
+#[cfg(test)]
+mod motion_tests;
 #[cfg(test)]
 mod notes_tests;
 #[cfg(test)]
