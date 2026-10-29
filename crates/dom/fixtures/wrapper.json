@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "viewport": { "width": 400, "height": 200, "deviceScaleFactor": 1 },
+  "root": {
+    "type": "element",
+    "tag": "div",
+    "label": "Card",
+    "box": { "x": 0, "y": 0, "width": 200, "height": 100 },
+    "style": {},
+    "children": [
+      {
+        "type": "element",
+        "tag": "div",
+        "label": "Wrapper",
+        "box": { "x": 10, "y": 10, "width": 80, "height": 30 },
+        "style": {},
+        "children": [
+          {
+            "type": "element",
+            "tag": "span",
+            "label": "Inner",
+            "box": { "x": 10, "y": 10, "width": 80, "height": 30 },
+            "style": { "backgroundColor": "rgb(25, 118, 210)" }
+          }
+        ]
+      },
+      {
+        "type": "element",
+        "tag": "div",
+        "label": "Empty",
+        "box": { "x": 10, "y": 50, "width": 20, "height": 20 },
+        "style": { "backgroundColor": "rgba(0, 0, 0, 0)" }
+      },
+      {
+        "type": "element",
+        "tag": "span",
+        "label": "Ripple",
+        "className": "MuiTouchRipple-root",
+        "box": { "x": 100, "y": 50, "width": 20, "height": 20 },
+        "style": {}
+      },
+      {
+        "type": "element",
+        "tag": "div",
+        "label": "Filled",
+        "box": { "x": 100, "y": 10, "width": 40, "height": 20 },
+        "style": { "backgroundColor": "rgb(0, 128, 0)" }
+      },
+      {
+        "type": "element",
+        "tag": "div",
+        "label": "Dim",
+        "box": { "x": 10, "y": 80, "width": 60, "height": 15 },
+        "style": { "opacity": "0.5" },
+        "children": [
+          {
+            "type": "element",
+            "tag": "span",
+            "label": "Dimmed",
+            "box": { "x": 10, "y": 80, "width": 60, "height": 15 },
+            "style": { "backgroundColor": "rgb(255, 0, 0)" }
+          }
+        ]
+      }
+    ]
+  }
+}

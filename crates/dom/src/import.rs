@@ -10,11 +10,17 @@ mod svg;
 mod text;
 
 #[cfg(test)]
+mod cleanup_tests;
+#[cfg(test)]
 mod css_tests;
 #[cfg(test)]
 mod fidelity_tests;
 #[cfg(test)]
 mod frame_tests;
+#[cfg(test)]
+mod layout_tests;
+#[cfg(test)]
+mod notes_tests;
 #[cfg(test)]
 mod shadow_tests;
 #[cfg(test)]
@@ -23,6 +29,8 @@ mod support;
 mod svg_tests;
 #[cfg(test)]
 mod text_tests;
+#[cfg(test)]
+mod translate_support;
 #[cfg(test)]
 mod walk_tests;
 
