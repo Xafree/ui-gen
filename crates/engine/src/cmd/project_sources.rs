@@ -54,11 +54,11 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
-fn binding(s: &Session, cmd: &str) -> Result<Arc<ProjectBinding>> {
+pub(super) fn binding(s: &Session, cmd: &str) -> Result<Arc<ProjectBinding>> {
     s.project().cloned().ok_or_else(|| bad(cmd, "the current file is not in a library project"))
 }
 
-fn package(cmd: &str, p: &Value) -> Result<String> {
+pub(super) fn package(cmd: &str, p: &Value) -> Result<String> {
     let name = p.get("package").ok_or_else(|| bad(cmd, "package is required"))?.as_str().ok_or_else(|| bad(cmd, "package must be a string"))?;
     npm::validate_package_name(name).map_err(|e| bad(cmd, e.to_string()))?;
     Ok(name.to_string())
@@ -85,7 +85,7 @@ fn require_active_source(cmd: &str, binding: &ProjectBinding, package: &str) -> 
     Err(bad(cmd, format!("package \"{package}\" is not a source of this project")))
 }
 
-fn absolute_root(cmd: &str, root: &str) -> Result<String> {
+pub(super) fn absolute_root(cmd: &str, root: &str) -> Result<String> {
     let absolute = path::absolute(root).map_err(|e| bad(cmd, format!("cannot resolve the project folder {root}: {e}")))?;
     Ok(absolute.to_string_lossy().into_owned())
 }

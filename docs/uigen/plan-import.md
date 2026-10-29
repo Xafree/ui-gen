@@ -53,7 +53,7 @@ journal libre, jamais lu comme protocole.
 |---|---|---|
 | `install` | `dir`, `package`, `version` (exacte ou `latest`) | `{package, version, license, framework}` |
 | `uninstall` | `dir`, `package` | `{package}` |
-| `inspect` | `dir`, `package` | `{package, version, framework, components: [{name, props}]}` |
+| `inspect` | `dir`, `package` | `{package, version, framework, components: [{name, props: [{name, type, values}]}], notes}` (propriétés typées depuis le lot 3, voir « Instantané et `inspect` enrichis ») |
 | `render` | `dir`, `package`, `component`, `props`, `state`, `theme` | `{snapshot (instantané v1 de `figcraft-dom`), png (chemin relatif à `dir`)}` |
 | `shutdown` | `{}` | `{}` |
 
@@ -101,6 +101,77 @@ cargo test -p figcraft-capture -- --ignored --test-threads=1
 - E2-8.2 : `install @uigen-test/absent-404 1.0.0` rend `Install` avec un message lisible ; `render` d'un composant
   `Nope` rend `ComponentNotFound`.
 
+Deux autres tests `#[ignore]` (`crates/capture/src/real_import_tests.rs`, lot 3) font tourner une vraie `Session` du moteur
+sur le vrai service, dans un projet temporaire (`project.open {create: true}`, `project.addSource @mui/material
+7.3.11`) ; ils téléchargent aussi depuis npm, lancent Chromium et durent environ 100 s chacun :
+
+- E3-8.1 : `uigen.importComponent {component: "Button", styles: ["contained", "outlined"], sizes: ["small",
+  "medium"], states: ["Default", "Hover", "Pressed", "Disabled"]}` (thèmes par défaut) aboutit à 16 variantes dans
+  un `ComponentSet`, la collection `@mui/material 7.3.11` aux modes `Light` et `Dark`, un calque
+  `uigen.effect = "ripple"` et une interaction `OnHover` de durée non nulle ; un seul `edit.undo` vide la page.
+- E3-8.2 : le même import avec `component: "Nope"` échoue en `ComponentNotFound` (le message nomme `inspect` et le
+  composant) et laisse le document et l'historique d'annulation inchangés.
+
+Lancés à la main le 29 octobre 2026 : `cargo test -p figcraft-capture real_import -- --ignored --test-threads=1`, verts.
+
+### Instantané et `inspect` enrichis (lot 3)
+
+Le protocole reste en **version 1** : le lot 3 n'ajoute que des champs facultatifs, aucun n'est retiré, et un
+instantané du lot 0 se relit à l'identique.
+
+- **`inspect`** lit les propriétés typées de chaque composant : `props: [{name, type, values}]`, `type` ∈ `enum`
+  (union de littéraux chaîne ; `values` dans l'ordre de déclaration), `boolean`, `string`, `number`, `other`
+  (`values: null`). Les types viennent des `.d.ts` du paquet installé, lus avec l'API du compilateur
+  `typescript` ; le code du paquet n'est jamais exécuté dans Node. Sont écartés `children`, `className`, `style`,
+  `ref`, `key`, les `on[A-Z]…`, les props de type fonction et celles qui ne viennent que de React ou du DOM.
+  Au plus 64 props par composant et 64 valeurs par prop. Bornes de lecture : 20 s, 4 000 fichiers, 64 Mio, 512 Mio de
+  mémoire, confinée à `.uigen/sources/node_modules/` (un lien qui sort du paquet est tenu pour inexistant) ; la lecture
+  tourne dans un `worker_thread` interrompu à l'échéance, et la taille d'un fichier est lue avant le fichier. Une borne
+  atteinte ou un paquet sans types rend `props: []` et une phrase dans `notes`, jamais une erreur. Composant web :
+  `custom-elements.json`.
+- **`style`** d'un élément gagne les clés de mise en page `flexDirection`, `flexWrap`, `justifyContent`,
+  `alignItems`, `alignContent`, `alignSelf`, `flexGrow`, `flexShrink`, `rowGap`, `columnGap`, `paddingTop`,
+  `paddingRight`, `paddingBottom`, `paddingLeft`, `position`, `boxSizing` et `gridTemplateColumns`.
+- **`className`** : l'attribut `class` (256 caractères au plus). **`vars`** : pour chaque clé de `style` dont la
+  déclaration d'auteur gagnante est un `var(--nom…)` nu, `{"<clé>": "--nom"}` (64 entrées au plus, nom
+  `--[A-Za-z0-9_-]{1,128}`). **`animations`** : les animations CSS en cours (`element.getAnimations()`, 16 au
+  plus) `{name, durationMs, easing, iterations (nombre ou "infinite"), properties}` ; un nœud `svg` porte les mêmes
+  `animations` (un spinner est souvent un `<svg>` qui tourne, par `transform` ou par la propriété `rotate`).
+- `parse_snapshot` (`figcraft-dom`) valide ces champs à la frontière et refuse l'instantané en nommant le nœud :
+  `vars` au plus `MAX_VARS` (64) entrées dont le nom suit `MAX_VAR_NAME_CHARS` (128) ; `animations` au plus
+  `MAX_ANIMATIONS` (16) par élément ou `svg` ; `className` au plus 256 caractères ; `name` et `easing` d'une animation
+  au plus 256 caractères ; `properties` d'une animation au plus 64 entrées de 128 caractères. Le service coupe ces
+  textes avant d'écrire l'instantané ; seul un instantané qui ne vient pas de lui est refusé.
+
+### Traduction et assemblage (lot 3)
+
+- **`figcraft_dom::translate_snapshot(doc, snapshot, parent, x, y, &TranslateOptions)`** (L4, pur) traduit
+  **un** instantané : boîtes en cadres (fonds, bordures, ombres, rayons, opacité, découpe), flex en auto layout quand
+  le moteur de mise en page retrouve les boîtes du navigateur à 1 px près (sinon les enfants restent où ils ont été
+  capturés et une note le dit), textes dans la police installée la plus proche, SVG par `usvg`, enveloppes vides
+  retirées, frères homonymes suffixés ` 2`, ` 3`. Il rend `Translated {root, warnings, layers}` ; chaque
+  `LayerFacts` donne le chemin du calque, les valeurs liables en tokens (`TokenFact`, avec le nom `--…` exposé
+  quand `vars` en porte un), la transition lue (`TransitionFact`) et l'effet reconnu (`Effect::Ripple` ou
+  `Spinner`). Ce qui ne se traduit pas devient une annotation Dev Mode « UIGEN import: … » sur le calque.
+- **`uigen.importDom`** garde la traduction du lot 0 par défaut ; `full: true` appelle `translate_snapshot`.
+- **`uigen.importComponent`** (moteur, `crates/engine/src/uigen_import/`) : `plan` lit `inspect` et fixe les axes
+  (Style, Taille, États) et la grille ; `pending` enchaîne les travaux (`inspect`, puis un `render` par variante et
+  par thème) et rend un seul évènement ; `assemble` traduit chaque variante, en fait un composant, les combine en
+  `ComponentSet`, les place en grille (pas de 20 px) et marque le jeu `plugin_data["uigen.source"]` ; `tokens`
+  crée ou réutilise la collection `<paquet> <version>` (modes `Light` et `Dark`) et lie les calques ; `motion`
+  pose les interactions `ChangeTo` et les effets (`plugin_data["uigen.effect"]`). Le tout s'écrit dans un seul
+  `Session::grouped("Import component")` : un pas d'annulation. La commande est décrite dans
+  [`docs/mcp.md`](../mcp.md#component-import).
+
+### Limites connues (lot 3)
+
+- La cascade de `vars` ignore `@layer` et le CSS imbriqué : une déclaration posée dans l'un d'eux n'est pas
+  comptée. Seul le nom exposé (`--nom`) est perdu ; la valeur du calque reste celle que Chromium a calculée.
+- Les animations terminées avant la capture ne sont pas relevées (`getAnimations()` ne rend que celles en cours) ;
+  le ripple est reconnu par sa classe (`ripple`, casse ignorée), pas par son animation.
+- Les chemins de calques écrivent un `/` d'un nom `\/` et un `\` d'un nom `\\`, pour que deux calques distincts
+  n'aient jamais le même chemin ; les noms affichés ne changent pas.
+
 ## Lots
 
 ### Lot 0 · Essai de faisabilité (risque principal d'abord)
@@ -134,15 +205,18 @@ titre d'information. Si l'essai échoue, on revoit l'approche avant d'aller plus
    2026, vert (voir « Service de capture »).
 
 ### Lot 3 · Traduction en calques
-1. `uigen-dom` : boîtes → cadres, flex → auto layout, textes, SVG (`figcraft_svg::import_svg`),
-   fonds, bordures, ombres, rayons, opacité, découpe ; nettoyage des enveloppes vides ;
-   ce qui ne se traduit pas devient une note sur le calque, jamais une invention.
-2. Jeu de variantes Style × Taille × État (`ComponentSet`, noms `Style=…, Size=…, State=…`), mêmes
-   noms de calques entre variantes, mise en grille.
-3. Thème de tokens : variables de la lib (noms exposés, sinon par rôle), modes clair et sombre,
+- [x] 1. `figcraft-dom` : boîtes → cadres, flex → auto layout, textes, SVG (`figcraft_svg::import_svg`),
+   fonds, bordures, ombres, rayons, opacité, découpe ; nettoyage des enveloppes vides ; ce qui ne se
+   traduit pas devient une note sur le calque, jamais une invention (`translate_snapshot`,
+   `uigen.importDom {full: true}`).
+- [x] 2. Jeu de variantes Style × Taille × État (`ComponentSet`, noms `Style=…, Size=…, State=…`), mêmes
+   noms de calques entre variantes, mise en grille (`uigen.importComponent`).
+- [x] 3. Thème de tokens : variables de la lib (noms exposés, sinon par rôle), modes clair et sombre,
    calques liés (`variable.bind`).
-4. Transitions → interactions de prototype `ChangeTo` (durée, courbe) ; ripple et spinner reconnus.
-5. Un import = un seul pas d'annulation (`Session::grouped`).
+- [x] 4. Transitions → interactions de prototype `ChangeTo` (durée, courbe) ; ripple et spinner reconnus.
+- [x] 5. Un import = un seul pas d'annulation (`Session::grouped`).
+- [x] 6. Essai réel (`crates/capture/src/real_import_tests.rs`, E3-8.1 et E3-8.2) : voir « Service de
+   capture ».
 
 ### Lot 4 · Onglet Composants et glisser-déposer
 1. Sections « Importé · <lib> <version> » dans le panneau (`assets_panel.rs`, `build_listing`).

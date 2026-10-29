@@ -52,6 +52,27 @@ them; on Windows the orphans are found by the parent id the dead service had (a 
 that id was reused first (a job object would need `unsafe`). A clean exit (code 0) is not swept: the service stops its
 own children.
 
+### Translating a render into layers
+
+A capture result is a DOM snapshot (version 1: boxes, computed styles, text runs, SVG markup, and since lot 3 the
+`className`, the CSS variables behind a style (`vars`) and the running animations). The translation is split along the
+layers so the pure part stays pure:
+
+- `figcraft_dom::translate_snapshot` (L4, wasm-safe, never sees the engine) turns **one** snapshot into layers:
+  frames with fills, borders, shadows, radii, clipping and opacity; flex containers into auto layout when the layout
+  engine puts the children back on the browser's boxes (within 1 px); text in the installed font nearest the one
+  Chromium used; SVG through `usvg`; empty wrappers dropped; unique sibling names. It returns `Translated {root,
+  warnings, layers}` where each `LayerFacts` carries the layer's path, the values a token could stand for
+  (`TokenFact`), the transition it declares (`TransitionFact`) and the effect it draws (`Effect::Ripple`,
+  `Spinner`). What it cannot carry is a Dev Mode annotation on the layer, never an invented value.
+- `figcraft-engine` (L5, `uigen_import/`) assembles an import from many translations, in one undo step
+  (`Session::grouped("Import component")`): `plan` (axes, grid, one render per cell) → `pending` (the `inspect`
+  job, then the renders, a single event, the first failure ends the import) → `assemble` (translate each variant,
+  `component.create`, `component.combineVariants`, lay out the grid, `uigen.source`) → `tokens` (the collection
+  `<package> <version>` with a mode per theme, `variable.bind` on every colour, radius, padding, gap, stroke and
+  opacity) → `motion` (`ChangeTo` interactions between the `Default`, `Hover` and `Pressed` variants, ripple and
+  spinner flags in `plugin_data`).
+
 ## Data model
 
 A `Document` holds pages, a persistent map of nodes (frames, groups, sections, rectangles,

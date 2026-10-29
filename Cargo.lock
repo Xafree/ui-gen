@@ -1623,6 +1623,7 @@ dependencies = [
 name = "figcraft-capture"
 version = "0.12.1"
 dependencies = [
+ "figcraft-doc",
  "figcraft-dom",
  "figcraft-engine",
  "serde_json",
@@ -1709,6 +1710,7 @@ version = "0.12.1"
 dependencies = [
  "figcraft-color",
  "figcraft-doc",
+ "figcraft-layout",
  "figcraft-svg",
  "figcraft-text",
  "serde",

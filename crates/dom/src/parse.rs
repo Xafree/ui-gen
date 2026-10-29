@@ -1,8 +1,11 @@
 use serde::Deserialize;
 
 use crate::error::{SnapshotError, capped};
-use crate::model::{DomBox, DomNode, Snapshot};
-use crate::{MAX_DEPTH, MAX_JSON_BYTES, MAX_MARKUP_BYTES, MAX_NODES, SUPPORTED_VERSION};
+use crate::model::{DomAnimation, DomBox, DomNode, Element, Snapshot};
+use crate::{
+    MAX_ANIMATION_PROPERTIES, MAX_ANIMATION_PROPERTY_CHARS, MAX_ANIMATION_TEXT_CHARS, MAX_ANIMATIONS, MAX_CLASS_NAME_CHARS, MAX_DEPTH,
+    MAX_JSON_BYTES, MAX_MARKUP_BYTES, MAX_NODES, MAX_VAR_NAME_CHARS, MAX_VARS, SUPPORTED_VERSION,
+};
 
 /// serde_json stops at 128 nested levels, a 64-level tree needs 129: the limit is lifted and this bound replaces it.
 const MAX_JSON_NESTING: usize = 2 * MAX_DEPTH + 8;
@@ -88,7 +91,11 @@ fn validate_tree(root: &DomNode) -> Result<(), SnapshotError> {
 
 fn validate_node(node: &DomNode) -> Result<(), SnapshotError> {
     match node {
-        DomNode::Element(element) => validate_box(&element.r#box, || format!("element <{}>", capped(&element.tag, MAX_TAG_CHARS))),
+        DomNode::Element(element) => {
+            let node = || format!("element <{}>", capped(&element.tag, MAX_TAG_CHARS));
+            validate_box(&element.r#box, node)?;
+            validate_facts(element, node)
+        }
         DomNode::Text(text) => {
             validate_box(&text.r#box, || "text".to_owned())?;
             text.line_box.as_ref().map_or(Ok(()), |line_box| validate_box(line_box, || "text line box".to_owned()))
@@ -97,9 +104,50 @@ fn validate_node(node: &DomNode) -> Result<(), SnapshotError> {
             if svg.markup.len() > MAX_MARKUP_BYTES {
                 return Err(SnapshotError::MarkupTooLarge { node: "svg".to_owned(), size: svg.markup.len() });
             }
+            validate_animations(&svg.animations, || "svg".to_owned())?;
             validate_box(&svg.r#box, || "svg".to_owned())
         }
     }
+}
+
+fn validate_facts(element: &Element, node: impl Fn() -> String) -> Result<(), SnapshotError> {
+    if element.vars.len() > MAX_VARS {
+        return Err(SnapshotError::TooManyVars { node: node(), count: element.vars.len() });
+    }
+    if let Some(name) = element.vars.values().find(|name| !is_custom_property(name)) {
+        return Err(SnapshotError::InvalidVar { node: node(), name: capped(name, MAX_TAG_CHARS) });
+    }
+    if let Some(class_name) = &element.class_name {
+        validate_length(class_name, "className", MAX_CLASS_NAME_CHARS, &node)?;
+    }
+    validate_animations(&element.animations, node)
+}
+
+fn validate_animations(animations: &[DomAnimation], node: impl Fn() -> String) -> Result<(), SnapshotError> {
+    if animations.len() > MAX_ANIMATIONS {
+        return Err(SnapshotError::TooManyAnimations { node: node(), count: animations.len() });
+    }
+    for animation in animations {
+        validate_length(&animation.name, "animation name", MAX_ANIMATION_TEXT_CHARS, &node)?;
+        validate_length(&animation.easing, "animation easing", MAX_ANIMATION_TEXT_CHARS, &node)?;
+        if animation.properties.len() > MAX_ANIMATION_PROPERTIES {
+            return Err(SnapshotError::TooManyProperties { node: node(), count: animation.properties.len() });
+        }
+        for property in &animation.properties {
+            validate_length(property, "animation property", MAX_ANIMATION_PROPERTY_CHARS, &node)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_length(text: &str, field: &'static str, limit: usize, node: &impl Fn() -> String) -> Result<(), SnapshotError> {
+    let size = text.chars().count();
+    if size > limit { Err(SnapshotError::FieldTooLong { node: node(), field, size, limit }) } else { Ok(()) }
+}
+
+fn is_custom_property(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix("--") else { return false };
+    (1..=MAX_VAR_NAME_CHARS).contains(&rest.len()) && rest.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
 }
 
 fn validate_box(dom_box: &DomBox, node: impl FnOnce() -> String) -> Result<(), SnapshotError> {

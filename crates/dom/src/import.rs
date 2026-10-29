@@ -2,19 +2,38 @@
 //! layer, an `<svg>` an imported vector layer. A value that cannot be read is left out and named
 //! in the warnings; nothing is made up in its place.
 
+mod cleanup;
 mod css;
+mod facts;
 mod fonts;
 mod frame;
+mod layout;
+mod motion;
+mod names;
+mod notes;
 mod shadow;
 mod svg;
 mod text;
+mod translate;
 
 #[cfg(test)]
+mod cleanup_tests;
+#[cfg(test)]
 mod css_tests;
+#[cfg(test)]
+mod facts_tests;
 #[cfg(test)]
 mod fidelity_tests;
 #[cfg(test)]
 mod frame_tests;
+#[cfg(test)]
+mod layout_tests;
+#[cfg(test)]
+mod motion_tests;
+#[cfg(test)]
+mod notes_tests;
+#[cfg(test)]
+mod review_tests;
 #[cfg(test)]
 mod shadow_tests;
 #[cfg(test)]
@@ -24,14 +43,19 @@ mod svg_tests;
 #[cfg(test)]
 mod text_tests;
 #[cfg(test)]
+mod translate_support;
+#[cfg(test)]
 mod walk_tests;
 
-use figcraft_doc::{Document, NodeId};
+use figcraft_doc::{Annotation, Document, NodeId};
 
 use crate::error::ImportError;
-use crate::model::{DomBox, DomNode, Element, Snapshot};
+use crate::model::{DomBox, DomNode, Element, Snapshot, SvgNode};
 
 pub use fonts::nearest_weight;
+pub use motion::css_easing;
+pub use notes::NOTE_PREFIX;
+pub use translate::{Effect, LayerFacts, TokenFact, TokenValue, TransitionFact, TranslateOptions, Translated, translate_snapshot};
 
 const MAX_WARNINGS: usize = 200;
 const MAX_NAME_CHARS: usize = 128;
@@ -48,7 +72,7 @@ pub fn import_snapshot(doc: &mut Document, snapshot: &Snapshot, parent: NodeId, 
     if doc.node(parent).is_none() {
         return Err(ImportError::ParentNotFound(parent));
     }
-    let mut walk = Walk { doc, warnings: Warnings::default() };
+    let mut walk = Walk::new(doc, false);
     let root = walk.run(&snapshot.root, parent, (finite_or_zero(x), finite_or_zero(y)))?;
     Ok(Imported { root, warnings: walk.warnings.into_messages() })
 }
@@ -57,15 +81,21 @@ pub fn import_snapshot(doc: &mut Document, snapshot: &Snapshot, parent: NodeId, 
 struct Warnings {
     messages: Vec<String>,
     left_out: usize,
+    fresh: Vec<String>,
 }
 
 impl Warnings {
-    fn push(&mut self, message: String) {
+    fn push(&mut self, name: &str, message: &str) {
         if self.messages.len() < MAX_WARNINGS {
-            self.messages.push(message);
+            self.messages.push(format!("{name}: {message}"));
         } else {
             self.left_out += 1;
         }
+        self.fresh.push(message.to_owned());
+    }
+
+    fn take_fresh(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.fresh)
     }
 
     fn into_messages(mut self) -> Vec<String> {
@@ -91,7 +121,7 @@ impl<'a> Report<'a> {
     }
 
     fn note(&mut self, message: &str) {
-        self.warnings.push(format!("{}: {message}", self.name));
+        self.warnings.push(self.name, message);
     }
 }
 
@@ -156,13 +186,25 @@ impl Pending<'_> {
     }
 }
 
-struct Walk<'d> {
+struct Walk<'d, 's> {
     doc: &'d mut Document,
     warnings: Warnings,
+    annotate: bool,
+    elements: Vec<(NodeId, &'s Element)>,
+    svgs: Vec<(NodeId, &'s SvgNode)>,
 }
 
-impl Walk<'_> {
-    fn run(&mut self, root: &DomNode, parent: NodeId, at: (f64, f64)) -> Result<NodeId, ImportError> {
+impl<'d, 's> Walk<'d, 's> {
+    fn new(doc: &'d mut Document, annotate: bool) -> Self {
+        Self { doc, warnings: Warnings::default(), annotate, elements: Vec::new(), svgs: Vec::new() }
+    }
+
+    fn take_notes(&mut self) -> Vec<Annotation> {
+        let fresh = self.warnings.take_fresh();
+        if self.annotate { notes::annotations(fresh) } else { Vec::new() }
+    }
+
+    fn run(&mut self, root: &'s DomNode, parent: NodeId, at: (f64, f64)) -> Result<NodeId, ImportError> {
         let mut pending = vec![Pending { node: root, parent, origin: (0.0, 0.0), at: Some(at) }];
         let mut root_id = None;
         while let Some(item) = pending.pop() {
@@ -174,24 +216,31 @@ impl Walk<'_> {
         root_id.ok_or(ImportError::NothingToImport("the root is hidden or draws nothing"))
     }
 
-    fn visit<'s>(&mut self, item: &Pending<'s>, pending: &mut Vec<Pending<'s>>) -> Result<Option<NodeId>, ImportError> {
+    fn visit(&mut self, item: &Pending<'s>, pending: &mut Vec<Pending<'s>>) -> Result<Option<NodeId>, ImportError> {
         match item.node {
             DomNode::Element(element) => self.element(element, item, pending),
             DomNode::Text(run) => {
                 let id = self.doc.alloc_id();
                 let placement = item.place(run.line_box.as_ref().unwrap_or(&run.r#box));
-                let node = text::layer(id, run, &placement, &mut self.warnings);
+                let mut node = text::layer(id, run, &placement, &mut self.warnings);
+                node.annotations = self.take_notes();
                 Ok(Some(self.doc.insert(node, item.parent, None)?))
             }
             DomNode::Svg(svg) => {
                 let mut report = Report::new("svg", &mut self.warnings);
-                Ok(svg::layer(self.doc, svg, item.parent, &item.place(&svg.r#box), &mut report))
+                let id = svg::layer(self.doc, svg, item.parent, &item.place(&svg.r#box), &mut report);
+                let notes = self.take_notes();
+                if let Some(node) = id.and_then(|id| self.doc.node_mut(id)) {
+                    node.annotations = notes;
+                }
+                self.svgs.extend(id.map(|id| (id, svg)));
+                Ok(id)
             }
         }
     }
 
     /// A `display: contents` element has no box: its children go straight into its parent.
-    fn element<'s>(&mut self, element: &'s Element, item: &Pending<'s>, pending: &mut Vec<Pending<'s>>) -> Result<Option<NodeId>, ImportError> {
+    fn element(&mut self, element: &'s Element, item: &Pending<'s>, pending: &mut Vec<Pending<'s>>) -> Result<Option<NodeId>, ImportError> {
         if css::is_hidden(&element.style) {
             return Ok(None);
         }
@@ -199,8 +248,10 @@ impl Walk<'_> {
             (item.parent, item.origin, None)
         } else {
             let placement = item.place(&element.r#box);
-            let node = frame::build(self.doc.alloc_id(), element, &placement, &mut self.warnings);
+            let mut node = frame::build(self.doc.alloc_id(), element, &placement, &mut self.warnings);
+            node.annotations = self.take_notes();
             let id = self.doc.insert(node, item.parent, None)?;
+            self.elements.push((id, element));
             (id, (placement.snapped.x, placement.snapped.y), Some(id))
         };
         pending.extend(element.children.iter().rev().map(|child| Pending { node: child, parent, origin, at: None }));

@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "viewport": { "width": 400, "height": 300, "deviceScaleFactor": 1 },
+  "root": {
+    "type": "element",
+    "tag": "div",
+    "label": "Column",
+    "box": { "x": 20, "y": 20, "width": 200, "height": 160 },
+    "style": {
+      "display": "flex",
+      "flexDirection": "column",
+      "justifyContent": "center",
+      "alignItems": "flex-end",
+      "rowGap": "8px",
+      "columnGap": "0px",
+      "paddingTop": "10px",
+      "paddingRight": "10px",
+      "paddingBottom": "10px",
+      "paddingLeft": "10px",
+      "boxSizing": "border-box"
+    },
+    "children": [
+      {
+        "type": "element",
+        "tag": "span",
+        "label": "A",
+        "box": { "x": 160, "y": 71, "width": 50, "height": 20 },
+        "style": { "backgroundColor": "rgb(25, 118, 210)" }
+      },
+      {
+        "type": "element",
+        "tag": "span",
+        "label": "B",
+        "box": { "x": 130, "y": 99, "width": 80, "height": 30 },
+        "style": { "backgroundColor": "rgb(0, 128, 0)" }
+      }
+    ]
+  }
+}
