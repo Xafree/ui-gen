@@ -130,8 +130,8 @@ titre d'information. Si l'essai échoue, on revoit l'approche avant d'aller plus
    `project.addSource`, `project.setSourceVersion`, `project.removeSource`, `capture.status`.
 - [x] 3. Réglages du projet (`project.settings`), section « Bibliothèques sources » : ajouter, changer de
    version, retirer (captures gardées, « source retirée »).
-- [ ] 4. Essai réel (`crates/capture/src/real_tests.rs`, E2-8.1 et E2-8.2) : écrit et compilé, à lancer à la
-   main (voir « Service de capture »).
+- [x] 4. Essai réel (`crates/capture/src/real_tests.rs`, E2-8.1 et E2-8.2) : lancé à la main le 29 octobre
+   2026, vert (voir « Service de capture »).
 
 ### Lot 3 · Traduction en calques
 1. `uigen-dom` : boîtes → cadres, flex → auto layout, textes, SVG (`figcraft_svg::import_svg`),
