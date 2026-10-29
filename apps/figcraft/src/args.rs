@@ -4,7 +4,9 @@
 //! is up; everything else that isn't a flag is a file to open, as a path or a `file://` URL (the
 //! Linux desktop entry passes URLs, `%U`, so that it can also hand over invite links). Any other
 //! `--flag` is unknown and stops the app at startup (#836): a mistyped root flag must never leave
-//! the app running unconfined. After a bare `--`, every argument is a file.
+//! the app running unconfined. After a bare `--` (how the Windows URL handler passes the link, so a
+//! link holding a quote can never add an option) nothing is an option: an invite link still joins
+//! and every other argument is a file.
 
 /// What the app was started with.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -74,7 +76,13 @@ pub fn parse(args: &[String]) -> Args {
     let mut it = args.iter();
     while let Some(a) = it.next() {
         if a == "--" {
-            out.files.extend(it.by_ref().cloned());
+            for rest in it.by_ref() {
+                if is_invite(rest) {
+                    out.join = Some(rest.clone());
+                } else {
+                    out.files.push(rest.clone());
+                }
+            }
             break;
         }
         let (flag, inline) = a.split_once('=').map_or((a.as_str(), None), |(f, v)| (f, Some(v.to_string())));
