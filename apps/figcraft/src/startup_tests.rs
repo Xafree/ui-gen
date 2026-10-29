@@ -40,3 +40,9 @@ fn with_wgpu_backend_set_it_suggests_unsetting_it() {
     assert!(text.contains(tr(BACKEND_HINT)), "{text}");
     assert!(!text.contains(tr(DRIVER_HINT)), "the chosen backend is the likelier cause: {text}");
 }
+
+// covers: U1
+#[test]
+fn the_app_does_not_check_for_updates_when_it_starts() {
+    assert!(!crate::startup::checks_for_updates_at_start(), "the only release channel known is the upstream FigCraft one");
+}

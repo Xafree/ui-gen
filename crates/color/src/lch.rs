@@ -155,6 +155,12 @@ impl Oklch {
         Self { l, c, h }
     }
 
+    /// The OKLCH of OKLab's Cartesian `l`, `a` and `b` (CSS `oklab()`); a grey has hue 0.
+    pub(crate) fn from_lab(l: f32, a: f32, b: f32) -> Self {
+        let (l, c, h) = polar([f64::from(l), f64::from(a), f64::from(b)], 0.0);
+        Self { l, c, h }
+    }
+
     /// Opaque sRGB; out-of-gamut chroma is reduced to the nearest colour sRGB can show.
     pub fn to_color(self) -> Color {
         let l = finite(self.l).clamp(0.0, 1.0);

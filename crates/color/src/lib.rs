@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 mod blend;
+mod css;
 mod hsx;
 mod icc;
 mod lch;
@@ -149,12 +150,17 @@ impl Color {
         Self::from_hex(s).or_else(|| named::lookup(s).map(|[r, g, b]| Self::from_rgba8(r, g, b, 255)))
     }
 
-    /// Parse a CSS colour: hex, `rgb()/rgba()`, `hsl()/hsla()`, `lch()`, `oklch()`, a CSS colour
-    /// name or `transparent`. LCH and OKLCH outside sRGB come back as the nearest sRGB colour.
+    /// Parse a CSS colour: hex, `rgb()/rgba()`, `hsl()/hsla()`, `lch()`, `oklch()`, `oklab()`,
+    /// `color()` (`srgb`, `srgb-linear`, `display-p3`), a CSS colour name or `transparent`. LCH,
+    /// OKLCH and OKLab outside sRGB come back as the nearest sRGB colour; Display P3 outside it is
+    /// clipped per channel.
     pub fn parse_css(s: &str) -> Option<Self> {
         let t = s.trim().to_ascii_lowercase();
         if t.starts_with('#') {
             return Self::from_hex(&t);
+        }
+        if let Some(parsed) = css::modern_function(&t) {
+            return parsed;
         }
         if let Some(inner) = t.strip_prefix("rgba(").or_else(|| t.strip_prefix("rgb(")).and_then(|r| r.strip_suffix(')')) {
             let parts = css_args(inner);
@@ -720,6 +726,10 @@ impl Paint {
     }
 }
 
+#[cfg(test)]
+mod css_color_tests;
+#[cfg(test)]
+mod css_forms_tests;
 #[cfg(test)]
 mod gradient_tests;
 #[cfg(test)]

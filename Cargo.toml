@@ -22,6 +22,7 @@ figcraft-text = { path = "crates/text" }
 figcraft-pathops = { path = "crates/pathops" }
 figcraft-render = { path = "crates/render" }
 figcraft-svg = { path = "crates/svg" }
+figcraft-dom = { path = "crates/dom" }
 figcraft-pdf = { path = "crates/pdf" }
 figcraft-vectordrawable = { path = "crates/vectordrawable" }
 figcraft-format = { path = "crates/format" }

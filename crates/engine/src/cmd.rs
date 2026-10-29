@@ -20,6 +20,7 @@ pub mod section;
 pub mod structure;
 pub mod styles;
 pub mod text;
+pub mod uigen;
 pub mod variables;
 pub mod variables_io;
 pub mod view;
@@ -86,6 +87,7 @@ fn registry() -> &'static Registry {
         list.extend(crate::fonts::specs());
         list.extend(styles::specs());
         list.extend(image::specs());
+        list.extend(uigen::specs());
         list.extend(variables::specs());
         list.extend(variables_io::specs());
         list.extend(component::specs());
