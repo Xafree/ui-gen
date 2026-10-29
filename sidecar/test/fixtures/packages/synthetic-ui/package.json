@@ -1,0 +1,20 @@
+{
+  "name": "synthetic-ui",
+  "version": "1.0.0",
+  "description": "Synthetic fixture: a React Button and an x-chip web component",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "customElements": "custom-elements.json",
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  }
+}

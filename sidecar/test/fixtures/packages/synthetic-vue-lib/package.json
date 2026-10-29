@@ -1,0 +1,14 @@
+{
+  "name": "synthetic-vue-lib",
+  "version": "1.0.0",
+  "description": "Synthetic fixture: a Vue component library",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "peerDependencies": {
+    "vue": ">=3"
+  }
+}
