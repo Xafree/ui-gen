@@ -118,3 +118,25 @@ fn without_a_control_port_no_roots_are_required() {
     let a = parse(&args(&["a.figcraft"]));
     assert_eq!(require_roots_for_control(control_port(&a, None), &a), Ok(()));
 }
+
+// covers: L1
+#[test]
+fn an_option_after_the_separator_is_a_file_never_an_option() {
+    let a = parse(&args(&["--", "--control"]));
+    assert_eq!(a, Args { files: args(&["--control"]), ..Args::default() });
+    let a = parse(&args(&["--", "a.figcraft", "--control", "7979"]));
+    assert_eq!(a.control, None);
+    assert!(a.unknown.is_empty());
+    assert_eq!(a.files, args(&["a.figcraft", "--control", "7979"]));
+}
+
+// covers: L1
+#[test]
+fn an_invite_after_the_separator_still_joins_and_cannot_open_the_control_port() {
+    let link = "figcraft://join?x\" --control 7979";
+    let a = parse(&args(&["--", link]));
+    assert_eq!(a.control, None);
+    assert!(a.unknown.is_empty());
+    assert_eq!(a.join.as_deref(), Some(link), "what the URL handler passes after `--` is still an invite link");
+    assert!(a.files.is_empty());
+}
