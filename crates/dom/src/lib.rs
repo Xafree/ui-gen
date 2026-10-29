@@ -1,4 +1,4 @@
-﻿//! DOM snapshots: the validated model and parser of a rendered component's tree, boxes and
+//! DOM snapshots: the validated model and parser of a rendered component's tree, boxes and
 //! computed styles (format version 1, written by the capture service), and their translation
 //! into editable layers.
 
