@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use figcraft_doc::{Document, NodeId};
-use figcraft_project::{FILE_NAME, MAX_JSON_BYTES, Project, ProjectError, Role, SCHEMA_VERSION};
+use figcraft_project::{FILE_NAME, MAX_JSON_BYTES, Project, Role};
 
 use crate::{EngineError, Result, Session, file_access};
 
@@ -32,24 +32,11 @@ pub(crate) fn manifest_path(root: &str) -> PathBuf {
     Path::new(root).join(FILE_NAME)
 }
 
-/// Why a manifest is refused, without the file name (messages say `uigen.json: <cause>`).
-pub(crate) fn cause(error: &ProjectError) -> String {
-    match error {
-        ProjectError::TooLarge { bytes, max } => format!("{bytes} bytes is over the limit of {max}"),
-        ProjectError::Json(why) => format!("not valid: {why}"),
-        ProjectError::Version { found } if *found > SCHEMA_VERSION => {
-            format!("version {found} is newer than this app supports ({SCHEMA_VERSION}); update UIGEN")
-        }
-        ProjectError::Version { found } => format!("version {found} is not supported (expected {SCHEMA_VERSION})"),
-        ProjectError::Invalid { field, reason } => format!("{field}: {reason}"),
-    }
-}
-
 fn read_cause(root: &str) -> std::result::Result<Project, String> {
     let limit = u64::try_from(MAX_JSON_BYTES).unwrap_or(u64::MAX);
     let bytes = file_access::read_capped(manifest_path(root), limit).map_err(|e| e.to_string())?;
     let text = String::from_utf8(bytes).map_err(|_| "not valid UTF-8 text".to_string())?;
-    Project::parse(&text).map_err(|e| cause(&e))
+    Project::parse(&text).map_err(|e| e.to_string())
 }
 
 /// The manifest of project folder `root`, read and validated.
@@ -59,8 +46,8 @@ pub fn load(root: &str) -> Result<Project> {
 
 /// Write `project` as the manifest of folder `root`, after validating it.
 pub fn save(root: &str, project: &Project) -> Result<()> {
-    project.validate().map_err(|e| EngineError::Other(format!("{FILE_NAME}: {}", cause(&e))))?;
-    let text = project.to_json().map_err(|e| EngineError::Other(format!("{FILE_NAME}: {}", cause(&e))))?;
+    project.validate().map_err(|e| EngineError::Other(format!("{FILE_NAME}: {e}")))?;
+    let text = project.to_json().map_err(|e| EngineError::Other(format!("{FILE_NAME}: {e}")))?;
     file_access::write(manifest_path(root), text.as_bytes())
 }
 
@@ -77,7 +64,7 @@ pub fn binding_for_file(path: &str) -> Option<std::result::Result<ProjectBinding
         return None;
     }
     match read_cause(&root) {
-        Ok(config) if config.design_files.iter().any(|listed| listed == name) => Some(Ok(ProjectBinding { root, config })),
+        Ok(config) if config.design_files.iter().any(|listed| listed.eq_ignore_ascii_case(name)) => Some(Ok(ProjectBinding { root, config })),
         Ok(_) => None,
         Err(why) => Some(Err(why)),
     }
@@ -98,11 +85,35 @@ pub fn component_roots(doc: &Document, page: NodeId) -> Vec<NodeId> {
     node.children.iter().copied().filter(|child| doc.node(*child).is_some_and(|layer| Role::of(&layer.plugin_data).is_none())).collect()
 }
 
+/// Whether `page` is a component of a library project: any page whose name doesn't start with a
+/// hyphen (a page that does is a divider, whether it holds layers or not).
+pub fn is_component_page(doc: &Document, page: NodeId) -> bool {
+    doc.node(page).is_some_and(|node| node.is_page() && !node.name.starts_with('-'))
+}
+
+/// Whether a component of `doc` other than `except` is already named `name`, case apart.
+pub fn component_name_in_use(doc: &Document, name: &str, except: Option<NodeId>) -> bool {
+    let wanted = name.trim().to_lowercase();
+    doc.pages
+        .iter()
+        .filter(|page| Some(**page) != except && is_component_page(doc, **page))
+        .filter_map(|page| doc.node(*page))
+        .any(|node| node.name.trim().to_lowercase() == wanted)
+}
+
+/// `base` if no component has that name, else `base 2`, `base 3`… the first free one.
+pub fn free_component_name(doc: &Document, base: &str) -> String {
+    if !component_name_in_use(doc, base, None) {
+        return base.to_string();
+    }
+    (2_usize..).map(|n| format!("{base} {n}")).find(|name| !component_name_in_use(doc, name, None)).unwrap_or_else(|| base.to_string())
+}
+
 /// The components of a library project's file: its pages in order, dividers left out.
 pub fn component_pages(doc: &Document) -> Vec<ComponentInfo> {
     doc.pages
         .iter()
-        .filter(|page| !doc.is_divider(**page))
+        .filter(|page| is_component_page(doc, **page))
         .filter_map(|page| {
             let node = doc.node(*page)?;
             let layers = component_roots(doc, *page).len();

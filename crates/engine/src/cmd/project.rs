@@ -4,17 +4,16 @@ use std::path::Path;
 use std::sync::Arc;
 
 use figcraft_doc::{Document, NodeKind};
-use figcraft_project::{DEFAULT_COMPONENT_TEMPLATE, FILE_NAME, Project, WORK_DIR, component_name};
+use figcraft_project::{DEFAULT_COMPONENT_TEMPLATE, FILE_NAME, MAX_NAME_CHARS, Project, WORK_DIR, component_name};
 use serde_json::{Value, json};
 
 use super::CommandSpec;
 use crate::file_access::{self, Access};
-use crate::project::{self, ProjectBinding, cause};
+use crate::project::{self, ProjectBinding};
 use crate::{DocState, EngineError, Result, Session, bad, spec};
 
 const OPEN: &str = "project.open";
 const UPDATE: &str = "project.update";
-const MAX_TEXT_CHARS: usize = 200;
 const UPDATABLE: [&str; 4] = ["name", "tagPrefix", "litOutDir", "appliedTheme"];
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -66,7 +65,7 @@ fn text(cmd: &str, field: &str, value: &str) -> Result<String> {
     let value = value.trim();
     let reason = if value.is_empty() {
         "must not be empty"
-    } else if value.chars().count() > MAX_TEXT_CHARS {
+    } else if value.chars().count() > MAX_NAME_CHARS {
         "is too long"
     } else if value.chars().any(char::is_control) {
         "must not contain control characters"
@@ -255,7 +254,7 @@ fn update(s: &mut Session, p: &Value) -> Result<Value> {
             other => Some(string_field(UPDATE, "appliedTheme", other)?.to_string()),
         };
     }
-    config.validate().map_err(|e| bad(UPDATE, format!("{FILE_NAME}: {}", cause(&e))))?;
+    config.validate().map_err(|e| bad(UPDATE, format!("{FILE_NAME}: {e}")))?;
     project::save(&binding.root, &config)?;
     let updated = Arc::new(ProjectBinding { root: binding.root.clone(), config });
     for ds in &mut s.docs {
