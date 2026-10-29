@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use figcraft_doc::proto::Trigger;
 use figcraft_doc::{Document, NodeId, NodeKind};
 use figcraft_engine::Session;
-use figcraft_engine::capture::{CaptureError, CaptureErrorKind, CaptureEvent};
+use figcraft_engine::capture::{CaptureError, CaptureErrorKind, CaptureEvent, CaptureJob};
 use serde_json::{Value, json};
 
 use crate::service_tests::TempDir;
@@ -19,6 +19,8 @@ const VERSION: &str = "7.3.11";
 const ADD_SOURCE: &str = "project.addSource";
 const IMPORT: &str = "uigen.importComponent";
 const EFFECT: &str = "uigen.effect";
+const INSPECT: &str = "test.inspect";
+const IDENTICAL_DARK: &str = "the dark render is identical to the light one: the library does not follow prefers-color-scheme";
 const JOB_LIMIT: Duration = Duration::from_secs(900);
 
 fn project_with_mui(label: &str) -> (TempDir, Session) {
@@ -49,6 +51,17 @@ fn wait_for(session: &mut Session, command: &str, started: &Value) -> CaptureEve
         assert!(Instant::now() < deadline, "no {command} event within {JOB_LIMIT:?}");
         thread::sleep(Duration::from_millis(50));
     }
+}
+
+fn inspected_values(session: &mut Session, dir: &TempDir, component: &str, prop: &str) -> Option<Vec<String>> {
+    let job = CaptureJob::Inspect { root: dir.path().display().to_string(), package: PACKAGE.to_string() };
+    let id = session.submit_capture(INSPECT, PACKAGE, job).expect("the inspect job is submitted");
+    let event = wait_for(session, INSPECT, &json!({"job": id}));
+    let listing = event.outcome.unwrap_or_else(|error| panic!("inspect failed: {}", error.message));
+    let components = listing["components"].as_array().expect("inspect lists components");
+    let found = components.iter().find(|candidate| candidate["name"] == json!(component))?;
+    let listed = found["props"].as_array()?.iter().find(|candidate| candidate["name"] == json!(prop) && candidate["type"] == json!("enum"))?;
+    Some(listed["values"].as_array()?.iter().filter_map(|value| value.as_str().map(str::to_string)).collect())
 }
 
 fn import(session: &mut Session, component: &str) -> CaptureEvent {
@@ -91,7 +104,9 @@ fn assert_readable(error: &CaptureError) {
 #[test]
 #[ignore = "downloads @mui/material from npm and drives Chromium; run by hand"]
 fn real_import_of_the_mui_button_gives_sixteen_variants_a_light_dark_theme_a_ripple_and_a_hover_transition() {
-    let (_dir, mut session) = project_with_mui("real-import");
+    let (dir, mut session) = project_with_mui("real-import");
+    let variants = inspected_values(&mut session, &dir, "Button", "variant").expect("inspect reads `variant` of Button as an enum");
+    assert!(variants.iter().any(|value| value == "contained"), "{variants:?}");
     let before = document_text(&session);
     assert!(page_children(&session).is_empty(), "the new project's page is not empty");
 
@@ -114,6 +129,16 @@ fn real_import_of_the_mui_button_gives_sixteen_variants_a_light_dark_theme_a_rip
     assert_eq!(collection.name, format!("{PACKAGE} {VERSION}"));
     let modes: Vec<&str> = collection.modes.iter().map(|mode| mode.name.as_str()).collect();
     assert_eq!(modes, ["Light", "Dark"]);
+    let (light, dark) = (&collection.modes[0].id, &collection.modes[1].id);
+    let differs = doc
+        .variables
+        .variables
+        .iter()
+        .filter(|variable| variable.collection == collection.id)
+        .any(|variable| variable.values.get(light) != variable.values.get(dark));
+    let warned = result["warnings"].as_array().is_some_and(|warnings| warnings.iter().any(|warning| warning == IDENTICAL_DARK));
+    assert!(differs || warned, "Light and Dark hold the same values and nothing says so: {result}");
+    eprintln!("MUI dark theme: a variable differs between Light and Dark = {differs}, identical-dark warning = {warned}");
 
     let mut layers = Vec::new();
     for variant in &node.children {
