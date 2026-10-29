@@ -261,10 +261,8 @@ fn absurd_parameters_are_refused_or_answered_but_never_panic_or_write() {
         for value in &junk {
             let mut params = baseline.clone();
             params[key] = value.clone();
-            match s.execute(CMD, &params) {
-                Err(EngineError::Internal { .. } | EngineError::UnknownCommand(_)) => panic!("{params}: the command crashed or is missing"),
-                Ok(_) | Err(_) => {}
-            }
+            let crashed = matches!(s.execute(CMD, &params), Err(EngineError::Internal { .. } | EngineError::UnknownCommand(_)));
+            assert!(!crashed, "{params}: the command crashed or is missing");
         }
     }
     assert!(s.execute(CMD, &json!({})).is_err() && s.execute(CMD, &json!("junk")).is_err() && s.execute(CMD, &json!(null)).is_err());
