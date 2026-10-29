@@ -332,6 +332,8 @@ mod lit_codegen_tests;
 #[cfg(test)]
 mod lit_effects_tests;
 #[cfg(test)]
+mod lit_export_disk_tests;
+#[cfg(test)]
 mod lit_export_tests;
 #[cfg(test)]
 mod lit_states_extra_tests;
