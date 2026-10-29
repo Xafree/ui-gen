@@ -1,3 +1,7 @@
+use std::collections::{HashMap, HashSet};
+
+use figcraft_doc::VariableId;
+
 use super::{
     ContentAlign, CrossAlign, Document, EffectKind, LayoutMode, LetterSpacing, LineHeight, MainAlign, Node, NodeId, NodeKind, PaintKind, TextAlignH,
     TextCase, TextDecoration, Variable, css_borders, num,
@@ -13,18 +17,99 @@ pub(crate) struct Tokens {
     pub tailwind: bool,
     /// The file's theme names (computed on first use).
     theme: Option<crate::tailwind::Theme>,
+    /// Lit: the prefix of the custom properties. They are named by [`LitNames`], carry no fallback
+    /// and ignore the Web code syntax.
+    pub lit_prefix: Option<String>,
+    lit_names: Option<LitNames>,
+    /// Lit: the Web code syntaxes that were ignored.
+    pub ignored: Vec<IgnoredSyntax>,
+}
+
+/// A variable with a Web code syntax a Lit component does not follow.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct IgnoredSyntax {
+    pub layer: String,
+    pub variable: String,
+    pub syntax: String,
+    pub name: String,
+}
+
+/// The names Lit gives the file's variables: `--<prefix>-<slug>`, unique in the file (a numeric
+/// suffix tells apart two variables with one slug), so a component and `tokens.css` agree.
+pub(crate) struct LitNames(HashMap<VariableId, String>);
+
+impl LitNames {
+    pub fn new(doc: &Document, prefix: &str) -> Self {
+        let mut taken: HashSet<String> = HashSet::new();
+        let mut next: HashMap<String, usize> = HashMap::new();
+        let mut names = HashMap::new();
+        for v in &doc.variables.variables {
+            let slug = css_var_name(&v.name);
+            let slug = slug.trim_start_matches('-');
+            let base = if prefix.is_empty() { format!("--{slug}") } else { format!("--{prefix}-{slug}") };
+            let mut name = base.clone();
+            if !taken.insert(name.clone()) {
+                let k = next.entry(base.clone()).or_insert(1);
+                loop {
+                    *k += 1;
+                    name = format!("{base}-{k}");
+                    if taken.insert(name.clone()) {
+                        break;
+                    }
+                }
+            }
+            names.insert(v.id.clone(), name);
+        }
+        LitNames(names)
+    }
+
+    pub fn name(&self, v: &Variable) -> String {
+        self.0.get(&v.id).cloned().unwrap_or_else(|| css_var_name(&v.name))
+    }
 }
 
 impl Tokens {
-    /// `var(--name, value)`, remembering the variable.
-    fn var(&mut self, doc: &Document, variable: &Variable, value: String) -> String {
-        let name =
-            if self.tailwind { self.theme.get_or_insert_with(|| crate::tailwind::Theme::new(doc)).name(variable) } else { css_var_of(variable) };
-        let out = format!("var({name}, {value})");
+    /// `var(--name, value)` (Lit: `var(--name)`), remembering the variable.
+    fn var(&mut self, doc: &Document, n: &Node, variable: &Variable, value: String) -> String {
+        let name = if let Some(prefix) = &self.lit_prefix {
+            let name = self.lit_names.get_or_insert_with(|| LitNames::new(doc, prefix)).name(variable);
+            if let Some(syntax) = variable.code_syntax.get("WEB").map(|w| w.trim()).filter(|w| !w.is_empty()) {
+                let ignored =
+                    IgnoredSyntax { layer: n.name.clone(), variable: variable.name.clone(), syntax: syntax.to_string(), name: name.clone() };
+                if !self.ignored.contains(&ignored) {
+                    self.ignored.push(ignored);
+                }
+            }
+            name
+        } else if self.tailwind {
+            self.theme.get_or_insert_with(|| crate::tailwind::Theme::new(doc)).name(variable)
+        } else {
+            css_var_of(variable)
+        };
+        let out = if self.lit_prefix.is_some() { format!("var({name})") } else { format!("var({name}, {value})") };
         if !self.vars.iter().any(|(n, _)| *n == name) {
             self.vars.push((name, value));
         }
         out
+    }
+
+    /// The custom properties used so far, in first-use order.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.vars.iter().map(|(n, _)| n.as_str())
+    }
+
+    /// What `other` used joins this.
+    pub fn absorb(&mut self, other: Tokens) {
+        for (name, value) in other.vars {
+            if !self.vars.iter().any(|(n, _)| *n == name) {
+                self.vars.push((name, value));
+            }
+        }
+        for ignored in other.ignored {
+            if !self.ignored.contains(&ignored) {
+                self.ignored.push(ignored);
+            }
+        }
     }
 
     /// A `:root` rule declaring the variables (empty without any).
@@ -32,8 +117,21 @@ impl Tokens {
         if self.vars.is_empty() {
             return String::new();
         }
-        let decls: String = self.vars.iter().map(|(n, v)| format!("  {n}: {v};\n")).collect();
-        format!(":root {{\n{decls}}}\n")
+        let decls: String = self
+            .vars
+            .iter()
+            .map(|(n, v)| {
+                format!(
+                    "  {n}: {v};
+"
+                )
+            })
+            .collect();
+        format!(
+            ":root {{
+{decls}}}
+"
+        )
     }
 }
 
@@ -63,7 +161,7 @@ pub fn css_var_of(v: &Variable) -> String {
 /// `value`, or a reference to the variable bound to the first of `fields` that has one.
 pub(super) fn tok(doc: &Document, n: &Node, fields: &[&str], value: String, t: &mut Tokens) -> String {
     match fields.iter().find_map(|f| crate::devinspect::bound_variable(doc, n, f)) {
-        Some(v) => t.var(doc, v, value),
+        Some(v) => t.var(doc, n, v, value),
         None => value,
     }
 }

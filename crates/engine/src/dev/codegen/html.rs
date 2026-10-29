@@ -160,13 +160,18 @@ fn placement_decls(n: &Node, parent: Option<&Node>, root: bool, in_flow: bool) -
 
 impl<'c, 'a> Markup<'c, 'a> {
     pub fn new(ctx: &'c Ctx<'a>, lang: CodeLang) -> Self {
+        let lit = LitOptions::default();
+        let mut tokens = Tokens::default();
+        if lang == CodeLang::Lit {
+            tokens.lit_prefix = Some(lit.token_prefix.clone());
+        }
         Markup {
             ctx,
             lang,
             used: Vec::new(),
             markup: String::new(),
             styles: String::new(),
-            tokens: Tokens::default(),
+            tokens,
             root_class: None,
             root_attrs: String::new(),
             v_if: None,
@@ -175,8 +180,16 @@ impl<'c, 'a> Markup<'c, 'a> {
             inline: false,
             fluid: false,
             fluid_leaves: f64::INFINITY,
-            lit: LitOptions::default(),
+            lit,
             lit_plain: false,
+        }
+    }
+
+    /// The Lit components this markup calls, and (in Lit) its tokens, follow `opts`.
+    pub fn use_lit(&mut self, opts: &LitOptions) {
+        self.lit = opts.clone();
+        if self.lang == CodeLang::Lit {
+            self.tokens.lit_prefix = Some(opts.token_prefix.clone());
         }
     }
 

@@ -68,6 +68,7 @@ pub use dev::dev_resources;
 pub use dev::devcompare;
 pub use dev::devinspect;
 pub use dev::lit;
+pub use dev::lit_export;
 pub use dev::tailwind;
 pub use extensions::plugin_directory;
 pub use extensions::plugins;
@@ -332,6 +333,8 @@ mod lit_codegen_tests;
 mod lit_states_extra_tests;
 #[cfg(test)]
 mod lit_states_tests;
+#[cfg(test)]
+mod lit_tokens_extra_tests;
 #[cfg(test)]
 mod lit_tokens_freeze_tests;
 #[cfg(test)]

@@ -14,8 +14,8 @@ use figcraft_doc::{Document, NodeId, NodeKind};
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::codegen::{CodeLang, Ctx, Markup, class_name};
-use crate::component_codegen::{Component, Param, ParamKind, js_string, web};
+use crate::codegen::{CodeLang, Ctx, Markup, Tokens, class_name};
+use crate::component_codegen::{Component, Param, ParamKind, js_string, web_tokens};
 use crate::components::{slots_of, variant_props, variant_set};
 use crate::params::id_of;
 
@@ -135,6 +135,8 @@ pub struct LitOutput {
     pub class_name: String,
     pub ts: String,
     pub notes: Vec<Note>,
+    /// The custom properties the component reads, in first-use order.
+    pub tokens: Vec<String>,
 }
 
 /// The custom element name of a component called `name`: `prefix` and the name as a kebab-case slug.
@@ -565,6 +567,20 @@ fn state_notes(c: &Component, lay: &Layout) -> Vec<Note> {
         .collect()
 }
 
+/// One note per variable whose Web code syntax the component does not follow.
+fn syntax_notes(c: &Component, tokens: &Tokens) -> Vec<Note> {
+    tokens
+        .ignored
+        .iter()
+        .map(|i| Note {
+            code: "code-syntax-ignored",
+            component: c.type_name.clone(),
+            layer: Some(i.layer.clone()),
+            message: format!("{}: the Web code syntax {} is ignored, the component reads {}", i.variable, i.syntax, i.name),
+        })
+        .collect()
+}
+
 /// A component with a Focus state takes the keyboard focus, and not while it is disabled.
 fn focus_methods(lay: &Layout) -> String {
     let Some(state) = lay.state.as_ref().filter(|s| s.has(StateKind::FocusVisible)) else { return String::new() };
@@ -639,7 +655,7 @@ fn field(p: &Param, m: &Member) -> Option<String> {
 pub fn definition(doc: &Document, c: &Component, opts: &LitOptions) -> LitOutput {
     let tag = tag_for(doc, c, opts);
     let class = class_of(&tag);
-    let (_, markup, css) = web(doc, c, CodeLang::Lit, opts);
+    let (_, markup, css, tokens) = web_tokens(doc, c, CodeLang::Lit, opts);
     let hugs = doc.node(c.comp).is_some_and(|n| n.layout.is_some() && n.child_layout.sizing_h == figcraft_doc::Sizing::Hug);
     let display = if hugs { "inline-block" } else { "block" };
     let mut out =
@@ -669,7 +685,9 @@ pub fn definition(doc: &Document, c: &Component, opts: &LitOptions) -> LitOutput
     out.push_str(&focus_methods(&lay));
     out.push_str(&format!("  render() {{\n    return html`\n{markup}    `;\n  }}\n}}\n\n"));
     out.push_str(&format!("declare global {{\n  interface HTMLElementTagNameMap {{\n    \"{tag}\": {class};\n  }}\n}}\n"));
-    LitOutput { tag, class_name: class, ts: out, notes: state_notes(c, &lay) }
+    let mut notes = state_notes(c, &lay);
+    notes.extend(syntax_notes(c, &tokens));
+    LitOutput { tag, class_name: class, ts: out, notes, tokens: tokens.names().map(str::to_string).collect() }
 }
 
 // ------------------------------------------------------------------ instances
@@ -688,7 +706,7 @@ fn slot_content(doc: &Document, layer: NodeId, name: &str, depth: usize, opts: &
     let ctx = Ctx { doc, root: layer, comp: None, base: depth };
     let mut m = Markup::new(&ctx, CodeLang::Lit);
     m.class_prefix = Some(format!("slot-{name}-"));
-    m.lit = opts.clone();
+    m.use_lit(opts);
     m.lit_plain = !template;
     for k in ctx.kids(n) {
         m.node(k, Some(n), depth + 1, "");

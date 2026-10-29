@@ -7,11 +7,13 @@
 //! used by `inspect.code`. A component connected to code (see [`crate::code_connect`]) shows its
 //! real snippet instead.
 
+use std::cell::RefCell;
+
 use figcraft_doc::{Document, NodeId, NodeKind, PropDef};
 use serde_json::{Value, json};
 
 use crate::cmd::CommandSpec;
-use crate::codegen::{CodeLang, Ctx, Markup, arkui, class_name, compose, indent, literal, swift};
+use crate::codegen::{CodeLang, Ctx, Markup, Tokens, arkui, class_name, compose, indent, literal, swift};
 use crate::components::{prop_default_value, slot_edited, slots_of, variant_options, variant_props, variant_set};
 use crate::lit::LitOptions;
 use crate::params::{id_of, string, targets};
@@ -814,6 +816,12 @@ fn data_attrs(variants: &[&Param]) -> Vec<String> {
 /// (variables as custom properties, other variants as rules on their `data-*` attributes, or in
 /// Lit on the host's attributes): (root class, markup, CSS).
 pub(crate) fn web(doc: &Document, c: &Component, lang: CodeLang, lit: &LitOptions) -> (String, String, String) {
+    let (root_class, markup, css, _) = web_tokens(doc, c, lang, lit);
+    (root_class, markup, css)
+}
+
+/// [`web`], and the custom properties its CSS reads.
+pub(crate) fn web_tokens(doc: &Document, c: &Component, lang: CodeLang, lit: &LitOptions) -> (String, String, String, Tokens) {
     let lit_lang = lang == CodeLang::Lit;
     let start = if lit_lang { 3 } else { 2 };
     let ctx = Ctx { doc, root: c.comp, comp: Some(c), base: start };
@@ -821,16 +829,19 @@ pub(crate) fn web(doc: &Document, c: &Component, lang: CodeLang, lit: &LitOption
     let root_class = class_name(&root_name, "component", &mut Vec::new());
     let variants: Vec<&Param> = c.params.iter().filter(|p| matches!(p.kind, ParamKind::Variant(_))).collect();
     let attr_names: Vec<String> = if lit_lang { Vec::new() } else { data_attrs(&variants) };
+    let variant_tokens = RefCell::new(Tokens::default());
     let pass = |root: NodeId| {
         let vctx = Ctx { doc, root, comp: Some(c), base: start };
         let mut m = Markup::new(&vctx, lang);
-        m.lit = lit.clone();
+        m.use_lit(lit);
         m.root_class = Some(root_class.clone());
         m.node(root, None, start, "");
-        m.rules
+        let Markup { rules, tokens, .. } = m;
+        variant_tokens.borrow_mut().absorb(tokens);
+        rules
     };
     let mut m = Markup::new(&ctx, lang);
-    m.lit = lit.clone();
+    m.use_lit(lit);
     m.root_class = Some(root_class.clone());
     m.root_attrs = if lit_lang {
         " part=\"root\"".to_string()
@@ -873,7 +884,8 @@ pub(crate) fn web(doc: &Document, c: &Component, lang: CodeLang, lit: &LitOption
     }
     let tokens = if lit_lang { String::new() } else { m.tokens.root_rule() };
     let css = format!("{tokens}{}{variant_rules}", m.styles);
-    (root_class, m.markup, css)
+    m.tokens.absorb(variant_tokens.into_inner());
+    (root_class, m.markup, css, m.tokens)
 }
 
 /// A TSX function component with its props interface, and its stylesheet.
