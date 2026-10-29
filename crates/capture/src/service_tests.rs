@@ -148,6 +148,14 @@ fn heartbeat_len(dir: &TempDir) -> u64 {
     fs::metadata(dir.path().join("heartbeat")).map_or(0, |meta| meta.len())
 }
 
+fn wait_for_heartbeat(dir: &TempDir) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while heartbeat_len(dir) == 0 && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(10));
+    }
+    heartbeat_len(dir) > 0
+}
+
 fn assert_service_process_is_gone(dir: &TempDir) {
     thread::sleep(Duration::from_millis(250));
     let before = heartbeat_len(dir);
@@ -344,7 +352,7 @@ fn shutdown_sends_the_shutdown_request_and_the_service_process_ends() {
     let dir = TempDir::new("shutdown");
     let (mut service, _wakes) = fake_service(&dir, &[], timeouts());
     run_job(&mut service, inspect_job()).unwrap();
-    assert!(heartbeat_len(&dir) > 0, "the fake service never ran");
+    assert!(wait_for_heartbeat(&dir), "the fake service never ran");
 
     let started = Instant::now();
     service.shutdown();
@@ -360,7 +368,7 @@ fn dropping_the_service_sends_the_shutdown_request_and_the_service_process_ends(
     let dir = TempDir::new("drop");
     let (mut service, _wakes) = fake_service(&dir, &[], timeouts());
     run_job(&mut service, inspect_job()).unwrap();
-    assert!(heartbeat_len(&dir) > 0, "the fake service never ran");
+    assert!(wait_for_heartbeat(&dir), "the fake service never ran");
 
     drop(service);
 
@@ -375,7 +383,7 @@ fn a_service_that_ignores_shutdown_is_killed_after_the_shutdown_delay() {
     let shutdown_delay = Duration::from_millis(400);
     let (mut service, _wakes) = fake_service(&dir, &[("shutdown", "ignore")], Timeouts { shutdown: shutdown_delay, ..timeouts() });
     run_job(&mut service, inspect_job()).unwrap();
-    assert!(heartbeat_len(&dir) > 0, "the fake service never ran");
+    assert!(wait_for_heartbeat(&dir), "the fake service never ran");
 
     let started = Instant::now();
     service.shutdown();
