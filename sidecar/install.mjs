@@ -65,9 +65,11 @@ let emptyConfig = null;
 const emptyNpmConfig = () => {
   emptyConfig ??= mkdtemp(path.join(os.tmpdir(), 'uigen-npm-')).then(async (folder) => {
     process.once('exit', () => rmSync(folder, { recursive: true, force: true }));
-    const file = path.join(folder, 'empty.npmrc');
-    await writeFile(file, '');
-    return file;
+    const user = path.join(folder, 'user.npmrc');
+    const global = path.join(folder, 'global.npmrc');
+    await writeFile(user, '');
+    await writeFile(global, '');
+    return { user, global };
   });
   return emptyConfig;
 };
@@ -83,10 +85,10 @@ async function refuseProjectNpmrc(dir, kind) {
 }
 
 async function npmSettings() {
-  const config = await emptyNpmConfig();
+  const { user, global } = await emptyNpmConfig();
   return {
-    flags: ['--ignore-scripts', '--userconfig', config, '--globalconfig', config, '--no-audit', '--no-fund'],
-    env: { ...process.env, npm_config_ignore_scripts: 'true', npm_config_userconfig: config, npm_config_globalconfig: config },
+    flags: ['--ignore-scripts', '--userconfig', user, '--globalconfig', global, '--no-audit', '--no-fund'],
+    env: { ...process.env, npm_config_ignore_scripts: 'true', npm_config_userconfig: user, npm_config_globalconfig: global },
   };
 }
 

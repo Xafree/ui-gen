@@ -30,7 +30,9 @@ const recordingNpm = () => {
   const runNpm = async (args, options) => {
     const prefix = optionAfter(args, '--prefix');
     const userConfig = optionAfter(args, '--userconfig');
-    calls.push({ args: [...args], options, userConfigSize: (await readFile(userConfig)).length });
+    const globalConfig = optionAfter(args, '--globalconfig');
+    const userConfigSize = (await readFile(userConfig)).length + (await readFile(globalConfig)).length;
+    calls.push({ args: [...args], options, userConfigSize });
     if (args[0] === 'install') {
       const destination = path.join(prefix, 'node_modules', REACT_LIB);
       await mkdir(path.dirname(destination), { recursive: true });
@@ -50,12 +52,15 @@ describe('npm configuration of the project', () => {
 
     const [{ args, options, userConfigSize }] = calls;
     const userConfig = optionAfter(args, '--userconfig');
-    assert.equal(optionAfter(args, '--globalconfig'), userConfig);
-    assert.ok(path.isAbsolute(userConfig));
-    assert.ok(!path.resolve(userConfig).startsWith(path.resolve(dir)), 'the empty configuration lives outside the project');
+    const globalConfig = optionAfter(args, '--globalconfig');
+    assert.notEqual(globalConfig, userConfig, 'npm refuses to load one file as both user and global configuration');
+    for (const config of [userConfig, globalConfig]) {
+      assert.ok(path.isAbsolute(config));
+      assert.ok(!path.resolve(config).startsWith(path.resolve(dir)), 'the empty configuration lives outside the project');
+    }
     assert.equal(userConfigSize, 0);
     assert.equal(options.env.npm_config_userconfig, userConfig);
-    assert.equal(options.env.npm_config_globalconfig, userConfig);
+    assert.equal(options.env.npm_config_globalconfig, globalConfig);
     assert.equal(options.env.npm_config_ignore_scripts, 'true');
     assert.ok(args.includes('--ignore-scripts'));
     assert.equal(args[args.length - 1], `${REACT_LIB}@2.4.1`);
@@ -70,7 +75,7 @@ describe('npm configuration of the project', () => {
 
     const { args, options, userConfigSize } = calls[1];
     assert.equal(args[0], 'uninstall');
-    assert.equal(optionAfter(args, '--globalconfig'), optionAfter(args, '--userconfig'));
+    assert.notEqual(optionAfter(args, '--globalconfig'), optionAfter(args, '--userconfig'));
     assert.equal(userConfigSize, 0);
     assert.equal(options.env.npm_config_userconfig, optionAfter(args, '--userconfig'));
   });
