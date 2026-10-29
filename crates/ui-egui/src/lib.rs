@@ -200,6 +200,8 @@ mod toast_action_tests;
 #[cfg(test)]
 mod project_open_tests;
 #[cfg(test)]
+mod project_pages_ui_tests;
+#[cfg(test)]
 mod ui_scale_tests;
 #[cfg(test)]
 mod variables_export_ui_tests;
