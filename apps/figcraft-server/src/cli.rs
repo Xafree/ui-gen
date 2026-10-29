@@ -20,23 +20,23 @@ use crate::store::{self, KEY, Store};
 pub const SERVER_JSON: &str = "server.json";
 
 pub const USAGE: &str = "\
-figcraft-server: FigCraft's collaboration server (files, share links, live sessions)
+uigen-server: UIGEN's collaboration server (files, share links, live sessions)
 
 Usage:
-  figcraft-server [serve] [--listen ADDR] [--data DIR] [--public-url URL] [--config FILE]
-  figcraft-server key [--rotate]                 the address to publish to, with the server key
-  figcraft-server check                          check the settings (after editing the --config file)
-  figcraft-server files [list] [--sort size|age|idle]  the files kept (biggest, oldest or longest unopened first)
-  figcraft-server files remove FILE              remove a file and its links for good
-  figcraft-server links list FILE                a file's share links
-  figcraft-server links create FILE --access edit|view [--label TEXT]
-  figcraft-server links revoke FILE LINK         revoke a link (whoever joined with it is disconnected)
-  figcraft-server plugins [list]                 the plugin directory: every plugin and its versions
-  figcraft-server plugins remove ID [--version V]  unpublish a plugin (every version, or one)
-  figcraft-server reports                        what people reported about files
-  figcraft-server block-ip IP                    refuse an address (an IPv6 address: its /64) and drop its connections
-  figcraft-server unblock-ip IP                  accept an address again
-  figcraft-server blocked                        the blocked addresses
+  uigen-server [serve] [--listen ADDR] [--data DIR] [--public-url URL] [--config FILE]
+  uigen-server key [--rotate]                 the address to publish to, with the server key
+  uigen-server check                          check the settings (after editing the --config file)
+  uigen-server files [list] [--sort size|age|idle]  the files kept (biggest, oldest or longest unopened first)
+  uigen-server files remove FILE              remove a file and its links for good
+  uigen-server links list FILE                a file's share links
+  uigen-server links create FILE --access edit|view [--label TEXT]
+  uigen-server links revoke FILE LINK         revoke a link (whoever joined with it is disconnected)
+  uigen-server plugins [list]                 the plugin directory: every plugin and its versions
+  uigen-server plugins remove ID [--version V]  unpublish a plugin (every version, or one)
+  uigen-server reports                        what people reported about files
+  uigen-server block-ip IP                    refuse an address (an IPv6 address: its /64) and drop its connections
+  uigen-server unblock-ip IP                  accept an address again
+  uigen-server blocked                        the blocked addresses
 
 Options (also keys of the --config TOML file):
   --listen ADDR       where to listen (default 127.0.0.1:47900; 0.0.0.0:47900 for every network)
@@ -200,8 +200,8 @@ pub fn run(cli: &Cli) -> Result<String, String> {
     let cfg = &cli.config;
     match &cli.command {
         Command::Help => Ok(USAGE.to_string()),
-        Command::Version => Ok(format!("figcraft-server {}\n", env!("CARGO_PKG_VERSION"))),
-        Command::Serve => Err("serving runs in the foreground: run figcraft-server without a command".into()),
+        Command::Version => Ok(format!("uigen-server {}\n", env!("CARGO_PKG_VERSION"))),
+        Command::Serve => Err("serving runs in the foreground: run uigen-server without a command".into()),
         Command::Key { rotate } => key(cfg, *rotate),
         Command::Files { sort } => match admin(cfg, Admin::Listing)? {
             AdminReply::Listing(files) => Ok(files_table(files, *sort, store::now())),
@@ -279,7 +279,7 @@ fn directory(cfg: &Config, req: PluginReq) -> Result<PluginReply, String> {
 
 fn plugins_table(entries: &[PluginEntry]) -> String {
     if entries.is_empty() {
-        return "No plugins yet (publish one with `figcraft-cli plugin publish FOLDER --server ws://host:port/?key=KEY`).\n".into();
+        return "No plugins yet (publish one with `uigen-cli plugin publish FOLDER --server ws://host:port/?key=KEY`).\n".into();
     }
     let mut out =
         String::from("ID                                VERSIONS            NAME                  AUTHOR            ACCESS  SIZE       SHA-256\n");
@@ -344,7 +344,7 @@ fn key(cfg: &Config, rotate: bool) -> Result<String, String> {
     if rotate {
         out.push_str("A new server key: the old one no longer works.\n");
     }
-    let _ = writeln!(out, "Publish to this address (in FigCraft: File > Publish to server…):");
+    let _ = writeln!(out, "Publish to this address (in UIGEN: File > Publish to server…):");
     let _ = writeln!(out, "  {}?key={key}", public.url());
     let _ = writeln!(out, "Whoever has it can publish files and manage their links: share it only with people you trust.");
     if cfg.open_publish {
@@ -375,7 +375,7 @@ fn used(f: &FileRow) -> u64 {
 
 fn files_table(mut files: Vec<FileRow>, sort: Sort, now: u64) -> String {
     if files.is_empty() {
-        return "No files yet (publish one from FigCraft: File > Publish to server…).\n".into();
+        return "No files yet (publish one from UIGEN: File > Publish to server…).\n".into();
     }
     match sort {
         Sort::Id => {}
@@ -424,7 +424,7 @@ fn day(secs: u64) -> String {
 
 fn links_table(links: &[LinkInfo]) -> String {
     if links.is_empty() {
-        return "No links (make one with `figcraft-server links create FILE --access view`).\n".into();
+        return "No links (make one with `uigen-server links create FILE --access view`).\n".into();
     }
     let mut out = String::from("LINK              ACCESS  CREATED               LABEL\n");
     for l in links {

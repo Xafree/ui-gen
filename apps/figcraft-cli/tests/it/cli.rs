@@ -4,7 +4,7 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 fn bin() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_figcraft-cli"))
+    Command::new(env!("CARGO_BIN_EXE_uigen-cli"))
 }
 
 fn tmp(name: &str) -> std::path::PathBuf {
@@ -96,7 +96,7 @@ fn help_after_a_subcommand_prints_the_usage() {
         let out = bin().args(args).stdin(Stdio::null()).output().unwrap();
         assert_eq!(out.status.code(), Some(0), "{args:?}: {}", String::from_utf8_lossy(&out.stderr));
         let text = String::from_utf8_lossy(&out.stdout);
-        assert!(text.contains("USAGE") && text.contains("figcraft-cli mcp"), "{args:?}: {text}");
+        assert!(text.contains("USAGE") && text.contains("uigen-cli mcp"), "{args:?}: {text}");
         assert!(out.stderr.is_empty(), "{args:?}: nothing on stderr, got {}", String::from_utf8_lossy(&out.stderr));
     }
     // A value that happens to be `-h` is still a value, not a request for help.

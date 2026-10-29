@@ -68,10 +68,7 @@ fn the_publish_dialog() {
     assert!(has_text(&shapes, "Another server, or one that needs its key. The usual server is set in Preferences."));
     h.click(text_center(&shapes, "Publish to another server…"));
     let shapes = h.frames(2);
-    assert!(has_text(
-        &shapes,
-        "Give the address of a server open to the public, or a server's address with its key (`figcraft-server key` prints it)."
-    ));
+    assert!(has_text(&shapes, "Give the address of a server open to the public, or a server's address with its key (`uigen-server key` prints it)."));
     h.frame(vec![Event::Text("ws://127.0.0.1:47900/?key=KeyKeyKeyKeyKeyKeyKey0".into())]);
     let shapes = h.frames(1);
     assert!(has_text(&shapes, "Publishing with the server's key."));

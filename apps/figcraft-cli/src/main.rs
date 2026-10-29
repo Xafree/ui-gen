@@ -1,4 +1,4 @@
-//! `figcraft-cli`: FigCraft without a window. Inspect, export, convert and render documents, run
+//! `figcraft-cli`: UIGEN without a window. Inspect, export, convert and render documents, run
 //! command scripts, list commands, serve MCP on stdio, publish plugins to a server's plugin
 //! directory and measure performance.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
@@ -13,27 +13,27 @@ use std::process::ExitCode;
 use args::Args;
 use serde_json::{Value, json};
 
-pub const USAGE: &str = "figcraft-cli — FigCraft without a window
+pub const USAGE: &str = "uigen-cli — UIGEN without a window
 
 USAGE:
-  figcraft-cli info <file> [--json]
-  figcraft-cli export <file> -o <out> [--format png|jpg|svg|webp|pdf|xml|fig] [--scale N] [--page NAME] [--node ID|NAME]
+  uigen-cli info <file> [--json]
+  uigen-cli export <file> -o <out> [--format png|jpg|svg|webp|pdf|xml|fig] [--scale N] [--page NAME] [--node ID|NAME]
                       [--bleed LENGTH] [--crop-marks] [--bleed-marks] [--cmyk] [--vd-compat bestEffort|exact|ignore]
-  figcraft-cli convert <in> <out>
-  figcraft-cli render <file> -o <out.png> [--scale N] [--page NAME]
-  figcraft-cli run <script.json|script.jsonl> [--in <file>] [--out <file>]
+  uigen-cli convert <in> <out>
+  uigen-cli render <file> -o <out.png> [--scale N] [--page NAME]
+  uigen-cli run <script.json|script.jsonl> [--in <file>] [--out <file>]
   (info, export, convert, render and run also take --automation-read-root DIR / --automation-write-root DIR)
-  figcraft-cli commands [--json] [--filter TEXT]
-  figcraft-cli mcp [--attach PORT] [--automation-read-root DIR]... [--automation-write-root DIR]...
-  figcraft-cli plugin publish <folder> --server ws://host:port/[?key=KEY]
-  figcraft-cli perf [--layers N[,N...]] [--instances N[,N...]]
-  figcraft-cli help | --help | --version   (a subcommand followed by --help or -h prints this too)
+  uigen-cli commands [--json] [--filter TEXT]
+  uigen-cli mcp [--attach PORT] [--automation-read-root DIR]... [--automation-write-root DIR]...
+  uigen-cli plugin publish <folder> --server ws://host:port/[?key=KEY]
+  uigen-cli perf [--layers N[,N...]] [--instances N[,N...]]
+  uigen-cli help | --help | --version   (a subcommand followed by --help or -h prints this too)
 
 Every subcommand takes --no-system-fonts (or set FIGCRAFT_NO_SYSTEM_FONTS=1): text uses only the
-fonts built into FigCraft, for renders that match on every machine. Otherwise installed fonts are
+fonts built into UIGEN, for renders that match on every machine. Otherwise installed fonts are
 indexed the first time text is laid out, as in the app.
 
-Files: .figcraft (native), .json (FigCraft or REST API file JSON), .fig (best effort; `info` lists what
+Files: .figcraft (native), .json (UIGEN or REST API file JSON), .fig (best effort; `info` lists what
 wasn't imported), .sketch (Sketch 48 or newer, best effort), .svg, .png/.jpg/.webp/.gif/.bmp (open as an
 image layer). `export` writes one file per top-level frame into the <out> directory, or one file when
 <out> has an image extension or --node is given (`fig`, or an <out> ending in .fig: the whole file as .fig, experimental; other apps may
@@ -41,7 +41,7 @@ not open every file); PDFs take print options (a bleed like 3mm or 0.125in,
 crop and bleed marks, CMYK colour). `run` executes a JSON array (or JSON lines) of
 {\"command\": id, \"params\": {...}} in a headless session and prints one JSON result line per step.
 `plugin publish` sends a plugin folder (figcraft-plugin.json, its module, an optional assets/ folder)
-to a figcraft-server's plugin directory as a new version; the server's key comes from the address or
+to a uigen-server's plugin directory as a new version; the server's key comes from the address or
 the FIGCRAFT_SERVER_KEY environment variable (which keeps it out of the shell history).
 `--automation-read-root DIR` / `--automation-write-root DIR` (each may be repeated; the folders
 must exist) confine the files a subcommand touches: reads only inside a read or write root, writes
@@ -135,7 +135,7 @@ fn run(argv: &[String]) -> CliResult<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         "--version" | "-V" | "version" => {
-            println!("figcraft-cli {}", env!("CARGO_PKG_VERSION"));
+            println!("uigen-cli {}", env!("CARGO_PKG_VERSION"));
             Ok(ExitCode::SUCCESS)
         }
         "info" => {
@@ -196,7 +196,7 @@ fn run(argv: &[String]) -> CliResult<ExitCode> {
             // The app runs the commands: only its own roots can confine them.
             if attach.is_some() && ROOT_FLAGS.iter().any(|f| !a.values(f).is_empty()) {
                 return Err(CliError::Usage(
-                    "--attach can't take automation roots: start the app with them instead (`figcraft --control PORT --automation-read-root DIR ...`)"
+                    "--attach can't take automation roots: start the app with them instead (`uigen --control PORT --automation-read-root DIR ...`)"
                         .into(),
                 ));
             }
@@ -277,7 +277,7 @@ fn mcp(attach: Option<&str>, roots: Option<figcraft_engine::file_access::Roots>)
                 format!("127.0.0.1:{}", p.parse::<u16>().map_err(|_| CliError::Usage(format!("--attach needs a port number, got `{p}`")))?)
             };
             let b = figcraft_mcp::Attached::connect(&addr)
-                .map_err(|e| format!("can't reach the FigCraft app at {addr}: {e} (start it with `figcraft --control PORT`)"))?;
+                .map_err(|e| format!("can't reach the UIGEN app at {addr}: {e} (start it with `uigen --control PORT`)"))?;
             Box::new(b)
         }
         None => Box::new(figcraft_mcp::Headless::new()),

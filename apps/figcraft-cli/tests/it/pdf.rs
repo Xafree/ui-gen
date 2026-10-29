@@ -3,7 +3,7 @@
 use std::process::Command;
 
 fn bin() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_figcraft-cli"))
+    Command::new(env!("CARGO_BIN_EXE_uigen-cli"))
 }
 
 fn pages(pdf: &[u8]) -> usize {

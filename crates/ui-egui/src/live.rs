@@ -30,7 +30,7 @@ use crate::widgets;
 
 /// In the browser: what joining needs (a page can't host, and https pages can't reach `ws://`).
 const BROWSER_NOTE: &str = tr_noop(
-    "In the browser you can join sessions the desktop app hosts and files on a FigCraft server. A page opened over https reaches other computers only through wss:// links (a server behind TLS).",
+    "In the browser you can join sessions the desktop app hosts and files on a UIGEN server. A page opened over https reaches other computers only through wss:// links (a server behind TLS).",
 );
 
 /// How undo works in a session (per person).
@@ -41,7 +41,7 @@ const VIEW_NOTE: &str = tr_noop("View only: you see every change as it happens b
 
 /// What a published file's links are.
 const PUBLISHED_NOTE: &str = tr_noop(
-    "Anyone with the edit link can change the file; the view link only lets people look. The links carry their secrets: share them like passwords. `figcraft-server links` makes more and revokes them.",
+    "Anyone with the edit link can change the file; the view link only lets people look. The links carry their secrets: share them like passwords. `uigen-server links` makes more and revokes them.",
 );
 
 /// What the owner token is for (shown once, when a file is published without the server key).
@@ -912,7 +912,7 @@ fn share_ui(app: &mut FigApp, ui: &mut Ui, t: &Tokens, share: &Share) {
                     app.clipboard_set_text(&code);
                     app.toast(tr("Join code copied"));
                 }
-                if widgets::button(ui, tr("Copy link"), false, true).on_hover_text(tr("An invite link that opens FigCraft and joins")).clicked() {
+                if widgets::button(ui, tr("Copy link"), false, true).on_hover_text(tr("An invite link that opens UIGEN and joins")).clicked() {
                     app.clipboard_set_text(&link);
                     app.toast(tr("Invite link copied"));
                 }
@@ -1186,7 +1186,7 @@ pub fn publish_dialog(app: &mut FigApp, ctx: &egui::Context) {
         ui.set_width(380.0);
         widgets::label(
             ui,
-            tr("Uploads this file to a FigCraft server and keeps this tab in sync with it. You get a link to edit and a link to view."),
+            tr("Uploads this file to a UIGEN server and keeps this tab in sync with it. You get a link to edit and a link to view."),
             t.text,
         );
         widgets::label(ui, tr("Server address"), t.text_secondary);
@@ -1216,12 +1216,12 @@ pub fn publish_dialog(app: &mut FigApp, ctx: &egui::Context) {
             }
             Some(_) => widgets::label(
                 ui,
-                tr("This server needs its key: add ?key=… to the address (`figcraft-server key` prints it on the server's machine)."),
+                tr("This server needs its key: add ?key=… to the address (`uigen-server key` prints it on the server's machine)."),
                 t.danger,
             ),
             None => widgets::label(
                 ui,
-                tr("Give the address of a server open to the public, or a server's address with its key (`figcraft-server key` prints it)."),
+                tr("Give the address of a server open to the public, or a server's address with its key (`uigen-server key` prints it)."),
                 t.text_secondary,
             ),
         }

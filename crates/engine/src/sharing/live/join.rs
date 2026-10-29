@@ -196,7 +196,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "collab.publish",
             "Publish to server",
-            "{server: ws://host:port/?key=… or wss://host/path/?key=… (the server's address with its key; `figcraft-server key` prints it; without a key on a server open to the public), key? (when the address has none), name? (default: the file's name)} → status \"connecting\": the open file is uploaded as a new file and this tab syncs through the server; `collab.peers` then has `published: {server, file, name, edit, view, owner (published without a key: the owner token, shown once), expires (seconds since 1970, or null)}` and `hosting` (the server's operator, terms and idle expiry)",
+            "{server: ws://host:port/?key=… or wss://host/path/?key=… (the server's address with its key; `uigen-server key` prints it; without a key on a server open to the public), key? (when the address has none), name? (default: the file's name)} → status \"connecting\": the open file is uploaded as a new file and this tab syncs through the server; `collab.peers` then has `published: {server, file, name, edit, view, owner (published without a key: the owner token, shown once), expires (seconds since 1970, or null)}` and `hosting` (the server's operator, terms and idle expiry)",
             false,
             publish
         ),

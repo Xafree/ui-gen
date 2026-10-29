@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-  Build, sign and package FigCraft for Windows.
+  Build, sign and package UIGEN for Windows.
 
 .DESCRIPTION
   Produces, in $env:DIST (default: dist/release):
-    figcraft-<version>-windows-<arch>.msi            per-machine installer (WiX v5)
-    figcraft-<version>-windows-<arch>-portable.zip   figcraft.exe (+ figcraft-cli.exe) and the licences
+    uigen-<version>-windows-<arch>.msi            per-machine installer (WiX v5)
+    uigen-<version>-windows-<arch>-portable.zip   uigen.exe (+ uigen-cli.exe) and the licences
 
-  figcraft-cli.exe is built and shipped once apps/figcraft-cli exists in the workspace.
+  uigen-cli.exe is built and shipped once apps/figcraft-cli exists in the workspace.
 
   The binaries link the C runtime statically (+crt-static), so neither the MSI nor the portable
   zip needs the Visual C++ redistributable. Signing is delegated to sign.ps1 (skipped with a
@@ -58,16 +58,16 @@ if (-not $env:FIGCRAFT_BUILD_DATE) { $env:FIGCRAFT_BUILD_DATE = (Get-Date).ToUni
 
 # The headless CLI ships next to the app once apps/figcraft-cli exists.
 $HasCli = Test-Path (Join-Path $Root 'apps\figcraft-cli\Cargo.toml')
-$Bins = @('figcraft'); if ($HasCli) { $Bins += 'figcraft-cli' }
+$Bins = @('uigen'); if ($HasCli) { $Bins += 'uigen-cli' }
 
-Write-Output "FigCraft $Version for Windows $Arch ($Target): $($Bins -join ', ')"
+Write-Output "UIGEN $Version for Windows $Arch ($Target): $($Bins -join ', ')"
 
 if (-not $SkipBuild) {
   # Static CRT: no VC++ redistributable needed. Scoped to the target so host build scripts and
   # proc-macros are unaffected.
   $flagVar = 'CARGO_TARGET_' + ($Target.ToUpper() -replace '-', '_') + '_RUSTFLAGS'
   [Environment]::SetEnvironmentVariable($flagVar, '-C target-feature=+crt-static')
-  $pkgs = @(); foreach ($b in $Bins) { $pkgs += @('-p', $b) }
+  $pkgs = @(); foreach ($b in $Bins) { $pkgs += @('-p', ($b -replace '^uigen', 'figcraft')) }
   Invoke-Native "cargo build ($Target)" { cargo build --release --locked @pkgs --target $Target }
 }
 
@@ -83,7 +83,7 @@ function Get-PeHeader([string] $Path) {
   return @{ Machine = [BitConverter]::ToUInt16($bytes, $pe + 4); Subsystem = [BitConverter]::ToUInt16($bytes, $pe + 0x5C) }
 }
 $Machine = switch ($Arch) { 'x64' { 0x8664 } 'x86' { 0x14C } 'arm64' { 0xAA64 } }
-$checks = @(, @('figcraft.exe', 2)); if ($HasCli) { $checks += , @('figcraft-cli.exe', 3) }
+$checks = @(, @('uigen.exe', 2)); if ($HasCli) { $checks += , @('uigen-cli.exe', 3) }
 foreach ($check in $checks) {
   $h = Get-PeHeader (Join-Path $Bin $check[0])
   if ($h.Machine -ne $Machine) { throw "$($check[0]) is for machine 0x$('{0:X}' -f $h.Machine), expected 0x$('{0:X}' -f $Machine) ($Arch)" }
@@ -151,7 +151,7 @@ $Banner = Join-Path $Stage 'installer-banner.bmp'
 $Dialog = Join-Path $Stage 'installer-dialog.bmp'
 New-InstallerArt (Join-Path $Root 'assets\app-icon\hicolor\256x256\apps\ai.storyteller.figcraft.png') $Banner $Dialog
 
-$Msi = Join-Path $Dist "figcraft-$Version-windows-$Arch.msi"
+$Msi = Join-Path $Dist "uigen-$Version-windows-$Arch.msi"
 & (Join-Path $PSScriptRoot 'check-icons.ps1')
 Invoke-Native 'wix build' {
   wix build (Join-Path $PSScriptRoot 'figcraft.wxs') -arch $Arch `
@@ -172,7 +172,7 @@ Remove-Item -Force -ErrorAction SilentlyContinue ([IO.Path]::ChangeExtension($Ms
 & (Join-Path $PSScriptRoot 'sign.ps1') $Msi
 
 # ---- portable zip ------------------------------------------------------------------------------
-$Portable = Join-Path $TargetDir "windows-package\figcraft-$Version-windows-$Arch-portable"
+$Portable = Join-Path $TargetDir "windows-package\uigen-$Version-windows-$Arch-portable"
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
@@ -189,16 +189,16 @@ if ($env:CRAFT_FONTS_DIR) {
   }
 }
 # files go to FigCraftData\ next to the exe instead of %APPDATA% (#228; see app_dirs.rs).
-$Zip = Join-Path $Dist "figcraft-$Version-windows-$Arch-portable.zip"
+$Zip = Join-Path $Dist "uigen-$Version-windows-$Arch-portable.zip"
 Remove-Item -Force $Zip -ErrorAction SilentlyContinue
 Compress-Archive -Path $Portable -DestinationPath $Zip
 
 # Smoke-test the CLI when this machine can run it. An ARM64 build made on an x64 runner can't run
 # here; .github/workflows/windows-arm64.yml installs and runs it on ARM64 instead.
 $HostArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
-$Smoke = if ($HasCli) { 'figcraft-cli.exe' } else { 'figcraft.exe' }
+$Smoke = if ($HasCli) { 'uigen-cli.exe' } else { 'uigen.exe' }
 if ($Arch -ne 'arm64' -or $HostArch -eq 'arm64') {
-  # figcraft.exe is a GUI-subsystem exe: pipe it so PowerShell waits and shows its --version output.
+  # uigen.exe is a GUI-subsystem exe: pipe it so PowerShell waits and shows its --version output.
   Invoke-Native "$Smoke --version" { & (Join-Path $Stage $Smoke) --version | Out-Host }
 } else {
   Write-Output "skipping $Smoke --version: an $Arch build doesn't run on this $HostArch machine"

@@ -142,7 +142,7 @@ fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|a| a == "--version" || a == "-V") {
         println!(
-            "FigCraft {}{}",
+            "UIGEN {}{}",
             env!("CARGO_PKG_VERSION"),
             option_env!("FIGCRAFT_BUILD_SHA").filter(|s| !s.is_empty()).map(|s| format!(" ({s})")).unwrap_or_default()
         );
@@ -151,7 +151,7 @@ fn main() -> eframe::Result {
     let args = args::parse(&args);
     if let Some(flag) = args.unknown.first() {
         eprintln!(
-            "FigCraft: unknown option {flag}\nUsage: figcraft [--control PORT] [--automation-read-root DIR]... [--automation-write-root DIR]... [FILE | figcraft://join?...]..."
+            "UIGEN: unknown option {flag}\nUsage: uigen [--control PORT] [--automation-read-root DIR]... [--automation-write-root DIR]... [FILE | figcraft://join?...]..."
         );
         std::process::exit(2);
     }
@@ -162,7 +162,7 @@ fn main() -> eframe::Result {
         (true, _) => None,
         (false, Ok(r)) => Some(Arc::new(r)),
         (false, Err(e)) => {
-            eprintln!("FigCraft: {e}");
+            eprintln!("UIGEN: {e}");
             std::process::exit(2);
         }
     };
@@ -240,7 +240,7 @@ fn main() -> eframe::Result {
     // The app id is the Wayland app_id and the X11 window class on Linux: the desktop entry's name
     // and StartupWMClass (FreeBSD's package matches the binary's name instead).
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("FigCraft")
+        .with_title("UIGEN")
         .with_app_id("ai.storyteller.figcraft")
         .with_inner_size([1440.0, 900.0])
         .with_min_inner_size([800.0, 500.0])
@@ -267,7 +267,7 @@ fn main() -> eframe::Result {
     #[cfg(target_os = "macos")]
     let apple_events = &apple_events;
     let result = eframe::run_native(
-        "FigCraft",
+        "UIGEN",
         options,
         Box::new(move |cc| {
             with_app(|fig| fig.services.set_egui_context(&cc.egui_ctx));

@@ -1,4 +1,4 @@
-//! Windows: embed the icon and version info in figcraft.exe and size its main thread's stack
+//! Windows: embed the icon and version info in uigen.exe and size its main thread's stack
 //! (no-op elsewhere).
 fn main() {
     println!("cargo::rustc-check-cfg=cfg(windows_slim_errors)");
@@ -10,9 +10,9 @@ fn main() {
         if std::path::Path::new(ico).exists() {
             res.set_icon(ico);
         }
-        res.set("ProductName", "FigCraft");
-        res.set("FileDescription", "FigCraft");
-        res.set("CompanyName", "ArtCraft");
+        res.set("ProductName", "UIGEN");
+        res.set("FileDescription", "UIGEN");
+        res.set("CompanyName", "UIGEN contributors");
         if let Err(e) = res.compile() {
             println!("cargo::warning=winresource: {e}");
         }

@@ -1,6 +1,12 @@
-# FigCraft — instructions for agents
+# UIGEN (fork of FigCraft) — instructions for agents
 
-FigCraft is a clean-room, open-source, pure-Rust (egui) reimplementation of the Figma design workflow:
+UIGEN is a fork of FigCraft (storytold/figcraft), MIT OR Apache-2.0. The product name shown to users is
+"UIGEN"; crate names (`figcraft-*`), modules, the `.figcraft` extension and the MCP/CLI protocol
+identifiers keep their upstream names so upstream merges stay easy. Binaries: `uigen`, `uigen-cli`,
+`uigen-server` (packages `figcraft`, `figcraft-cli`, `figcraft-server`). Theme: "Ryzen orange"
+(`crates/ui-egui/src/theme.rs`), dark by default.
+
+Upstream description: FigCraft is a clean-room, open-source, pure-Rust (egui) reimplementation of the Figma design workflow:
 interface design, auto layout, components and variants, styles and variables, prototyping and
 inspection. It runs natively on macOS, Windows, Linux and FreeBSD, and in the browser via WASM.
 Siblings: `../vectorcraft` (Illustrator-class), `../photocraft` (Photoshop-class), `../designcraft`
@@ -43,19 +49,19 @@ code.
   - Creative Commons with redistribution allowed.
 - **Every asset file must have a row in [`ATTRIBUTION.md`](ATTRIBUTION.md)** (path, author, source,
   licence, notes). `cargo xtask assets` (part of `cargo xtask ci`) fails on any unlisted file under
-  `assets/`, `docs/brand/` or `docs/images/`.
+  `assets/` or `docs/images/`.
 - FigCraft's UI icons are drawn in code (`crates/ui-egui/src/icons.rs`) from simple primitives and
   are original. Keep it that way: new icons are new code, designed from scratch.
-- The app icon is the owner's chameleon drawing, vectorised (`assets/app-icon/README.md`); `cargo xtask icon`
-  renders the PNGs and `.ico` from `assets/app-icon/figcraft.svg`.
+- The app icon is UIGEN's original geometric "U" mark (`assets/app-icon/README.md`); `cargo xtask icon`
+  renders the PNGs and `.ico` from `assets/app-icon/figcraft.svg` (file names kept from upstream).
 - **Fonts live in [storytold/craft-fonts](https://github.com/storytold/craft-fonts), never in this
   repo.** The app uses it only through the optional `CRAFT_FONTS_DIR` build input
   (`.cargo/config.toml` points it at `../craft-fonts` for local builds; `crates/text/build.rs`
   embeds it). Everything must build, test and run without it (system fonts are scanned at runtime).
 - Demo and test content is synthetic or public domain; never personal photos or data.
 - Code and original assets are MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE`). The
-  ArtCraft logos in `docs/brand/` are trademarks, not open source, under
-  `docs/brand/LICENSE-brand.txt`: never modify them or use them outside FigCraft.
+  ArtCraft brand assets (trademarks, not open source) were removed from this fork (`docs/brand/` is
+  gone): never add them back.
 - If the provenance of an asset is unclear, don't add it.
 
 ### Never crash

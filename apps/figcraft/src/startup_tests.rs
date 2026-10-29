@@ -5,9 +5,9 @@ use figcraft_ui_egui::dialogs::window_failed as message;
 use figcraft_ui_egui::i18n::tr;
 
 const ERROR: &str = "WGPU error: Failed to create surface for any enabled backend: {}";
-const BACKEND_HINT: &str = "WGPU_BACKEND is set and names the graphics API to use; unsetting it lets FigCraft choose.";
+const BACKEND_HINT: &str = "WGPU_BACKEND is set and names the graphics API to use; unsetting it lets UIGEN choose.";
 const DRIVER_HINT: &str = if cfg!(windows) {
-    "Updating the graphics driver often helps. To use OpenGL only, start FigCraft from a Command Prompt with:"
+    "Updating the graphics driver often helps. To use OpenGL only, start UIGEN from a Command Prompt with:"
 } else {
     "Updating the graphics driver often helps. WGPU_BACKEND (vulkan, gl, metal) names another graphics API to try."
 };

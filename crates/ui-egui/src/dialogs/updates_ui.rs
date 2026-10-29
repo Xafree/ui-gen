@@ -94,7 +94,7 @@ pub(crate) fn show(app: &mut FigApp, ctx: &egui::Context) {
             Status::Idle => (false, None),
             Status::Checking => (true, None),
             Status::UpToDate => {
-                (true, Some(tr("FigCraft {version} is currently the newest version available.").replace("{version}", env!("CARGO_PKG_VERSION"))))
+                (true, Some(tr("UIGEN {version} is currently the newest version available.").replace("{version}", env!("CARGO_PKG_VERSION"))))
             }
             Status::Failed(e) => (true, Some(tr("Could not check for updates:\n{error}").replace("{error}", e))),
         };

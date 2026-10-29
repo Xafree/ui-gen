@@ -169,7 +169,7 @@ fn assets() -> bool {
     let root = root();
     let attribution = std::fs::read_to_string(root.join("ATTRIBUTION.md")).unwrap_or_default();
     let mut missing = Vec::new();
-    for dir in ["assets", "docs/brand", "docs/images"] {
+    for dir in ["assets", "docs/images"] {
         walk(&root.join(dir), &mut |p| {
             let rel = p.strip_prefix(&root).map(|r| r.to_string_lossy().replace('\\', "/")).unwrap_or_default();
             let name = p.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();

@@ -15,8 +15,8 @@
   ],
   "payloads": [
     "NOTICE",
-    "figcraft-cli.exe",
-    "figcraft.exe"
+    "uigen-cli.exe",
+    "uigen.exe"
   ],
   "registry": [
     [
@@ -63,55 +63,55 @@
     ],
     [
       "-1",
-      "Software\\Classes\\Applications\\figcraft.exe",
+      "Software\\Classes\\Applications\\uigen.exe",
       "FriendlyAppName",
-      "FigCraft"
+      "UIGEN"
     ],
     [
       "-1",
-      "Software\\Classes\\Applications\\figcraft.exe\\shell\\open\\command",
+      "Software\\Classes\\Applications\\uigen.exe\\shell\\open\\command",
       "",
       "\"[#FigcraftExe]\" \"%1\""
     ],
     [
       "-1",
-      "Software\\Classes\\Applications\\figcraft.exe\\SupportedTypes",
+      "Software\\Classes\\Applications\\uigen.exe\\SupportedTypes",
       ".figcraft",
       ""
     ],
     [
       "-1",
-      "Software\\Classes\\Applications\\figcraft.exe\\SupportedTypes",
+      "Software\\Classes\\Applications\\uigen.exe\\SupportedTypes",
       ".svg",
       ""
     ],
     [
       "-1",
-      "Software\\Classes\\Applications\\figcraft.exe\\SupportedTypes",
+      "Software\\Classes\\Applications\\uigen.exe\\SupportedTypes",
       ".png",
       ""
     ],
     [
       "-1",
-      "Software\\Classes\\Applications\\figcraft.exe\\SupportedTypes",
+      "Software\\Classes\\Applications\\uigen.exe\\SupportedTypes",
       ".jpg",
       ""
     ],
     [
       "-1",
-      "Software\\Classes\\Applications\\figcraft.exe\\SupportedTypes",
+      "Software\\Classes\\Applications\\uigen.exe\\SupportedTypes",
       ".jpeg",
       ""
     ],
     [
       "-1",
-      "Software\\Classes\\Applications\\figcraft.exe\\SupportedTypes",
+      "Software\\Classes\\Applications\\uigen.exe\\SupportedTypes",
       ".sketch",
       ""
     ],
     [
       "-1",
-      "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\figcraft.exe",
+      "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\uigen.exe",
       "",
       "[#FigcraftExe]"
     ],
