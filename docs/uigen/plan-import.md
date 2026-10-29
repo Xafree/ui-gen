@@ -46,8 +46,9 @@ Avant toute interface : le service capture le Button de MUI, shadcn/ui et Chakra
 `uigen-dom` le traduit en calques dans un fichier `.figcraft`. Critère : les trois boutons s'ouvrent
 dans UIGEN. Critère : les formes s'écartent de moins de 1 % de pixels de leur capture ; le texte ne
 se juge pas au pixel (les glyphes diffèrent entre DirectWrite et le moteur de texte d'UIGEN) mais sur
-la police (famille), la taille et la graisse identiques à celles de Chromium, la position (x, y) et
-la largeur de la couche à 1 px près de sa boîte capturée, l'écart pixel du texte restant affiché à
+la police (famille, installée dans UIGEN), la taille et la graisse identiques à celles de Chromium, la
+position (x, y) de la couche à 1 px près de sa boîte capturée et sa largeur, mesurée par le moteur
+de texte d'UIGEN, à 1 px près de la largeur de cette boîte, l'écart pixel du texte restant affiché à
 titre d'information. Si l'essai échoue, on revoit l'approche avant d'aller plus loin.
 
 ### Lot 1 · Projet de lib
