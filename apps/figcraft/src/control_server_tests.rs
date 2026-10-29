@@ -423,7 +423,7 @@ fn tokens_match_only_when_identical() {
     assert!(!token_matches("", TOKEN));
     assert!(!token_matches(TOKEN, &TOKEN[..TOKEN.len() - 1]));
     assert!(!token_matches(TOKEN, &format!("{TOKEN}0")));
-    let flipped = format!("{}f", &TOKEN[..TOKEN.len() - 1]);
+    let flipped = format!("{}e", &TOKEN[..TOKEN.len() - 1]);
     assert!(!token_matches(TOKEN, &flipped));
     assert!(!token_matches("", ""), "an empty token never authenticates");
 }
@@ -472,7 +472,9 @@ fn the_idle_timeout_is_not_reset_by_each_byte() {
                 std::thread::sleep(Duration::from_millis(50));
             }
         });
-        let outcome = finished.recv_timeout(Duration::from_millis(2000)).expect("the connection must be cut after the timeout, not kept alive by a slow trickle");
+        let outcome = finished
+            .recv_timeout(Duration::from_millis(2000))
+            .expect("the connection must be cut after the timeout, not kept alive by a slow trickle");
         assert!(started.elapsed() < Duration::from_millis(2000));
         let err = outcome.unwrap_err();
         assert!(matches!(err.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut), "{err:?}");
