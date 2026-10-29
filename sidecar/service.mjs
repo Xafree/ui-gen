@@ -1,13 +1,19 @@
+import { install, uninstall } from './install.mjs';
+import { killRunningNpm, runNpm } from './run-npm.mjs';
 import { ServiceError, createLineReader, encodeLine, errorResponse, greeting, okResponse, parseRequest } from './protocol.mjs';
 
 export const methods = new Map();
 
 methods.set('shutdown', () => ({}));
+methods.set('install', (params) => install(params, { runNpm }));
+methods.set('uninstall', (params) => uninstall(params, { runNpm }));
 
 const inFlight = new Set();
 let stopping = false;
 
 const send = (message, done) => process.stdout.write(encodeLine(message), done);
+
+process.on('exit', killRunningNpm);
 
 const stop = () => {
   if (stopping) {
