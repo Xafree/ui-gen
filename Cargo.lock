@@ -1619,6 +1619,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "figcraft-capture"
+version = "0.12.1"
+dependencies = [
+ "figcraft-engine",
+ "serde_json",
+]
+
+[[package]]
 name = "figcraft-cli"
 version = "0.12.1"
 dependencies = [

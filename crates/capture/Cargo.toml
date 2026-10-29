@@ -1,0 +1,13 @@
+[package]
+name = "figcraft-capture"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "UIGEN capture service driver: runs the Node sidecar and speaks its JSON-lines protocol"
+
+[lints]
+workspace = true
+
+[dependencies]
+figcraft-engine = { workspace = true }
+serde_json = { workspace = true }
