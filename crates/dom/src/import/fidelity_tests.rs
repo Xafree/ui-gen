@@ -234,7 +234,7 @@ fn text_and_svg_boxes_are_snapped_too() {
 // covers: P4
 #[test]
 fn a_box_thinner_than_a_pixel_collapses_to_zero_never_below() {
-    let hairline = json!({ "type": "element", "tag": "hr", "box": bounds(10.4, 30.0, 0.2, 10.0) });
+    let hairline = json!({ "type": "element", "tag": "hr", "box": bounds(10.1, 30.0, 0.2, 10.0) });
     let placed = place(parent_of(json!([hairline])));
     let node = placed.child(placed.root_node(), 0);
     assert_eq!(offset(node), (10.0, 30.0));
