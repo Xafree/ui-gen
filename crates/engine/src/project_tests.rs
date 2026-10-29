@@ -148,7 +148,7 @@ fn project_open_opens_every_design_file_in_a_bound_tab_and_activates_the_first()
     assert_eq!(info["project"]["litOutDir"], json!("lit"), "{info}");
     assert!(info["project"]["appliedTheme"].is_null(), "{info}");
     assert_eq!(info["project"]["sources"], json!([]), "{info}");
-    assert_eq!(info["components"], json!([]), "{info}");
+    assert_eq!(info["components"], json!([{"page": 1, "name": "B", "empty": true, "layers": 0}]), "{info}");
 }
 
 // covers: L1-E1
