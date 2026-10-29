@@ -15,6 +15,7 @@ pub const MAX_JSON_BYTES: usize = 1 << 20;
 pub const MAX_SOURCES: usize = 200;
 pub const MAX_DESIGN_FILES: usize = 20;
 pub const ROLE_KEY: &str = "uigen.role";
+pub const MAX_NAME_CHARS: usize = 200;
 pub const DEFAULT_COMPONENT_TEMPLATE: &str = "Component {n}";
 
 const DESIGN_FILE_EXTENSION: &str = ".figcraft";
@@ -23,9 +24,9 @@ const MAX_NAME_ATTEMPTS: usize = 100_000;
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum ProjectError {
-    #[error("uigen.json is {bytes} bytes, the limit is {max}")]
+    #[error("{bytes} bytes is over the limit of {max}")]
     TooLarge { bytes: usize, max: usize },
-    #[error("uigen.json is not valid: {0}")]
+    #[error("not valid: {0}")]
     Json(String),
     #[error("{}", version_message(*.found))]
     Version { found: u32 },
@@ -35,9 +36,9 @@ pub enum ProjectError {
 
 fn version_message(found: u32) -> String {
     if found > SCHEMA_VERSION {
-        format!("uigen.json version {found} is newer than this app supports ({SCHEMA_VERSION}); update UIGEN")
+        format!("version {found} is newer than this app supports ({SCHEMA_VERSION}); update UIGEN")
     } else {
-        format!("uigen.json version {found} is not supported (expected {SCHEMA_VERSION})")
+        format!("version {found} is not supported (expected {SCHEMA_VERSION})")
     }
 }
 
@@ -135,6 +136,7 @@ impl Project {
         if self.version != SCHEMA_VERSION {
             return Err(ProjectError::Version { found: self.version });
         }
+        validate_name(&self.name)?;
         validate_tag_prefix(&self.tag_prefix)?;
         validate_lit_out_dir(&self.lit_out_dir)?;
         validate_design_files(&self.design_files)?;
@@ -143,6 +145,19 @@ impl Project {
         }
         validate_sources(&self.sources)
     }
+}
+
+fn validate_name(name: &str) -> Result<(), ProjectError> {
+    let reason = if name.trim().is_empty() {
+        "must not be empty"
+    } else if name.chars().any(char::is_control) {
+        "must not contain control characters"
+    } else if name.chars().count() > MAX_NAME_CHARS {
+        "is too long"
+    } else {
+        return Ok(());
+    };
+    Err(invalid("name", reason))
 }
 
 fn validate_tag_prefix(prefix: &str) -> Result<(), ProjectError> {
@@ -162,8 +177,8 @@ fn validate_lit_out_dir(dir: &str) -> Result<(), ProjectError> {
         "must be a relative path"
     } else if dir.contains('\\') {
         "must use / as separator"
-    } else if dir.split('/').any(|segment| segment.is_empty() || segment == "..") {
-        "must not contain empty or .. segments"
+    } else if dir.split('/').any(|segment| segment.is_empty() || segment == "." || segment == "..") {
+        "must not contain empty, . or .. segments"
     } else {
         return Ok(());
     };
@@ -250,3 +265,6 @@ pub fn next_component_name<'a>(template: &str, existing: impl IntoIterator<Item 
 
 #[cfg(test)]
 mod project_tests;
+
+#[cfg(test)]
+mod validation_tests;
