@@ -12,6 +12,7 @@ pub mod layout;
 pub mod library;
 pub mod lists;
 pub mod page;
+pub mod project;
 pub mod props;
 pub mod proto;
 pub mod proto_actions;
@@ -80,6 +81,7 @@ fn registry() -> &'static Registry {
         list.extend(layout::specs());
         list.extend(file::specs());
         list.extend(page::specs());
+        list.extend(project::specs());
         list.extend(view::specs());
         list.extend(text::specs());
         list.extend(crate::fonts::specs());
@@ -98,6 +100,8 @@ fn registry() -> &'static Registry {
         list.extend(crate::codegen::specs());
         list.extend(crate::devinspect::specs());
         list.extend(crate::component_codegen::specs());
+        list.extend(crate::lit_export::specs());
+        list.extend(crate::lit_compare::specs());
         list.extend(crate::playground::specs());
         list.extend(crate::code_connect::specs());
         list.extend(crate::annotations::specs());

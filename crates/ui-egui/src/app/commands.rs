@@ -11,8 +11,20 @@ impl FigApp {
         }
     }
 
+    /// In a library project `page.add` without a name or a template names the new component after the UI language.
+    fn with_component_template(&self, id: &str, mut params: Value) -> Value {
+        if id == "page.add"
+            && self.session.in_lib_project()
+            && let Some(map) = params.as_object_mut().filter(|m| !m.contains_key("name") && !m.contains_key("template"))
+        {
+            map.insert("template".into(), Value::String(i18n::tr("Component {n}").to_string()));
+        }
+        params
+    }
+
     /// Run a command, surfacing errors as a toast. Returns the result.
     pub fn run(&mut self, id: &str, params: Value) -> Option<Value> {
+        let params = self.with_component_template(id, params);
         let layers_generation = self.session.clipboard.layers_generation;
         let r = self.session.execute(id, &params);
         self.clear_comment_draft_after_tool_set(id, r.is_ok());
@@ -126,6 +138,7 @@ impl FigApp {
                 }
                 "dialog.preferences" => self.ui.preferences = true,
                 "dialog.missingFonts" => missing_fonts::request(self),
+                "export.lit" => dialogs::lit_export::request(self),
                 "panel.shortcuts" => self.ui.shortcuts_panel = !self.ui.shortcuts_panel,
                 "palette.actions" => menus::toggle_palette(&mut self.ui),
                 "panel.design" if self.session.doc().is_ok_and(figcraft_engine::board::is_board) => self.ui.board_panel = !self.ui.board_panel,
@@ -189,6 +202,8 @@ impl FigApp {
                     self.services.save_prefs(&self.session.prefs);
                 }
                 "dialog.saveAs" => self.save_as_dialog(),
+                "dialog.projectOpen" => self.open_project_dialog(false),
+                "dialog.projectNew" => self.open_project_dialog(true),
                 "dialog.colorProfile" => self.ui.color_profile = self.session.doc().ok().map(|d| d.color_profile),
                 "present" => {
                     if let Some(start) = r.data.get("start").and_then(figcraft_engine::params::id_of) {

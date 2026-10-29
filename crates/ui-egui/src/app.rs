@@ -1,4 +1,6 @@
-use super::clock::{AUTO_SAVE_RETRY_SECS, AUTO_SAVE_SECS, AUTOSAVE_SECS, CJK_CHANGES, FrameClock, TOAST_SECS, ToastClock, repaint_in};
+use super::clock::{
+    AUTO_SAVE_RETRY_SECS, AUTO_SAVE_SECS, AUTOSAVE_SECS, CJK_CHANGES, FrameClock, TOAST_ACTION_SECS, TOAST_SECS, ToastAction, ToastClock, repaint_in,
+};
 use super::open::OPEN_EXTENSIONS;
 use super::services::{DialogFuture, PickFuture, Picked, RepaintWaker, Services};
 use super::state::{LEFT_PANEL, LeftTab, MOBILE_STRIP, MobilePanel, NARROW_WIDTH, PANEL_DEFAULT, RIGHT_PANEL, RightTab, TitleBar, fit_panels};
@@ -299,7 +301,7 @@ impl FigApp {
                     let label = match self.ui.left_tab {
                         _ if self.ui.versions.open => i18n::tr("Version history"),
                         LeftTab::File => i18n::tr("Layers"),
-                        LeftTab::Assets => i18n::tr("Assets"),
+                        LeftTab::Assets => i18n::tr("Components"),
                     };
                     a11y::region(&mut self.ui.nav, ui, a11y::Region::Layers, egui::accesskit::Role::Pane, label);
                     layers::left_panel(self, ui)

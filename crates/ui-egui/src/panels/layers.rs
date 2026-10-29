@@ -95,8 +95,11 @@ pub fn rail(app: &mut FigApp, ui: &mut Ui) {
     y += 44.0;
     ui.painter().line_segment([pos2(r.min.x + 18.0, y), pos2(r.max.x - 18.0, y)], Stroke::new(1.0, t.border));
     y += 12.0;
-    let items =
-        [(Icon::Page, tr("File"), Some(LeftTab::File)), (Icon::Assets, tr("Assets"), Some(LeftTab::Assets)), (Icon::Styles, tr("Variables"), None)];
+    let items = [
+        (Icon::Page, tr("File"), Some(LeftTab::File)),
+        (Icon::Assets, tr("Components"), Some(LeftTab::Assets)),
+        (Icon::Styles, tr("Variables"), None),
+    ];
     for (icon, label, tab) in items {
         let ir = Rect::from_center_size(pos2(r.center().x, y + 14.0), vec2(36.0, 28.0));
         let hit = Rect::from_min_max(pos2(r.min.x, y), pos2(r.max.x, y + 48.0));
@@ -146,7 +149,7 @@ pub fn left_panel(app: &mut FigApp, ui: &mut Ui) {
     // Header: file name (or "Assets") + drafts + collapse.
     let (head, _) = ui.allocate_exact_size(vec2(full.width(), 64.0), Sense::hover());
     if app.ui.left_tab == LeftTab::Assets {
-        ui.painter().text(pos2(head.min.x + 16.0, head.min.y + 24.0), Align2::LEFT_CENTER, tr("Assets"), semibold(13.0), t.text);
+        ui.painter().text(pos2(head.min.x + 16.0, head.min.y + 24.0), Align2::LEFT_CENTER, tr("Components"), semibold(13.0), t.text);
     } else {
         let name = app.session.doc().map(|d| d.name.clone()).unwrap_or_default();
         let nr = Rect::from_min_max(pos2(head.min.x + 14.0, head.min.y + 14.0), pos2(head.max.x - 48.0, head.min.y + 34.0));
@@ -375,8 +378,13 @@ pub(crate) fn pages_have_keyboard(app: &FigApp) -> bool {
 
 /// Delete `page` (no confirmation: Undo brings it back) and say so.
 pub(crate) fn delete_page(app: &mut FigApp, page: NodeId) {
+    let component = app.session.in_lib_project() && app.session.doc().is_ok_and(|doc| figcraft_engine::project::is_component_page(doc, page));
     if app.run("page.delete", json!({"id": page})).is_some() {
-        app.toast(tr("Page deleted"));
+        if component {
+            app.toast_with_undo(tr("Component deleted"));
+        } else {
+            app.toast(tr("Page deleted"));
+        }
     }
 }
 

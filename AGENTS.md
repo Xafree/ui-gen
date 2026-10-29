@@ -96,10 +96,12 @@ milestone id in the message (`M2.1: auto layout wrap`). Commit after every lande
 to `main`.
 
 ## Running and looking at the app
-- `cargo run -p figcraft -- --control <port> [file.figcraft|file.svg|image]`. Pick a free port
+- `cargo run -p figcraft -- --control <port> --automation-write-root <dir> [file.figcraft|file.svg|image]`
+  (a root is required with `--control`; the app prints a session token on stderr and keeps it in
+  `control-token-<port>` in its configuration folder). Pick a free port
   (`python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])'`);
   sibling apps use the control channel too.
-- Drive it with JSON lines, e.g.
+- Drive it with JSON lines: the first line of a connection is `{"auth":"<token>"}`, then e.g.
   `{"id":1,"method":"engine.execute","params":{"command":"shape.rectangle","params":{"x":10,"y":10,"width":100,"height":50}}}`
   then `{"id":2,"method":"ui.screenshot","params":{"path":"/tmp/shot.png"}}`. Methods are documented
   in `crates/ui-egui/src/control.rs` and `docs/control-protocol.md`.

@@ -9,6 +9,13 @@ pub fn secret() -> Result<String, String> {
     Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b))
 }
 
+/// A secret for a local control channel: 256 random bits as 64 hex digits.
+pub fn secret_256_hex() -> Result<String, String> {
+    let mut b = [0u8; 32];
+    getrandom::fill(&mut b).map_err(|e| format!("no secure random numbers: {e}"))?;
+    Ok(b.iter().map(|x| format!("{x:02x}")).collect())
+}
+
 /// A file's session id: 64 random bits as hex (not a secret; it tells sessions apart).
 pub fn file_id() -> Result<String, String> {
     let mut b = [0u8; 8];

@@ -7,6 +7,10 @@ mod export_depth;
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod fonts;
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod mcp_attach;
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod mcp_attach_remote;
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod pdf;
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod pdf_print;

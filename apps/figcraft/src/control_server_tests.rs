@@ -14,6 +14,20 @@ fn pair() -> (TcpStream, TcpStream) {
     (client, listener.accept().unwrap().0)
 }
 
+const TOKEN: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+/// The first line every connection must send, and the acknowledgement the app answers with.
+fn authenticate(client: &mut TcpStream) {
+    writeln!(client, "{}", json!({"auth": TOKEN})).unwrap();
+    let mut line = Vec::new();
+    let mut byte = [0u8];
+    while client.read_exact(&mut byte).is_ok() && byte[0] != b'\n' {
+        line.push(byte[0]);
+    }
+    let ack: Value = serde_json::from_slice(&line).unwrap();
+    assert_eq!(ack, json!({"id": null, "ok": true, "result": "authenticated"}));
+}
+
 fn queue() -> Queue {
     Arc::new(Mutex::new(Vec::new()))
 }
@@ -38,7 +52,8 @@ fn rejects_an_oversized_unterminated_frame_without_dispatch() {
     let (mut client, server) = pair();
     let pending = queue();
     let q = pending.clone();
-    let worker = std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(5)));
+    let worker = std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(5), TOKEN));
+    authenticate(&mut client);
     // Generate bytes as they are written; no giant input string and no terminating newline.
     std::io::copy(&mut std::io::repeat(b' ').take((MAX_LINE + 1) as u64), &mut client).unwrap();
     let mut reader = BufReader::new(client);
@@ -48,12 +63,14 @@ fn rejects_an_oversized_unterminated_frame_without_dispatch() {
     assert!(pending.lock().unwrap().is_empty());
 }
 
+// covers: K2
 #[test]
 fn valid_frames_keep_their_order_ids_and_parameters() {
     let (mut client, server) = pair();
     let pending = queue();
     let q = pending.clone();
-    let worker = std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(5)));
+    let worker = std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(5), TOKEN));
+    authenticate(&mut client);
     client.write_all(b"\r\n{\"id\":\"test\",\"method\":\"engine.execute\",\"params\":{\"command\":\"shape.rectangle\"}}\r\n").unwrap();
     let mut reader = BufReader::new(client);
     let start = Instant::now();
@@ -79,9 +96,10 @@ fn a_line_that_is_not_json_ends_the_connection_before_anything_after_it_runs() {
     let (mut client, server) = pair();
     let pending = queue();
     let q = pending.clone();
-    let worker = std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(5)));
+    let worker = std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(5), TOKEN));
     let body = "{\"id\":1,\"method\":\"engine.execute\",\"params\":{\"command\":\"file.save\"}}\n";
     let http = format!("POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+    authenticate(&mut client);
     client.write_all(http.as_bytes()).unwrap();
     let mut reader = BufReader::new(client);
     assert_eq!(reply(&mut reader)["ok"], false);
@@ -103,7 +121,8 @@ fn full_queue_rejects_before_dispatch_and_ui_queue_stays_bounded() {
     drain_queue(&pending, &mut ui_queue);
     assert_eq!(pending.lock().unwrap().len(), MAX_QUEUED_REQUESTS);
     let q = pending.clone();
-    let worker = std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(5)));
+    let worker = std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(5), TOKEN));
+    authenticate(&mut client);
     client.write_all(b"{\"id\":1,\"method\":\"engine.execute\"}\n").unwrap();
     let mut reader = BufReader::new(client);
     assert_eq!(reply(&mut reader), json!({"id": 1, "ok": false, "error": "control request queue is full"}));
@@ -169,7 +188,7 @@ fn idle_and_partial_frame_connections_expire() {
         let (done, finished) = mpsc::channel();
         let pending = queue();
         let q = pending.clone();
-        let worker = std::thread::spawn(move || done.send(serve(server, q, context(), Duration::from_millis(50))));
+        let worker = std::thread::spawn(move || done.send(serve(server, q, context(), Duration::from_millis(50), TOKEN)));
         client.write_all(bytes).unwrap();
         let err = finished.recv_timeout(Duration::from_secs(5)).unwrap().unwrap_err();
         assert!(matches!(err.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut));
@@ -198,13 +217,15 @@ fn connection_limit_rejects_excess_clients_and_reuses_finished_slots() {
     let mut clients = Vec::new();
     for _ in 0..MAX_CONNECTIONS {
         let (client, server) = pair();
-        spawn_connection(server, pending.clone(), ctx.clone(), &mut workers, Duration::from_secs(5));
+        spawn_connection(server, pending.clone(), ctx.clone(), &mut workers, Duration::from_secs(5), Arc::from(TOKEN));
         clients.push(client);
     }
     assert_eq!(workers.len(), MAX_CONNECTIONS);
     let (mut extra, server) = pair();
-    spawn_connection(server, pending.clone(), ctx.clone(), &mut workers, Duration::from_secs(5));
-    assert_eq!(extra.read(&mut [0]).unwrap(), 0);
+    spawn_connection(server, pending.clone(), ctx.clone(), &mut workers, Duration::from_secs(5), Arc::from(TOKEN));
+    let mut refusal = String::new();
+    extra.read_to_string(&mut refusal).unwrap();
+    assert_eq!(serde_json::from_str::<Value>(&refusal).unwrap(), json!({"id": null, "ok": false, "error": "too many connections"}));
     assert_eq!(workers.len(), MAX_CONNECTIONS);
     for client in clients {
         client.shutdown(Shutdown::Both).unwrap();
@@ -215,8 +236,9 @@ fn connection_limit_rejects_excess_clients_and_reuses_finished_slots() {
         std::thread::sleep(Duration::from_millis(1));
     }
     let (mut client, server) = pair();
-    spawn_connection(server, pending, ctx, &mut workers, Duration::from_secs(5));
+    spawn_connection(server, pending, ctx, &mut workers, Duration::from_secs(5), Arc::from(TOKEN));
     assert_eq!(workers.len(), 1);
+    authenticate(&mut client);
     client.write_all(b"invalid\n").unwrap();
     assert_eq!(reply(&mut BufReader::new(client.try_clone().unwrap()))["ok"], false);
     // The server closes this connection after answering an invalid request, and shutting down
@@ -233,7 +255,8 @@ fn a_client_that_stops_reading_cannot_hold_a_worker() {
     let pending = queue();
     let q = pending.clone();
     let (done, finished) = mpsc::channel();
-    let worker = std::thread::spawn(move || done.send(serve(server, q, context(), Duration::from_millis(100))));
+    let worker = std::thread::spawn(move || done.send(serve(server, q, context(), Duration::from_millis(100), TOKEN)));
+    authenticate(&mut client);
     client.write_all(b"{\"id\":1,\"method\":\"document.inspect\"}\n").unwrap();
     let start = Instant::now();
     let r = loop {
@@ -254,8 +277,9 @@ fn a_limit_sized_frame_is_accepted_at_eof() {
     let (mut client, server) = pair();
     let pending = queue();
     let q = pending.clone();
-    let worker = std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(5)));
+    let worker = std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(5), TOKEN));
     let message = b"{\"id\":1,\"method\":\"ui.inspect\"}";
+    authenticate(&mut client);
     client.write_all(message).unwrap();
     std::io::copy(&mut std::io::repeat(b' ').take((MAX_LINE - message.len()) as u64), &mut client).unwrap();
     client.shutdown(Shutdown::Write).unwrap();
@@ -291,7 +315,8 @@ fn timed_out_requests_release_a_full_deferred_ui_queue() {
     for id in 0..MAX_QUEUED_REQUESTS {
         let (mut client, server) = pair();
         let q = pending.clone();
-        workers.push(std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(1))));
+        workers.push(std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(1), TOKEN)));
+        authenticate(&mut client);
         writeln!(client, "{}", json!({"id": id, "method": "engine.execute", "params": {"window": window, "command": "file.new"}})).unwrap();
         clients.push(BufReader::new(client));
     }
@@ -317,7 +342,8 @@ fn timed_out_requests_release_a_full_deferred_ui_queue() {
     }));
     let (mut client, server) = pair();
     let q = pending.clone();
-    workers.push(std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(5))));
+    workers.push(std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(5), TOKEN)));
+    authenticate(&mut client);
     client.write_all(b"{\"id\":100,\"method\":\"window.list\",\"params\":{\"window\":0}}\n").unwrap();
     let start = Instant::now();
     while !pending.lock().unwrap().iter().any(|r| r.id == 100) {
@@ -340,5 +366,129 @@ fn timed_out_requests_release_a_full_deferred_ui_queue() {
     assert_eq!(app.session.docs.len(), documents);
     for worker in workers {
         worker.join().unwrap().unwrap();
+    }
+}
+
+/// What the server wrote before it closed, and whether it closed (rather than timed out).
+fn read_until_closed(mut client: TcpStream) -> Vec<u8> {
+    let mut received = Vec::new();
+    let start = Instant::now();
+    // A reset by the peer also means the server closed the connection.
+    let outcome = client.read_to_end(&mut received);
+    if let Err(e) = &outcome {
+        assert!(!matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut), "the server left the connection open");
+    }
+    assert!(start.elapsed() < Duration::from_secs(4), "the server left the connection open");
+    received
+}
+
+fn assert_closed_without_dispatch(first_lines: &[u8]) {
+    let (mut client, server) = pair();
+    let pending = queue();
+    let q = pending.clone();
+    let worker = std::thread::spawn(move || serve(server, q, context(), Duration::from_secs(5), TOKEN));
+    let command = b"{\"id\":1,\"method\":\"engine.execute\",\"params\":{\"command\":\"file.save\"}}\n";
+    client.write_all(first_lines).unwrap();
+    let _ = client.write_all(command);
+    let received = String::from_utf8_lossy(&read_until_closed(client)).into_owned();
+    let _ = worker.join().unwrap();
+    assert!(pending.lock().unwrap().is_empty(), "nothing was dispatched");
+    assert!(!received.contains("\"ok\":true"), "nothing was executed: {received}");
+}
+
+// covers: K2
+#[test]
+fn a_wrong_token_closes_the_connection_before_anything_runs() {
+    assert_closed_without_dispatch(b"{\"auth\": \"not-the-token\"}\n");
+    let almost = format!("{}\n", json!({"auth": &TOKEN[..TOKEN.len() - 1]}));
+    assert_closed_without_dispatch(almost.as_bytes());
+}
+
+// covers: K2
+#[test]
+fn a_first_line_that_is_not_the_token_closes_the_connection_before_anything_runs() {
+    // A client that skips the handshake and sends a command right away.
+    assert_closed_without_dispatch(b"{\"id\":0,\"method\":\"ui.inspect\"}\n");
+    // The token in the wrong place (inside a command) is not the handshake either.
+    let smuggled = format!("{}\n", json!({"id": 0, "method": "ui.inspect", "auth": TOKEN, "params": {}}));
+    assert_closed_without_dispatch(smuggled.as_bytes());
+    // What a browser sends: the request line is not the handshake.
+    assert_closed_without_dispatch(b"POST / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
+}
+
+// covers: K2
+#[test]
+fn the_token_is_random_hex_of_at_least_128_bits() {
+    let (a, b) = (generate_token(), generate_token());
+    assert!(a.len() >= 32 && a.chars().all(|c| c.is_ascii_hexdigit()), "{a}");
+    assert_ne!(a, b, "two tokens must differ");
+}
+
+// covers: K2
+#[test]
+fn tokens_match_only_when_identical() {
+    assert!(token_matches(TOKEN, TOKEN));
+    assert!(!token_matches(TOKEN, ""));
+    assert!(!token_matches("", TOKEN));
+    assert!(!token_matches(TOKEN, &TOKEN[..TOKEN.len() - 1]));
+    assert!(!token_matches(TOKEN, &format!("{TOKEN}0")));
+    let flipped = format!("{}e", &TOKEN[..TOKEN.len() - 1]);
+    assert!(!token_matches(TOKEN, &flipped));
+    assert!(!token_matches("", ""), "an empty token never authenticates");
+}
+
+// covers: K2
+#[test]
+fn the_token_file_holds_the_token_and_is_private() {
+    let dir = std::env::temp_dir().join(format!("figcraft-control-token-{}", std::process::id())).join("nested");
+    let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    let token = generate_token();
+    let path = write_token_file(&dir, 4242, &token).unwrap();
+    assert!(path.starts_with(&dir));
+    assert_eq!(path.file_name().unwrap(), "control-token-4242");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), token, "the exact token, no newline");
+    // Starting again replaces the old token.
+    let next = generate_token();
+    assert_eq!(write_token_file(&dir, 4242, &next).unwrap(), path);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), next);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o077, 0, "nobody but the owner may read it");
+    }
+    let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+}
+
+// covers: K3
+#[test]
+fn the_idle_timeout_is_not_reset_by_each_byte() {
+    for authenticated in [false, true] {
+        let (mut client, server) = pair();
+        let (done, finished) = mpsc::channel();
+        let pending = queue();
+        let q = pending.clone();
+        let started = Instant::now();
+        let worker = std::thread::spawn(move || done.send(serve(server, q, context(), Duration::from_millis(300), TOKEN)));
+        if authenticated {
+            authenticate(&mut client);
+        }
+        // One byte every 50 ms and never a newline: each byte would restart a per-read timeout.
+        let dribble = std::thread::spawn(move || {
+            for _ in 0..60 {
+                if client.write_all(b" ").is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        });
+        let outcome = finished
+            .recv_timeout(Duration::from_millis(2000))
+            .expect("the connection must be cut after the timeout, not kept alive by a slow trickle");
+        assert!(started.elapsed() < Duration::from_millis(2000));
+        let err = outcome.unwrap_err();
+        assert!(matches!(err.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut), "{err:?}");
+        assert!(pending.lock().unwrap().is_empty());
+        worker.join().unwrap().unwrap();
+        dribble.join().unwrap();
     }
 }

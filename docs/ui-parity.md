@@ -130,7 +130,7 @@ in the table. `crates/ui-egui/src/shortcut_keys_tests.rs` drives the keys a look
 | Bound on other keys (documented conflict) | 1 | Run last plugin: the documentation also gives Ctrl+Alt+P to pixel preview on Windows; the plugin takes Ctrl+Alt+Shift+P there |
 | Missing | 0 | moving the rotation origin (Alt+R, `transform.rotationOrigin`) and placing an object with Enter after choosing its tool (`tool.place`) were the last two |
 | Documented keys a platform keeps | 2 | Ctrl+Space (Windows/Linux keyboard box selection) switches some CJK input methods; F6 goes to a browser's address bar in the web build |
-| Undocumented bindings pinned | 57 | of which Cmd/Ctrl+W, Cmd/Ctrl+N and Ctrl+Tab are taken by browsers (web build) and Ctrl+Alt+T / Ctrl+Alt+L by some Linux desktops |
+| Undocumented bindings pinned | 58 | of which Cmd/Ctrl+W, Cmd/Ctrl+N and Ctrl+Tab are taken by browsers (web build) and Ctrl+Alt+T / Ctrl+Alt+L by some Linux desktops |
 
 - **Newly bound:** A for the Frame tool, Shift+' for the pixel grid (Cmd+' kept: the articles
   disagree), Alt+Cmd+\ / Ctrl+Alt+\ for others' cursors (`view.multiplayerCursors`, new), Ctrl+F6
@@ -173,6 +173,7 @@ in the table. `crates/ui-egui/src/shortcut_keys_tests.rs` drives the keys a look
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-29 | minor | Lit export window (`export.litWindow`) pinned on Alt+Shift+Cmd+E (Ctrl+Alt+Shift+E): Shift+Cmd+E stays with Export: 57 → 58 pinned |
 | 2026-10-25 | minor | Context menus: the Menu key is no longer an egui limitation at 0.37 (egui-winit maps the native Menu/ContextMenu key to egui's `Key::Menu`), but FigCraft normalizes no binding for `Menu`, so it does not open a context menu yet; Shift+F10 still does, with the same behaviour. The row moves from done to partial. Numbers unchanged |
 | 2026-10-24 | minor | Selection colors: a row's Styles menu also lists the document's color variables, and picking one binds it to every fill and stroke the row stands for, replacing a color style there (`selection.bindColorVariable`; a text range with fills of its own takes the variable's value); a row linked to a style or variable has a Detach button that unlinks it and keeps the color (`selection.detachColor`). Still partial: no library styles or variables, no new style or variable from a row |
 | 2026-10-24 | minor | The Text on a path tool (`tool.textOnPath`, in the Text flyout): a click on a shape's or vector's path puts new text on it, starting at the click, with the path's fill (when one shows) and effects, as the help center's Guide to text describes; the path layer is removed, and an edit left empty puts it back with no undo step (`draw_tools_tests`, `cursor_tests`) |

@@ -34,6 +34,7 @@ fn exe(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
+// covers: L1
 #[test]
 fn registers_the_scheme_for_this_copy() {
     let mut s = UrlScheme::new(Fake::default(), exe(r"C:\Apps\UIGEN\figcraft.exe"), true);
@@ -44,13 +45,14 @@ fn registers_the_scheme_for_this_copy() {
     assert_eq!(reg.get(KEY, "").as_deref(), Some("URL:UIGEN invite link"));
     assert_eq!(reg.get(KEY, "URL Protocol").as_deref(), Some(""), "marks the key as a URL scheme");
     assert_eq!(reg.get(&format!(r"{KEY}\DefaultIcon"), "").as_deref(), Some(r#""C:\Apps\UIGEN\figcraft.exe",0"#));
-    assert_eq!(reg.get(&format!(r"{KEY}\shell\open\command"), "").as_deref(), Some(r#""C:\Apps\UIGEN\figcraft.exe" "%1""#));
+    assert_eq!(reg.get(&format!(r"{KEY}\shell\open\command"), "").as_deref(), Some(r#""C:\Apps\UIGEN\figcraft.exe" -- "%1""#));
     assert_eq!(reg.values.len(), 4, "nothing else is written");
     s.set(false).unwrap();
     assert!(!s.registered());
     assert!(s.registry().values.is_empty(), "unregistering removes the whole key");
 }
 
+// covers: L1
 #[test]
 fn leaves_another_copys_registration() {
     let mut other = UrlScheme::new(Fake::default(), exe(r"C:\Other\figcraft.exe"), true);
@@ -59,10 +61,17 @@ fn leaves_another_copys_registration() {
     let mut s = UrlScheme::new(reg, exe(r"C:\Apps\figcraft.exe"), true);
     assert!(!s.registered(), "another copy is the opener");
     s.set(false).unwrap();
-    assert_eq!(s.registry().get(&format!(r"{KEY}\shell\open\command"), "").as_deref(), Some(r#""C:\Other\figcraft.exe" "%1""#));
+    assert_eq!(s.registry().get(&format!(r"{KEY}\shell\open\command"), "").as_deref(), Some(r#""C:\Other\figcraft.exe" -- "%1""#));
     // Turning it on takes it over.
     s.set(true).unwrap();
     assert!(s.registered());
+}
+
+// covers: L1
+#[test]
+fn the_command_ends_options_before_the_link() {
+    let s = UrlScheme::new(Fake::default(), exe(r"C:\Apps\UIGEN\figcraft.exe"), true);
+    assert_eq!(s.command(), r#""C:\Apps\UIGEN\figcraft.exe" -- "%1""#, "the link must come after a bare `--` so it can never be read as an option");
 }
 
 #[test]

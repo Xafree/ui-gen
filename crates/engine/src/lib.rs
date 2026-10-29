@@ -33,6 +33,7 @@ pub use assets::playground;
 pub use assets::style_vars;
 pub use assets::token_roles;
 pub use automation::batch;
+pub use automation::control_token;
 pub use automation::doc_urls;
 pub use automation::file_access;
 pub use automation::inspect;
@@ -67,6 +68,9 @@ pub use dev::dev_measurements;
 pub use dev::dev_resources;
 pub use dev::devcompare;
 pub use dev::devinspect;
+pub use dev::lit;
+pub use dev::lit_compare;
+pub use dev::lit_export;
 pub use dev::tailwind;
 pub use extensions::plugin_directory;
 pub use extensions::plugins;
@@ -100,6 +104,7 @@ mod derived;
 mod doc_state;
 mod error;
 mod prefs;
+pub mod project;
 mod session;
 mod view_state;
 
@@ -324,6 +329,32 @@ mod library_variables_tests;
 #[cfg(test)]
 mod line_endings_tests;
 #[cfg(test)]
+mod lit_codegen_extra_tests;
+#[cfg(test)]
+mod lit_codegen_tests;
+#[cfg(test)]
+mod lit_compare_tests;
+#[cfg(test)]
+mod lit_effects_tests;
+#[cfg(test)]
+mod lit_export_disk_tests;
+#[cfg(test)]
+mod lit_export_tests;
+#[cfg(test)]
+mod lit_review_tests;
+#[cfg(test)]
+mod lit_states_extra_tests;
+#[cfg(test)]
+mod lit_states_tests;
+#[cfg(test)]
+mod lit_tokens_extra_tests;
+#[cfg(test)]
+mod lit_tokens_freeze_tests;
+#[cfg(test)]
+mod lit_tokens_tests;
+#[cfg(test)]
+mod lit_write_review_tests;
+#[cfg(test)]
 mod live_access_tests;
 #[cfg(test)]
 mod live_docs_tests;
@@ -526,3 +557,18 @@ mod widgets_tests;
 mod selection_reorder_tests;
 #[cfg(test)]
 mod selection_spacing_tests;
+
+#[cfg(test)]
+mod project_tests;
+
+#[cfg(test)]
+mod project_pages_tests;
+
+#[cfg(test)]
+mod project_review_tests;
+
+#[cfg(test)]
+mod project_ui_requests_tests;
+
+#[cfg(test)]
+mod project_save_as_tests;

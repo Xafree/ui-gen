@@ -245,6 +245,7 @@ static ROWS: &[Row] = &[
     doc(Edit, "Copy all properties", &["Alt+Cmd+C"], &["Ctrl+Alt+C"], Bound("edit.copyProperties"), ""),
     doc(Edit, "Paste all properties", &["Alt+Cmd+V"], &["Ctrl+Alt+V"], Bound("edit.pasteProperties"), ""),
     doc(Edit, "Export", &["Shift+Cmd+E"], &[], Bound("file.export"), ""),
+    pin(Edit, "export.litWindow", &["Alt+Shift+Cmd+E"], &[]),
     doc(Edit, "Duplicate by dragging", &["Alt"], &[], Gesture("Duplicate by dragging"), "held while dragging"),
     pin(Edit, "edit.redo", &["Shift+Cmd+Z"], &[]),
     pin(Edit, "edit.cut", &["Cmd+X"], &[]),
@@ -407,7 +408,7 @@ fn counts_match_the_docs() {
     let reserved = documented.iter().filter(|r| !r.reserved.is_empty()).count();
     let pinned = ROWS.len() - documented.len();
     // docs/ui-parity.md quotes these.
-    assert_eq!((documented.len(), bound, moved, missing, reserved, pinned), (129, 128, 1, 0, 2, 57));
+    assert_eq!((documented.len(), bound, moved, missing, reserved, pinned), (129, 128, 1, 0, 2, 58));
 }
 
 #[test]

@@ -822,7 +822,8 @@ installing: [`plugins.md`](plugins.md#plugin-directories)):
   link and the reason. Other arguments are files, as paths or `file://` URLs.
 - **Windows**: the app registers itself per user as the opener of `figcraft://` under
   `HKEY_CURRENT_USER\Software\Classes\figcraft` (no administrator rights): the scheme, its icon
-  and `"<figcraft.exe>" "%1"`. Preferences ▸ **Open invite links in FigCraft** (and
+  and `"<figcraft.exe>" -- "%1"` (the bare `--` keeps a link holding a quote from adding an option:
+  after it, an invite link joins and everything else is a file). Preferences ▸ **Open invite links in FigCraft** (and
   `collab.registerLinks {on?}`) turns it on or off; it defaults to on for installed builds, which
   register on first run, and off for builds from source (inside a Cargo build directory, or debug
   builds), which leave any registration alone. Turning it off removes only this copy's
