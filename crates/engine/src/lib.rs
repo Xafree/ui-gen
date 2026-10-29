@@ -528,3 +528,6 @@ mod selection_spacing_tests;
 
 #[cfg(test)]
 mod project_tests;
+
+#[cfg(test)]
+mod project_pages_tests;
