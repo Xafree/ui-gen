@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 use super::window;
 use crate::FigApp;
 use crate::i18n::{tr, trn};
+use crate::repaint_in;
 use crate::theme::{Tokens, regular};
 
 const WIDTH: f32 = 760.0;
@@ -23,6 +24,8 @@ const LIST_HEIGHT: f32 = 150.0;
 const FILES_HEIGHT: f32 = 220.0;
 const NOTES_HEIGHT: f32 = 90.0;
 const MAX_PREVIEW_CHARS: usize = 40_000;
+const SETTLE_SECS: f64 = 0.3;
+const RENAME_WIDTH: f32 = 220.0;
 
 #[derive(Clone, Debug)]
 pub struct ComponentRow {
@@ -54,8 +57,16 @@ enum Act {
     Toggle(NodeId, bool),
     Select(String),
     Set(Setting),
+    Rename(NodeId, String),
+    Force(bool),
     Export,
     Close,
+}
+
+#[derive(Clone, Debug, Default)]
+struct Report {
+    skipped: Vec<(String, String)>,
+    notes: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -69,6 +80,13 @@ pub struct LitExport {
     error: Option<String>,
     selected: Option<String>,
     seen: Option<(u64, Arc<Document>)>,
+    heard: Option<Arc<Document>>,
+    touched: bool,
+    forced: bool,
+    waiting: bool,
+    last_edit: Option<f64>,
+    force: bool,
+    report: Report,
 }
 
 fn status_name(status: Status) -> &'static str {
@@ -96,6 +114,13 @@ impl LitExport {
             error: None,
             selected: None,
             seen: None,
+            heard: None,
+            touched: false,
+            forced: false,
+            waiting: false,
+            last_edit: None,
+            force: false,
+            report: Report::default(),
         }
     }
 
@@ -112,7 +137,7 @@ impl LitExport {
     }
 
     pub fn notes(&self) -> Vec<&str> {
-        self.notes.iter().map(String::as_str).collect()
+        self.notes.iter().chain(&self.report.notes).map(String::as_str).collect()
     }
 
     pub fn selected(&self) -> Option<&str> {
@@ -148,23 +173,56 @@ impl LitExport {
         } else {
             self.unchecked.insert(id);
         }
-        self.seen = None;
+        self.forced = true;
     }
 
-    fn follows(&self, uid: u64, doc: &Arc<Document>) -> bool {
-        self.seen.as_ref().is_some_and(|(u, d)| *u == uid && Arc::ptr_eq(d, doc))
+    /// Plans again once the document or a setting has changed and the edit is over: at once for
+    /// an edit that follows a quiet moment, else `SETTLE_SECS` after the last one, and never while
+    /// the pointer is down (a drag on the canvas changes the document on every frame). Returns how
+    /// long to wait before the next look.
+    fn settle(&mut self, uid: u64, doc: &Arc<Document>, now: f64, pointer_down: bool) -> Option<f64> {
+        if self.forced || self.seen.as_ref().is_none_or(|(u, _)| *u != uid) {
+            self.replan(uid, doc);
+            return None;
+        }
+        if self.touched || !self.heard.as_ref().is_some_and(|d| Arc::ptr_eq(d, doc)) {
+            let quiet = self.last_edit.is_none_or(|t| now - t >= SETTLE_SECS);
+            self.last_edit = Some(now);
+            self.heard = Some(Arc::clone(doc));
+            self.touched = false;
+            self.waiting = true;
+            if quiet && !pointer_down {
+                self.replan(uid, doc);
+                return None;
+            }
+        }
+        if !self.waiting {
+            return None;
+        }
+        let left = self.last_edit.map_or(0.0, |t| t + SETTLE_SECS - now);
+        if left > 0.0 {
+            return Some(left);
+        }
+        if !pointer_down {
+            self.replan(uid, doc);
+        }
+        None
     }
 
     fn replan(&mut self, uid: u64, doc: &Arc<Document>) {
         let all = plan(doc, &self.options(None));
         let wanted: Vec<NodeId> =
             all.components.iter().filter(|c| c.status != Status::Empty && !self.unchecked.contains(&c.id)).map(|c| c.id).collect();
-        let chosen = plan(doc, &self.options(Some(wanted.clone())));
+        let narrowed = all
+            .components
+            .iter()
+            .any(|c| c.status != Status::Empty && self.unchecked.contains(&c.id))
+            .then(|| plan(doc, &self.options(Some(wanted.clone()))));
         self.rows = all
             .components
             .iter()
             .map(|c| {
-                let shown = chosen.components.iter().find(|k| k.id == c.id).unwrap_or(c);
+                let shown = narrowed.as_ref().and_then(|n| n.components.iter().find(|k| k.id == c.id)).unwrap_or(c);
                 ComponentRow {
                     id: c.id,
                     name: c.name.clone(),
@@ -176,6 +234,7 @@ impl LitExport {
                 }
             })
             .collect();
+        let chosen = narrowed.unwrap_or(all);
         self.ready = chosen.ready();
         self.notes = chosen.notes.iter().map(|n| n.message.clone()).collect();
         self.files = chosen.files;
@@ -183,6 +242,8 @@ impl LitExport {
             self.selected = self.files.first().map(|f| f.path.clone());
         }
         self.seen = Some((uid, Arc::clone(doc)));
+        self.heard = Some(Arc::clone(doc));
+        (self.touched, self.forced, self.waiting) = (false, false, false);
     }
 
     fn apply(&mut self, setting: Setting) {
@@ -195,16 +256,20 @@ impl LitExport {
             return;
         }
         self.error = None;
-        match setting {
-            Setting::Prefix(text) => self.settings.prefix = text,
-            Setting::TokenPrefix(text) => self.settings.token_prefix = text,
-            Setting::Light(text) => self.settings.light = text,
-            Setting::Dark(text) => self.settings.dark = text,
+        let (slot, text) = match setting {
+            Setting::Prefix(text) => (&mut self.settings.prefix, text),
+            Setting::TokenPrefix(text) => (&mut self.settings.token_prefix, text),
+            Setting::Light(text) => (&mut self.settings.light, text),
+            Setting::Dark(text) => (&mut self.settings.dark, text),
+        };
+        if *slot != text {
+            *slot = text;
+            self.touched = true;
         }
     }
 
     fn write_params(&self) -> Value {
-        let mut params = json!({"ids": self.ids(), "prefix": self.settings.prefix});
+        let mut params = json!({"ids": self.ids(), "prefix": self.settings.prefix, "force": self.force});
         for (key, value) in [("tokenPrefix", &self.settings.token_prefix), ("lightMode", &self.settings.light), ("darkMode", &self.settings.dark)] {
             if !value.is_empty() {
                 params[key] = json!(value);
@@ -230,19 +295,25 @@ pub fn set_checked(app: &mut FigApp, id: NodeId, checked: bool) {
 }
 
 fn written_note(app: &mut FigApp, result: &Value) {
-    let count = |key: &str| result.get(key).and_then(Value::as_array).map_or(0, Vec::len);
-    let summary =
-        [trn("{n} written", count("written"), &[]), trn("{n} unchanged", count("unchanged"), &[]), trn("{n} skipped", count("skipped"), &[])];
+    let list = |key: &str| result.get(key).and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
+    let mut summary = vec![
+        trn("{n} written", list("written").len(), &[]),
+        trn("{n} unchanged", list("unchanged").len(), &[]),
+        trn("{n} skipped", list("skipped").len(), &[]),
+    ];
+    if !list("stale").is_empty() {
+        summary.push(trn("{n} stale", list("stale").len(), &[]));
+    }
+    if !list("kept").is_empty() {
+        summary.push(trn("{n} kept", list("kept").len(), &[]));
+    }
     app.toast(summary.join(", "));
-    let notes: Vec<String> = result
-        .get("notes")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|n| n.as_str().or_else(|| n.get("message").and_then(Value::as_str)).map(str::to_string))
-        .collect();
+    let text = |v: &Value, key: &str| v.get(key).and_then(Value::as_str).map(str::to_string);
+    let skipped = list("skipped").iter().filter_map(|s| Some((text(s, "path")?, text(s, "reason")?))).collect();
+    let messages: Vec<String> = list("notes").iter().filter_map(|n| n.as_str().map(str::to_string).or_else(|| text(n, "message"))).collect();
     if let Some(state) = app.ui.lit_export.as_mut() {
-        state.notes = notes;
+        let notes = messages.into_iter().filter(|m| !state.notes.contains(m)).collect();
+        state.report = Report { skipped, notes };
     }
 }
 
@@ -255,18 +326,19 @@ fn export(app: &mut FigApp, dir: PathBuf) {
     }
 }
 
-/// Plan again when the document in front is not the one the plan was made for.
-fn follow(app: &FigApp, state: &mut LitExport) -> bool {
+/// Plan again when the document in front has changed and the edit is over.
+fn follow(app: &FigApp, ctx: &Context, state: &mut LitExport) -> bool {
     let Ok(ds) = app.session.ds() else { return false };
-    if !state.follows(ds.uid, &ds.doc) {
-        state.replan(ds.uid, &ds.doc);
+    let pointer_down = ctx.input(|i| i.pointer.any_down());
+    if let Some(left) = state.settle(ds.uid, &ds.doc, app.clock.now(), pointer_down) {
+        repaint_in(ctx, left);
     }
     true
 }
 
 pub fn show(app: &mut FigApp, ctx: &Context) {
     let Some(mut state) = app.ui.lit_export.take() else { return };
-    if !follow(app, &mut state) {
+    if !follow(app, ctx, &mut state) {
         return;
     }
     let t = Tokens::get(ctx);
@@ -278,19 +350,27 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
         acts = body(ui, &t, &state, can_write);
     });
     let mut export_asked = false;
+    let mut renames = Vec::new();
     for act in acts {
         match act {
             Act::Toggle(id, on) => state.check(id, on),
             Act::Select(path) => state.select(&path),
-            Act::Set(setting) => {
-                state.apply(setting);
-                state.seen = None;
-            }
+            Act::Set(setting) => state.apply(setting),
+            Act::Rename(id, name) => renames.push((id, name)),
+            Act::Force(on) => state.force = on,
             Act::Export => export_asked = state.can_export(),
             Act::Close => open = false,
         }
     }
-    if open && follow(app, &mut state) {
+    if !open {
+        return;
+    }
+    for (id, name) in renames {
+        if app.run("node.set", json!({"id": id, "props": {"name": name}})).is_some() {
+            state.forced = true;
+        }
+    }
+    if follow(app, ctx, &mut state) {
         app.ui.lit_export = Some(state);
         if export_asked {
             app.pick_folder(tr("Export package"), export);
@@ -310,11 +390,13 @@ fn body(ui: &mut egui::Ui, t: &Tokens, state: &LitExport, can_write: bool) -> Ve
     ui.add_space(8.0);
     ui.label(RichText::new(tr("Files")).strong());
     files_and_preview(ui, t, state, &mut acts);
-    if !state.notes.is_empty() {
+    skipped_list(ui, t, state);
+    let notes = state.notes();
+    if !notes.is_empty() {
         ui.add_space(8.0);
         ui.label(RichText::new(tr("Notes")).strong());
         egui::ScrollArea::vertical().id_salt("lit_export_notes").max_height(NOTES_HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
-            for note in &state.notes {
+            for note in notes {
                 ui.label(RichText::new(note).color(t.text_secondary).font(regular(11.0)));
             }
         });
@@ -327,8 +409,23 @@ fn body(ui: &mut egui::Ui, t: &Tokens, state: &LitExport, can_write: bool) -> Ve
         if can_write && crate::widgets::button(ui, tr("Export package"), true, state.can_export()).clicked() {
             acts.push(Act::Export);
         }
+        if can_write && crate::widgets::checkbox(ui, state.force, tr("Overwrite modified files")) {
+            acts.push(Act::Force(!state.force));
+        }
     });
     acts
+}
+
+fn skipped_list(ui: &mut egui::Ui, t: &Tokens, state: &LitExport) {
+    if state.report.skipped.is_empty() {
+        return;
+    }
+    ui.add_space(8.0);
+    ui.label(RichText::new(tr("Files left as they are")).strong());
+    for (path, reason) in &state.report.skipped {
+        let why = if reason == "edited" { tr("Edited since the last export") } else { tr("Not generated by an export") };
+        ui.label(RichText::new(format!("{path} · {why}")).color(t.text_secondary).font(regular(11.0)));
+    }
 }
 
 fn settings_row(ui: &mut egui::Ui, t: &Tokens, settings: &Settings, acts: &mut Vec<Act>) {
@@ -364,18 +461,26 @@ fn components_list(ui: &mut egui::Ui, t: &Tokens, state: &LitExport, acts: &mut 
                     ui.label(RichText::new(format!("{label} · {}", tr("Empty"))).color(t.text_tertiary).font(regular(11.0)));
                     return;
                 }
-                if crate::widgets::checkbox(ui, row.checked, label) {
+                let exported = row.checked || row.status == "dependency";
+                if crate::widgets::checkbox(ui, exported, label) {
                     acts.push(Act::Toggle(row.id, !row.checked));
                 }
                 if row.tag.as_str() != row.name.as_str() {
                     ui.label(RichText::new(&row.name).color(t.text_secondary).font(regular(11.0)));
                 }
                 if row.status == "dependency" {
-                    ui.label(RichText::new(tr("Added because another component uses it")).color(t.text_secondary).font(regular(11.0)));
+                    ui.label(RichText::new(tr("Still exported: another component needs it")).color(t.text_secondary).font(regular(11.0)));
                 }
             });
             for message in &row.messages {
                 ui.label(RichText::new(message).color(t.danger).font(regular(11.0)));
+            }
+            if row.status == "invalid" {
+                let field = egui::Id::unique(("lit_export_rename", row.id.0));
+                let renamed = crate::widgets::text_field_named(ui, field, &row.name, RENAME_WIDTH, tr("Rename"));
+                if let Some(name) = renamed.filter(|name| !name.trim().is_empty() && *name != row.name) {
+                    acts.push(Act::Rename(row.id, name.trim().to_string()));
+                }
             }
         }
     });
