@@ -273,7 +273,7 @@ fn every_note_of_the_plan_is_shown() {
     lit_export::set_checked(&mut u.app, icon, false);
     settle(&mut u);
     let plan = planned(&mut u, json!({"ids": [chip]}));
-    let notes: Vec<String> = plan["notes"].as_array().unwrap().iter().filter_map(|n| n.as_str().map(str::to_string)).collect();
+    let notes: Vec<String> = plan["notes"].as_array().unwrap().iter().filter_map(|n| n["message"].as_str().map(str::to_string)).collect();
     assert!(notes.iter().any(|n| n.to_lowercase().contains("heart")), "the dependency is noted: {notes:?}");
     let shown = painted(&mut u);
     for note in &notes {

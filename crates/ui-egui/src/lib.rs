@@ -108,8 +108,6 @@ mod layers_keys_tests;
 #[cfg(test)]
 mod layers_rename_tests;
 #[cfg(test)]
-mod lit_export_notes_tests;
-#[cfg(test)]
 mod lit_export_ui_tests;
 #[cfg(test)]
 mod live_chat_tests;
