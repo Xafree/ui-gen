@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use crate::cmd::CommandSpec;
 use crate::codegen::{CodeLang, Ctx, Markup, arkui, class_name, compose, indent, literal, swift};
 use crate::components::{prop_default_value, slot_edited, slots_of, variant_options, variant_props, variant_set};
+use crate::lit::LitOptions;
 use crate::params::{id_of, string, targets};
 use crate::{bad, spec};
 
@@ -68,36 +69,53 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![spec!(
         "inspect.componentCode",
         "Component code",
-        "{id? (component, set or instance; default the selection), language?: react|leptos|vue|swiftui|compose|arkui (default react)} → {component, name, set, properties: [{name, param, type, default, value? (instances)}], definition, usage? (instances; the connected snippet when the component is connected to code), connected: {importPath, name, template, import, code} | null}",
+        "{id? (component, set or instance; default the selection), language?: react|leptos|vue|swiftui|compose|arkui|lit (default react), prefix? (lit: the custom element name prefix, default ui-)} → {component, name, set, properties: [{name, param, type, default, value? (instances), attribute?, reflect? (lit)}], definition, usage? (instances; the connected snippet when the component is connected to code), connected: {importPath, name, template, import, code} | null, tag?, className?, notes? (lit)}",
         false,
         |s, p| {
             let cmd = "inspect.componentCode";
             let id = targets(s, p).first().copied().ok_or_else(|| bad(cmd, "select a component or instance"))?;
             let lang = match string(p, "language") {
                 // One list of code languages, shared with codeConnect (see `code_connect::language`).
-                Some(l) => crate::code_connect::language(&l).ok_or_else(|| bad(cmd, "language: react|leptos|vue|swiftui|compose|arkui"))?,
+                Some(l) => crate::code_connect::language(&l)
+                    .or_else(|| CodeLang::from_id(&l).filter(|l| *l == CodeLang::Lit))
+                    .ok_or_else(|| bad(cmd, "language: react|leptos|vue|swiftui|compose|arkui|lit"))?,
                 None => CodeLang::React,
+            };
+            let opts = match string(p, "prefix") {
+                Some(prefix) if crate::lit::valid_prefix(&prefix) => LitOptions::new(&prefix),
+                Some(_) => return Err(bad(cmd, "prefix: lowercase letters, digits and hyphens (up to 20)")),
+                None => LitOptions::default(),
             };
             let doc = s.doc()?;
             let c = main_of(doc, id).and_then(|m| describe(doc, m)).ok_or_else(|| bad(cmd, "not a component, set or instance"))?;
             let values = instance_values(doc, id, &c);
+            let members = crate::lit::members(&c);
             let properties: Vec<Value> = c
                 .params
                 .iter()
-                .map(|p| {
+                .zip(&members)
+                .map(|(p, m)| {
                     let mut v = json!({"name": p.prop, "param": p.ident, "type": p.kind.id(), "default": p.default});
                     if let Some(vals) = &values {
                         v["value"] = vals.iter().find(|(name, _)| *name == p.prop).map_or(Value::Null, |(_, x)| x.clone());
                     }
+                    if lang == CodeLang::Lit {
+                        v["attribute"] = json!(m.attribute);
+                        v["reflect"] = json!(m.reflect);
+                    }
                     v
                 })
                 .collect();
+            let lit = (lang == CodeLang::Lit).then(|| crate::lit::definition(doc, &c, &opts));
             let mut out = json!({
                 "component": c.comp, "name": c.type_name, "set": c.set, "properties": properties,
-                "definition": definition(doc, &c, lang), "language": lang.id(),
+                "definition": lit.as_ref().map_or_else(|| definition(doc, &c, lang), |l| l.ts.clone()), "language": lang.id(),
             });
+            if let Some(l) = &lit {
+                (out["tag"], out["className"], out["notes"]) = (json!(l.tag), json!(l.class_name), json!(l.notes));
+            }
             if values.is_some() {
-                out["usage"] = json!(usage(doc, id, lang, 0));
+                out["usage"] = json!(usage_in(doc, id, lang, 0, &opts, false).map(|(code, _)| code));
             }
             out["connected"] = crate::code_connect::link(doc, id, lang).map_or(Value::Null, |l| {
                 json!({"importPath": l.import_path, "name": l.name, "template": l.template, "import": crate::code_connect::import_line(l, lang),
@@ -122,11 +140,12 @@ pub fn code(doc: &Document, id: NodeId, lang: CodeLang) -> String {
         (NodeKind::Instance { .. }, Some(c)) => format!("{}\n{}", usage(doc, id, lang, 0).unwrap_or_default(), definition(doc, &c, lang)),
         (NodeKind::Component { .. } | NodeKind::ComponentSet { .. }, Some(c)) => definition(doc, &c, lang),
         _ => match lang {
-            CodeLang::React | CodeLang::Leptos | CodeLang::Vue => {
+            CodeLang::React | CodeLang::Leptos | CodeLang::Vue | CodeLang::Lit => {
                 let c = Component { comp: id, set: None, type_name: component_type_name(&n.name), params: Vec::new() };
                 match lang {
                     CodeLang::Leptos => leptos(doc, &c),
                     CodeLang::Vue => vue(doc, &c),
+                    CodeLang::Lit => definition(doc, &c, lang),
                     _ => react(doc, &c),
                 }
             }
@@ -608,14 +627,23 @@ pub(crate) fn instance_values(doc: &Document, id: NodeId, c: &Component) -> Opti
 /// The call for instance `id` at `depth`, passing the values that differ from the defaults and the
 /// content of slots it fills (`None` when it isn't an instance of an existing component).
 pub fn usage(doc: &Document, id: NodeId, lang: CodeLang, depth: usize) -> Option<String> {
-    usage_with_styles(doc, id, lang, depth).map(|(code, _)| code)
+    usage_in(doc, id, lang, depth, &LitOptions::default(), false).map(|(code, _)| code)
 }
 
 /// `usage` and the CSS generated for the slot content it carries (the caller's stylesheet needs
 /// those rules; `usage` alone drops them at a snippet boundary).
 pub(crate) fn usage_with_styles(doc: &Document, id: NodeId, lang: CodeLang, depth: usize) -> Option<(String, String)> {
+    usage_in(doc, id, lang, depth, &LitOptions::default(), true)
+}
+
+/// `usage_with_styles` with Lit's tag prefix; `template`: the call sits in a Lit `html` template
+/// literal (it is plain HTML otherwise).
+pub(crate) fn usage_in(doc: &Document, id: NodeId, lang: CodeLang, depth: usize, lit: &LitOptions, template: bool) -> Option<(String, String)> {
     let c = main_of(doc, id).and_then(|m| describe(doc, m))?;
     let values = instance_values(doc, id, &c)?;
+    if lang == CodeLang::Lit {
+        return Some(crate::lit::usage(doc, id, &c, &values, depth, lit, template));
+    }
     let pad = if matches!(lang, CodeLang::React | CodeLang::Vue) { "  ".repeat(depth) } else { indent(depth) };
     // A connected component: its real snippet (its import is at the top of the code: `code`).
     if let Some(link) = crate::code_connect::link(doc, id, lang) {
@@ -763,6 +791,7 @@ pub fn definition(doc: &Document, c: &Component, lang: CodeLang) -> String {
         CodeLang::Leptos => leptos(doc, c),
         CodeLang::Vue => vue(doc, c),
         CodeLang::ArkUi => arkui_definition(doc, c),
+        CodeLang::Lit => crate::lit::definition(doc, c, &LitOptions::default()).ts,
         _ => react(doc, c),
     }
 }
@@ -773,33 +802,46 @@ fn data_attrs(variants: &[&Param]) -> Vec<String> {
     variants.iter().map(|p| format!("data-{}", class_name(&p.prop, "prop", &mut used))).collect()
 }
 
-/// `c`'s markup in React or Leptos (two levels in) and its stylesheet (variables as custom
-/// properties, other variants as rules on their `data-*` attributes): (root class, markup, CSS).
-fn web(doc: &Document, c: &Component, lang: CodeLang) -> (String, String, String) {
-    let ctx = Ctx { doc, root: c.comp, comp: Some(c), base: 2 };
+/// `c`'s markup in React, Vue, Leptos or Lit (two levels in, three in Lit) and its stylesheet
+/// (variables as custom properties, other variants as rules on their `data-*` attributes, or in
+/// Lit on the host's attributes): (root class, markup, CSS).
+pub(crate) fn web(doc: &Document, c: &Component, lang: CodeLang, lit: &LitOptions) -> (String, String, String) {
+    let lit_lang = lang == CodeLang::Lit;
+    let start = if lit_lang { 3 } else { 2 };
+    let ctx = Ctx { doc, root: c.comp, comp: Some(c), base: start };
     let root_name = c.set.and_then(|s| doc.node(s)).or_else(|| doc.node(c.comp)).map(|n| n.name.clone()).unwrap_or_default();
     let root_class = class_name(&root_name, "component", &mut Vec::new());
     let variants: Vec<&Param> = c.params.iter().filter(|p| matches!(p.kind, ParamKind::Variant(_))).collect();
-    let attr_names = data_attrs(&variants);
+    let attr_names: Vec<String> = if lit_lang {
+        variants.iter().map(|p| crate::lit::member(c, p).attribute.unwrap_or_else(|| p.ident.clone())).collect()
+    } else {
+        data_attrs(&variants)
+    };
     let pass = |root: NodeId| {
-        let vctx = Ctx { doc, root, comp: Some(c), base: 2 };
+        let vctx = Ctx { doc, root, comp: Some(c), base: start };
         let mut m = Markup::new(&vctx, lang);
+        m.lit = lit.clone();
         m.root_class = Some(root_class.clone());
-        m.node(root, None, 2, "");
+        m.node(root, None, start, "");
         m.rules
     };
     let mut m = Markup::new(&ctx, lang);
+    m.lit = lit.clone();
     m.root_class = Some(root_class.clone());
-    m.root_attrs = variants
-        .iter()
-        .zip(&attr_names)
-        .map(|(p, attr)| match lang {
-            CodeLang::Leptos => format!(" {attr}={{{}.as_str()}}", rust_ident(&p.ident)),
-            CodeLang::Vue => format!(" :{attr}=\"{}\"", p.ident),
-            _ => format!(" {attr}={{{}}}", p.ident),
-        })
-        .collect();
-    m.node(c.comp, None, 2, "");
+    m.root_attrs = if lit_lang {
+        " part=\"root\"".to_string()
+    } else {
+        variants
+            .iter()
+            .zip(&attr_names)
+            .map(|(p, attr)| match lang {
+                CodeLang::Leptos => format!(" {attr}={{{}.as_str()}}", rust_ident(&p.ident)),
+                CodeLang::Vue => format!(" :{attr}=\"{}\"", p.ident),
+                _ => format!(" {attr}={{{}}}", p.ident),
+            })
+            .collect()
+    };
+    m.node(c.comp, None, start, "");
     // Other variants: what differs from this one, layer by layer.
     let mut variant_rules = String::new();
     let others: Vec<NodeId> = c.set.and_then(|s| doc.node(s)).map(|s| s.children.clone()).unwrap_or_default();
@@ -809,7 +851,12 @@ fn web(doc: &Document, c: &Component, lang: CodeLang) -> (String, String, String
         let attrs: String = variants
             .iter()
             .zip(&attr_names)
-            .filter_map(|(p, attr)| pairs.get(&p.prop).map(|val| format!("[{attr}=\"{}\"]", val.replace(['"', '\\'], ""))))
+            .filter_map(|(p, attr)| {
+                pairs.get(&p.prop).map(|val| {
+                    let val = if lit_lang { crate::lit::css_string(val) } else { val.replace(['"', '\\'], "") };
+                    format!("[{attr}=\"{val}\"]")
+                })
+            })
             .collect();
         for (path, _, decls) in pass(v) {
             let Some((_, class, base)) = m.rules.iter().find(|(p, _, _)| *p == path) else { continue };
@@ -818,17 +865,22 @@ fn web(doc: &Document, c: &Component, lang: CodeLang) -> (String, String, String
             if diff.is_empty() {
                 continue;
             }
-            let sel = if path.is_empty() { format!(".{root_class}{attrs}") } else { format!(".{root_class}{attrs} .{class}") };
+            let sel = match (lit_lang, path.is_empty()) {
+                (true, _) => format!(":host({attrs}) .{class}"),
+                (false, true) => format!(".{root_class}{attrs}"),
+                (false, false) => format!(".{root_class}{attrs} .{class}"),
+            };
             variant_rules.push_str(&format!("{sel} {{\n{}}}\n", diff.iter().map(|l| format!("  {l}\n")).collect::<String>()));
         }
     }
-    let css = format!("{}{}{variant_rules}", m.tokens.root_rule(), m.styles);
+    let tokens = if lit_lang { String::new() } else { m.tokens.root_rule() };
+    let css = format!("{tokens}{}{variant_rules}", m.styles);
     (root_class, m.markup, css)
 }
 
 /// A TSX function component with its props interface, and its stylesheet.
 fn react(doc: &Document, c: &Component) -> String {
-    let (root_class, markup, css) = web(doc, c, CodeLang::React);
+    let (root_class, markup, css) = web(doc, c, CodeLang::React, &LitOptions::default());
     let t = &c.type_name;
     let mut out = format!("import \"./{root_class}.css\";\n\n");
     if c.params.is_empty() {
@@ -864,7 +916,7 @@ fn react(doc: &Document, c: &Component) -> String {
 /// props. Variants switch on the `data-*` attributes of the root element, as on the web.
 fn vue(doc: &Document, c: &Component) -> String {
     // The stylesheet sits inline in the SFC, so the root class name isn't needed here.
-    let (_, markup, css) = web(doc, c, CodeLang::Vue);
+    let (_, markup, css) = web(doc, c, CodeLang::Vue, &LitOptions::default());
     // A slot layer is a `<slot>` element in the template, so it takes no prop.
     let props: Vec<&Param> = c.params.iter().filter(|p| !matches!(p.kind, ParamKind::Slot)).collect();
     let mut out = String::new();
@@ -895,7 +947,7 @@ fn vue(doc: &Document, c: &Component) -> String {
 /// A Leptos `#[component]` with its variant enums and props (defaults as `#[prop]` attributes),
 /// and its stylesheet.
 fn leptos(doc: &Document, c: &Component) -> String {
-    let (root_class, markup, css) = web(doc, c, CodeLang::Leptos);
+    let (root_class, markup, css) = web(doc, c, CodeLang::Leptos, &LitOptions::default());
     let mut out = String::from("use leptos::prelude::*;\n\n");
     for p in &c.params {
         let ParamKind::Variant(opts) = &p.kind else { continue };

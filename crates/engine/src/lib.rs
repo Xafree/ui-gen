@@ -67,6 +67,7 @@ pub use dev::dev_measurements;
 pub use dev::dev_resources;
 pub use dev::devcompare;
 pub use dev::devinspect;
+pub use dev::lit;
 pub use dev::tailwind;
 pub use extensions::plugin_directory;
 pub use extensions::plugins;
@@ -323,6 +324,8 @@ mod library_range_styles_tests;
 mod library_variables_tests;
 #[cfg(test)]
 mod line_endings_tests;
+#[cfg(test)]
+mod lit_codegen_extra_tests;
 #[cfg(test)]
 mod lit_codegen_tests;
 #[cfg(test)]

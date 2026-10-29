@@ -1,5 +1,6 @@
 use super::css::{Tokens, css_decls};
 use super::{CodeLang, Ctx, Document, LayoutMode, Node, NodeId, NodeKind, Param, Sizing, indent, num, with_v_if};
+use crate::lit::LitOptions;
 
 // ------------------------------------------------------------------ HTML and React markup
 
@@ -62,7 +63,7 @@ pub(crate) fn class_name(name: &str, kind: &str, used: &mut Vec<String>) -> Stri
     name
 }
 
-fn html_escape(s: &str) -> String {
+pub(crate) fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('\n', "<br>")
 }
 
@@ -125,6 +126,10 @@ pub(crate) struct Markup<'c, 'a> {
     /// With `fluid`, other layers at least this share of the root's width are fluid too (a
     /// divider, a banner image); smaller ones (icons) keep their size. Default: none.
     pub fluid_leaves: f64,
+    /// Lit: the tag prefix of the components it calls.
+    pub lit: LitOptions,
+    /// Lit: the markup is plain HTML, not the content of a `html` template literal.
+    pub lit_plain: bool,
 }
 
 /// How `n` sits in its parent: in the flex flow, or placed at its position.
@@ -170,12 +175,14 @@ impl<'c, 'a> Markup<'c, 'a> {
             inline: false,
             fluid: false,
             fluid_leaves: f64::INFINITY,
+            lit: LitOptions::default(),
+            lit_plain: false,
         }
     }
 
-    /// JSX and Vue templates indent by two spaces, HTML and Leptos by four.
+    /// JSX, Vue and Lit templates indent by two spaces, HTML and Leptos by four.
     fn pad(&self, depth: usize) -> String {
-        if matches!(self.lang, CodeLang::React | CodeLang::Vue) { "  ".repeat(depth) } else { indent(depth) }
+        if matches!(self.lang, CodeLang::React | CodeLang::Vue | CodeLang::Lit) { "  ".repeat(depth) } else { indent(depth) }
     }
 
     /// Component code (React or Leptos): parameters and instances as calls.
@@ -185,7 +192,11 @@ impl<'c, 'a> Markup<'c, 'a> {
 
     /// A parameter's name in the generated code.
     fn ident(&self, p: &Param) -> String {
-        if self.lang == CodeLang::Leptos { crate::component_codegen::rust_ident(&p.ident) } else { p.ident.clone() }
+        match (self.lang, self.ctx.comp) {
+            (CodeLang::Leptos, _) => crate::component_codegen::rust_ident(&p.ident),
+            (CodeLang::Lit, Some(c)) => crate::lit::member(c, p).ident,
+            _ => p.ident.clone(),
+        }
     }
 
     /// A layer, shown only while its boolean parameter is on (component code).
@@ -203,8 +214,11 @@ impl<'c, 'a> Markup<'c, 'a> {
                 return;
             }
             let (pad, p) = (self.pad(depth), self.ident(p));
-            let (open, close) =
-                if self.lang == CodeLang::Leptos { (format!("{{{p}.then(|| view! {{"), "})}") } else { (format!("{{{p} && ("), ")}") };
+            let (open, close) = match self.lang {
+                CodeLang::Leptos => (format!("{{{p}.then(|| view! {{"), "})}"),
+                CodeLang::Lit => (format!("${{this.{p} ? html`"), "` : nothing}"),
+                _ => (format!("{{{p} && ("), ")}"),
+            };
             self.markup.push_str(&format!("{pad}{open}\n"));
             self.element(n, parent, depth + 1, path);
             self.markup.push_str(&format!("{pad}{close}\n"));
@@ -232,7 +246,12 @@ impl<'c, 'a> Markup<'c, 'a> {
             let run = if self.lang == CodeLang::Leptos { ".run()" } else { "" };
             let (inner, css) = match self.ctx.param(n, "mainComponent") {
                 Some(p) if self.lang == CodeLang::Vue => (Some(format!("{}<component :is=\"{}\" />\n", self.pad(at), self.ident(p))), String::new()),
+                Some(p) if self.lang == CodeLang::Lit => (Some(crate::lit::swap_slot(self.ctx, p, at, &self.lit)), String::new()),
                 Some(p) => (Some(format!("{}{{{}{run}}}\n", self.pad(at), self.ident(p))), String::new()),
+                None if self.lang == CodeLang::Lit => {
+                    crate::component_codegen::usage_in(self.ctx.doc, n.id, self.lang, at, &self.lit, !self.lit_plain)
+                        .map_or((None, String::new()), |(code, css)| (Some(code), css))
+                }
                 None => self.ctx.call(n, self.lang, at).map_or((None, String::new()), |(code, css)| (Some(code), css)),
             };
             self.styles.push_str(&css);
@@ -256,6 +275,7 @@ impl<'c, 'a> Markup<'c, 'a> {
         match (self.ctx.param(n, "characters").filter(|_| self.code()), self.lang) {
             (Some(p), CodeLang::Leptos) => format!("{{{}.clone()}}", self.ident(p)),
             (Some(p), CodeLang::Vue) => format!("{{{{ {} }}}}", self.ident(p)),
+            (Some(p), CodeLang::Lit) => format!("${{this.{}}}", self.ident(p)),
             (Some(p), _) => format!("{{{}}}", p.ident),
             (None, CodeLang::React) => jsx_text(&t.characters),
             // `view!` takes text as string literals and void elements self-closed.
@@ -264,6 +284,8 @@ impl<'c, 'a> Markup<'c, 'a> {
             }
             // A Vue template reads `{{ }}` as interpolation, so braces are escaped.
             (None, CodeLang::Vue) => html_escape(&t.characters).replace('{', "&#123;").replace('}', "&#125;"),
+            (None, CodeLang::Lit) if self.lit_plain => html_escape(&t.characters),
+            (None, CodeLang::Lit) => crate::lit::text(&t.characters),
             (None, _) => html_escape(&t.characters),
         }
     }
@@ -326,8 +348,10 @@ impl<'c, 'a> Markup<'c, 'a> {
                 let slot = self.ctx.param(n, "slot").filter(|_| self.code());
                 let vue = self.lang == CodeLang::Vue;
                 let leptos = self.lang == CodeLang::Leptos;
+                let lit = self.lang == CodeLang::Lit;
                 let open = open("div");
                 let slot_ident = slot.map(|p| match self.ctx.comp {
+                    Some(c) if lit => crate::lit::slot_name(c, p),
                     Some(c) => crate::component_codegen::slot_name(c, p),
                     None => class_name(&p.ident, "slot", &mut Vec::new()),
                 });
@@ -340,6 +364,8 @@ impl<'c, 'a> Markup<'c, 'a> {
                             Some(name) => format!("<slot name=\"{name}\" />"),
                             None => "<slot />".into(),
                         }
+                    } else if lit {
+                        format!("<slot name=\"{}\"></slot>", slot_ident.clone().unwrap_or_default())
                     } else {
                         format!("{{{}}}", p.ident)
                     };
@@ -351,7 +377,7 @@ impl<'c, 'a> Markup<'c, 'a> {
                     // A slot shows the instance's content, or else the main's.
                     let (p1, p2) = (self.pad(depth + 1), self.pad(depth + 2));
                     let inner = match slot {
-                        Some(_) if vue => {
+                        Some(_) if vue || lit => {
                             let name = slot_ident.clone().map(|n| format!(" name=\"{n}\"")).unwrap_or_default();
                             self.markup.push_str(&format!("{p1}<slot{name}>\n"));
                             depth + 2
@@ -375,7 +401,7 @@ impl<'c, 'a> Markup<'c, 'a> {
                         self.node(k, Some(n), inner, &format!("{path}/{}#{count}", kn.name));
                     }
                     match slot {
-                        Some(_) if vue => self.markup.push_str(&format!("{p1}</slot>\n")),
+                        Some(_) if vue || lit => self.markup.push_str(&format!("{p1}</slot>\n")),
                         Some(_) if leptos => self.markup.push_str(&format!("{p1}}}.into_any() }}}}\n")),
                         Some(_) => self.markup.push_str(&format!("{p2}</>\n{p1})}}\n")),
                         None => {}
