@@ -100,9 +100,7 @@ fn capped(text: &str) -> String {
 }
 
 fn shortened(value: &str) -> String {
-    let mut chars = value.chars();
-    let head: String = chars.by_ref().take(MAX_VALUE_CHARS).collect();
-    if chars.next().is_some() { format!("{head}…") } else { head }
+    crate::error::capped(value, MAX_VALUE_CHARS)
 }
 
 fn finite_or_zero(value: f64) -> f64 {

@@ -1,11 +1,13 @@
 use serde::Deserialize;
 
-use crate::error::SnapshotError;
+use crate::error::{SnapshotError, capped};
 use crate::model::{DomBox, DomNode, Snapshot};
 use crate::{MAX_DEPTH, MAX_JSON_BYTES, MAX_MARKUP_BYTES, MAX_NODES, SUPPORTED_VERSION};
 
 /// serde_json stops at 128 nested levels, a 64-level tree needs 129: the limit is lifted and this bound replaces it.
 const MAX_JSON_NESTING: usize = 2 * MAX_DEPTH + 8;
+
+const MAX_TAG_CHARS: usize = 80;
 
 #[derive(Deserialize)]
 struct VersionProbe {
@@ -86,7 +88,7 @@ fn validate_tree(root: &DomNode) -> Result<(), SnapshotError> {
 
 fn validate_node(node: &DomNode) -> Result<(), SnapshotError> {
     match node {
-        DomNode::Element(element) => validate_box(&element.r#box, || format!("element <{}>", element.tag)),
+        DomNode::Element(element) => validate_box(&element.r#box, || format!("element <{}>", capped(&element.tag, MAX_TAG_CHARS))),
         DomNode::Text(text) => {
             validate_box(&text.r#box, || "text".to_owned())?;
             text.line_box.as_ref().map_or(Ok(()), |line_box| validate_box(line_box, || "text line box".to_owned()))
