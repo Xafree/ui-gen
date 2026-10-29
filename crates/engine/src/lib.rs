@@ -329,6 +329,8 @@ mod lit_codegen_extra_tests;
 #[cfg(test)]
 mod lit_codegen_tests;
 #[cfg(test)]
+mod lit_states_tests;
+#[cfg(test)]
 mod live_access_tests;
 #[cfg(test)]
 mod live_docs_tests;
