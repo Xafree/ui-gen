@@ -4,7 +4,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use figcraft_project::{FILE_NAME, MAX_JSON_BYTES, Project, ProjectError, SCHEMA_VERSION};
+use figcraft_doc::{Document, NodeId};
+use figcraft_project::{FILE_NAME, MAX_JSON_BYTES, Project, ProjectError, Role, SCHEMA_VERSION};
 
 use crate::{EngineError, Result, Session, file_access};
 
@@ -80,4 +81,32 @@ pub fn binding_for_file(path: &str) -> Option<std::result::Result<ProjectBinding
         Ok(_) => None,
         Err(why) => Some(Err(why)),
     }
+}
+
+/// A page of a library project seen as a component: its layers, annotations left out.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ComponentInfo {
+    pub page: NodeId,
+    pub name: String,
+    pub empty: bool,
+    pub layers: usize,
+}
+
+/// The top-level layers of `page` that make up its component: those with no `reference` or `note` role.
+pub fn component_roots(doc: &Document, page: NodeId) -> Vec<NodeId> {
+    let Some(node) = doc.node(page) else { return Vec::new() };
+    node.children.iter().copied().filter(|child| doc.node(*child).is_some_and(|layer| Role::of(&layer.plugin_data).is_none())).collect()
+}
+
+/// The components of a library project's file: its pages in order, dividers left out.
+pub fn component_pages(doc: &Document) -> Vec<ComponentInfo> {
+    doc.pages
+        .iter()
+        .filter(|page| !doc.is_divider(**page))
+        .filter_map(|page| {
+            let node = doc.node(*page)?;
+            let layers = component_roots(doc, *page).len();
+            Some(ComponentInfo { page: *page, name: node.name.clone(), empty: layers == 0, layers })
+        })
+        .collect()
 }

@@ -29,7 +29,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "project.info",
             "Library project info",
-            "{}  the library project of the current tab: {project: null | {root, name, designFiles, tagPrefix, litOutDir, appliedTheme, sources}, components: []}",
+            "{}  the library project of the current tab: {project: null | {root, name, designFiles, tagPrefix, litOutDir, appliedTheme, sources}, components: [{page, name, empty, layers}]}  (components: the pages that are no divider, in order; layers: top-level layers without a reference or note role; [] outside a project)",
             false,
             info
         ),
@@ -197,7 +197,15 @@ fn describe(binding: &ProjectBinding) -> Result<Value> {
 
 fn info(s: &mut Session, _: &Value) -> Result<Value> {
     let project = s.project().map(|b| describe(b)).transpose()?;
-    Ok(json!({"project": project, "components": []}))
+    let components: Vec<Value> = if project.is_some() {
+        project::component_pages(s.doc()?)
+            .into_iter()
+            .map(|c| json!({"page": c.page, "name": c.name, "empty": c.empty, "layers": c.layers}))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    Ok(json!({"project": project, "components": components}))
 }
 
 fn update(s: &mut Session, p: &Value) -> Result<Value> {

@@ -2,10 +2,12 @@
 
 use figcraft_doc::proto::Flow;
 use figcraft_doc::{Guide, NodeId, NodeKind};
+use figcraft_project::next_component_name;
 use serde_json::{Value, json};
 
 use super::{CommandSpec, ok};
 use crate::params::{boolean, color, id, req_index, req_num, req_string, string};
+use crate::project::component_pages;
 use crate::{Session, bad, spec};
 
 /// After a page edit: the file keeps a page that isn't a divider, and the canvas shows one (the
@@ -35,28 +37,43 @@ fn page_target(s: &Session, cmd: &str, p: &Value) -> crate::Result<NodeId> {
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
-        spec!("page.add", "Add page", "{name?} (a name starting with a hyphen adds a divider)", true, |s, p| {
-            // An added page takes the current page's colour; the theme only decides new files.
-            let current = s.page().ok().and_then(|p| match s.doc().ok()?.node(p)?.kind {
-                NodeKind::Page { background, .. } => Some(background),
-                _ => None,
-            });
-            let background = current.unwrap_or_else(|| s.new_page_background());
-            let doc = s.doc_mut()?;
-            let name = string(p, "name").unwrap_or_else(|| format!("Page {}", doc.pages.len() + 1));
-            let id = doc.add_page(&name);
-            if let NodeKind::Page { background: b, .. } = &mut doc.get_mut(id)?.kind {
-                *b = background;
+        spec!(
+            "page.add",
+            "Add page",
+            "{name?, template? (in a library project: the name pattern with {n}, default \"Component {n}\")} (a name starting with a hyphen adds a divider)",
+            true,
+            |s, p| {
+                // An added page takes the current page's colour; the theme only decides new files.
+                let current = s.page().ok().and_then(|p| match s.doc().ok()?.node(p)?.kind {
+                    NodeKind::Page { background, .. } => Some(background),
+                    _ => None,
+                });
+                let background = current.unwrap_or_else(|| s.new_page_background());
+                let in_project = s.in_lib_project();
+                let doc = s.doc_mut()?;
+                let name = string(p, "name").unwrap_or_else(|| {
+                    if in_project {
+                        let template = string(p, "template").unwrap_or_default();
+                        let start = doc.pages.iter().filter(|page| !doc.is_divider(**page)).count() + 1;
+                        next_component_name(&template, doc.pages.iter().filter_map(|page| doc.node(*page)).map(|n| n.name.as_str()), start)
+                    } else {
+                        format!("Page {}", doc.pages.len() + 1)
+                    }
+                });
+                let id = doc.add_page(&name);
+                if let NodeKind::Page { background: b, .. } = &mut doc.get_mut(id)?.kind {
+                    *b = background;
+                }
+                if doc.is_divider(id) {
+                    return Ok(json!({"id": id, "divider": true}));
+                }
+                let ds = s.ds_mut()?;
+                ds.page = id;
+                ds.selection.clear();
+                ds.zoom_to_fit();
+                Ok(json!({"id": id}))
             }
-            if doc.is_divider(id) {
-                return Ok(json!({"id": id, "divider": true}));
-            }
-            let ds = s.ds_mut()?;
-            ds.page = id;
-            ds.selection.clear();
-            ds.zoom_to_fit();
-            Ok(json!({"id": id}))
-        }),
+        ),
         spec!("page.select", "Go to page", "{id | index}", false, |s, p| {
             let doc = s.doc()?;
             let id = match id(p, "id") {
@@ -82,12 +99,21 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!("page.rename", "Rename page", "{id?, name} (an empty page named with a leading hyphen becomes a divider)", true, |s, p| {
             let name = req_string("page.rename", p, "name")?;
             let id = page_target(s, "page.rename", p)?;
+            if s.in_lib_project() && name.trim().is_empty() {
+                return Err(bad("page.rename", "a component needs a name"));
+            }
             s.doc_mut()?.get_mut(id)?.name = name;
             settle(s, "page.rename")?;
             ok()
         }),
         spec!("page.delete", "Delete page", "{id?}", true, |s, p| {
             let id = page_target(s, "page.delete", p)?;
+            if s.in_lib_project() {
+                let doc = s.doc()?;
+                if !doc.is_divider(id) && component_pages(doc).len() <= 1 {
+                    return Err(bad("page.delete", "a library project needs at least one component"));
+                }
+            }
             s.doc_mut()?.remove(id)?;
             settle(s, "page.delete")?;
             ok()
