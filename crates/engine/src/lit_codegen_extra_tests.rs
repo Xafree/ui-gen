@@ -1,7 +1,7 @@
 //! Lit codegen beyond the locked tests: tag names, member and attribute uniqueness, instances
 //! with slots and swaps, escaping in attribute values, and the `prefix` parameter.
 
-use crate::Session;
+use crate::{EngineError, Session};
 use crate::components::tests::{ex, idv};
 use crate::lit::{self, LitOptions, TagIssue};
 use figcraft_doc::*;
@@ -182,7 +182,8 @@ fn absurd_lit_parameters_never_panic() {
         json!({"language": "lit"}),
     ] {
         for cmd in ["inspect.componentCode", "inspect.code"] {
-            let _ = s.execute(cmd, &params);
+            let r = s.execute(cmd, &params);
+            assert!(!matches!(r, Err(EngineError::Internal { .. })), "{cmd} panicked on {params}: {r:?}");
         }
     }
 }
