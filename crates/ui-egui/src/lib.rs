@@ -108,6 +108,10 @@ mod layers_keys_tests;
 #[cfg(test)]
 mod layers_rename_tests;
 #[cfg(test)]
+mod lit_export_review_ui_tests;
+#[cfg(test)]
+mod lit_export_ui_tests;
+#[cfg(test)]
 mod live_chat_tests;
 #[cfg(test)]
 mod live_docs_tests;
@@ -441,6 +445,8 @@ pub struct UiState {
     pub pending_open_frames: u8,
     /// The latest successful file import's summary and compatibility notes.
     pub import_report: Option<import_report::Report>,
+    /// The Export library as Lit window, when open.
+    pub lit_export: Option<dialogs::lit_export::LitExport>,
     /// Files the user opened whose fonts are yet to be checked (by document uid).
     pub font_checks: Vec<u64>,
     pub missing_fonts: Option<missing_fonts::Shown>,
@@ -603,6 +609,7 @@ impl Default for UiState {
             pending_opens: Vec::new(),
             pending_open_frames: 0,
             import_report: None,
+            lit_export: None,
             font_checks: Vec::new(),
             missing_fonts: None,
             screenshot_requests: Vec::new(),

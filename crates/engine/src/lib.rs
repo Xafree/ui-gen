@@ -68,6 +68,9 @@ pub use dev::dev_measurements;
 pub use dev::dev_resources;
 pub use dev::devcompare;
 pub use dev::devinspect;
+pub use dev::lit;
+pub use dev::lit_compare;
+pub use dev::lit_export;
 pub use dev::tailwind;
 pub use extensions::plugin_directory;
 pub use extensions::plugins;
@@ -325,6 +328,32 @@ mod library_range_styles_tests;
 mod library_variables_tests;
 #[cfg(test)]
 mod line_endings_tests;
+#[cfg(test)]
+mod lit_codegen_extra_tests;
+#[cfg(test)]
+mod lit_codegen_tests;
+#[cfg(test)]
+mod lit_compare_tests;
+#[cfg(test)]
+mod lit_effects_tests;
+#[cfg(test)]
+mod lit_export_disk_tests;
+#[cfg(test)]
+mod lit_export_tests;
+#[cfg(test)]
+mod lit_review_tests;
+#[cfg(test)]
+mod lit_states_extra_tests;
+#[cfg(test)]
+mod lit_states_tests;
+#[cfg(test)]
+mod lit_tokens_extra_tests;
+#[cfg(test)]
+mod lit_tokens_freeze_tests;
+#[cfg(test)]
+mod lit_tokens_tests;
+#[cfg(test)]
+mod lit_write_review_tests;
 #[cfg(test)]
 mod live_access_tests;
 #[cfg(test)]

@@ -53,11 +53,14 @@ pub struct SvgOptions {
     pub simplify_stroke: bool,
     /// The page area the SVG covers (default: the exported layers' export bounds).
     pub bounds: Option<Rect>,
+    /// Starts every generated id (paints, filters, clip paths, masks), so SVGs that share a page
+    /// or a shadow root don't reuse one another's.
+    pub id_prefix: String,
 }
 
 impl Default for SvgOptions {
     fn default() -> Self {
-        Self { include_ids: false, outline_text: true, simplify_stroke: true, bounds: None }
+        Self { include_ids: false, outline_text: true, simplify_stroke: true, bounds: None, id_prefix: String::new() }
     }
 }
 
@@ -198,7 +201,7 @@ impl W<'_> {
     fn id(&mut self, prefix: &str) -> String {
         loop {
             self.next += 1;
-            let id = format!("{prefix}{}", self.next);
+            let id = format!("{}{prefix}{}", self.opts.id_prefix, self.next);
             if self.used_ids.insert(id.clone()) {
                 return id;
             }
