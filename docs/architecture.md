@@ -1,6 +1,6 @@
 # FigCraft architecture
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-18 · **Change:** minor (the `vectordrawable` crate, L4: Android Vector Drawable export; earlier: the shared hub in `collab-net` and the `figcraft-server` app) · **Target:** Figma Design
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-29 · **Change:** minor (the `figcraft-capture` crate, the `sidecar/` service and the engine's capture port; earlier: the `vectordrawable` crate, L4: Android Vector Drawable export; earlier: the shared hub in `collab-net` and the `figcraft-server` app) · **Target:** Figma Design
 
 How FigCraft is built today. Engine first, a thin swappable UI, everything a command; a Figma-shaped
 data model (a scene graph of frames with auto layout, components and variables). ~108,800 lines of
@@ -31,10 +31,26 @@ replaced.
 | L5 | `figcraft-engine` | ~39.3k | Sessions, undo history (`Arc` snapshots), the command registry (`cmd/*`, `spec!`), pointer tools and vector edit mode, snapping and measuring, components sync, libraries, prototype runtime, Dev Mode code generation, the menu catalog (`catalog.rs`) and the keymap (`keymap.rs`), a panic guard |
 | L6 | `figcraft-ui-egui` | ~31.9k | The UI3-style frontend: canvas (render worker), toolbar, layers, Design/Prototype/Inspect panels, colour picker, menus, dialogs, presenter, comments, accessibility (AccessKit), the control channel server |
 | L6 | `figcraft-mcp` | ~2.4k | MCP server (JSON-RPC over stdio), headless or bridged to a running app |
+| L6 | `figcraft-capture` | | UIGEN capture service driver (adapter of the engine's `CaptureBackend` port, native only): runs the Node sidecar `sidecar/service.mjs` as a child process, speaks its JSON-lines protocol version 1 on a dedicated thread, with timeouts, size limits and readable errors; in the browser build every job is unavailable. Protocol: [`uigen/plan-import.md`](uigen/plan-import.md#service-de-capture) |
 | L6 | `figcraft-collab-net` | ~3.0k | Live sessions over the network: the WebSocket transport (tungstenite, a reader and a writer thread per connection), the hub that runs a collaboration core server per open file for the session host the app embeds and for `figcraft-server` (behind a `Backend`), the joining and managing clients (publishing), invite links, presence relay and limits; the browser client; the only crate allowed networking dependencies |
 | apps | `figcraft`, `figcraft-cli`, `figcraft-web`, `figcraft-server` | ~3.2k | Desktop app (eframe + wgpu), command line, browser build (WASM, WebGPU/WebGL2), collaboration server (files, share links, persistence; [`server.md`](server.md)) |
 | plugins | `plugins/` (own workspace) | | Rust plugin SDK and two example plugins, built for wasm32 by `cargo xtask plugins` ([`plugins.md`](plugins.md)) |
+| sidecar | `sidecar/` (Node, own `package.json`) | | UIGEN capture service, the one JavaScript exception to "Rust only": installs npm packages into a project's `.uigen/sources/` (always `--ignore-scripts`), lists their components and renders one in Chromium (Playwright, pipe mode) into a DOM snapshot and a PNG. Opens no port, is never shipped to wasm; tested by `npm --prefix sidecar test` |
 | tools | `xtask` | | `ci`, `layers`, `assets`, `parity`, `version`, `icon`, `wasm`, `plugins`, `bench` |
+
+### The capture port
+
+The engine (L5) never starts a process: it declares the port `CaptureBackend` (`submit`, `poll`, `shutdown`) and the
+job and error types in `crates/engine/src/capture.rs`. `project.addSource`, `project.setSourceVersion` and
+`project.removeSource` validate, check the project folder may be written, submit a job and return `{job}` at once;
+`Session::pump_capture()` (every frame in the app, a wait loop in the CLI) applies the finished jobs, which writes
+`uigen.json` and raises an event for the toast. `capture.status` lists the jobs. The desktop app and the CLI install
+`figcraft_capture::CaptureService` into the `Session`; the browser build installs none and the commands answer
+`capture service unavailable in the browser`. A stuck service is killed with its whole tree (`taskkill /T`, `kill -KILL`
+on its process group). One that crashed alone leaves npm and Chromium behind: on Unix the process group still finds
+them; on Windows the orphans are found by the parent id the dead service had (a PowerShell query), which fails only if
+that id was reused first (a job object would need `unsafe`). A clean exit (code 0) is not swept: the service stops its
+own children.
 
 ## Data model
 

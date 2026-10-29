@@ -154,6 +154,18 @@ it and duplicate it:
 {"id":4,"method":"engine.execute","params":{"command":"command.batch","params":{"commands":[{"command":"node.create","as":"card","params":{"type":"frame","width":200,"height":100}},{"command":"node.create","params":{"type":"rectangle","parent":{"$ref":"card"},"width":20,"height":20}},{"command":"edit.duplicate","as":"copy","params":{"ids":[{"$ref":"card"}]}},{"command":"node.set","params":{"ids":[{"$ref":"copy","field":"ids/0"}],"props":{"name":"Card copy"}}}]}}}
 ```
 
+#### Library projects and the capture service
+
+The `project.*` commands of [MCP: Library projects](mcp.md#library-projects) run through `engine.execute` like any
+other command. `project.settings`, `project.openFolder` and `project.newFolder` only ask the interface for a window
+or a dialog, which a programmatic call never opens. `project.addSource {package, version?}`,
+`project.setSourceVersion {package, version}` and `project.removeSource {package}` do not wait for npm: they return
+`{job}` at once, the app's capture service installs or removes the package on its own thread, and the app applies
+the finished job (it writes `uigen.json`) on its next frame. Poll `engine.execute {command: "capture.status",
+params: {job?}}` until the job is `done` or `failed` (`error` carries the service's message), then read the result
+with `project.info`. Without a capture service (no Node, or the browser build) the three commands answer `bad`. The
+service and its protocol are described in [UIGEN: Service de capture](uigen/plan-import.md#service-de-capture).
+
 ### `engine.commands {}`
 
 Every command: `[{id, label, params, menu, shortcut, undoable}]`.

@@ -8,6 +8,8 @@ use std::collections::{BTreeMap, HashSet};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub mod npm;
+
 pub const FILE_NAME: &str = "uigen.json";
 pub const WORK_DIR: &str = ".uigen";
 pub const SCHEMA_VERSION: u32 = 1;
@@ -227,11 +229,20 @@ fn validate_sources(sources: &[Source]) -> Result<(), ProjectError> {
         if source.version.is_empty() {
             return Err(invalid(format!("sources[{index}].version"), "is required"));
         }
+        npm::validate_package_name(&source.package).map_err(|error| in_source(index, "package", error))?;
+        npm::validate_version(&source.version, false).map_err(|error| in_source(index, "version", error))?;
         if !seen.insert(source.package.as_str()) {
             return Err(invalid("sources", format!("package \"{}\" is listed twice", source.package)));
         }
     }
     Ok(())
+}
+
+fn in_source(index: usize, field: &str, error: ProjectError) -> ProjectError {
+    match error {
+        ProjectError::Invalid { reason, .. } => invalid(format!("sources[{index}].{field}"), reason),
+        other => other,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -262,6 +273,9 @@ pub fn next_component_name<'a>(template: &str, existing: impl IntoIterator<Item 
         .find(|name| !taken.contains(name.as_str()))
         .unwrap_or_else(|| component_name(template, start.saturating_add(MAX_NAME_ATTEMPTS)))
 }
+
+#[cfg(test)]
+mod npm_tests;
 
 #[cfg(test)]
 mod project_tests;

@@ -78,7 +78,7 @@ Each may be given more than once, as `--flag DIR` or `--flag=DIR`:
   every command that names a file: `file.open`, `file.openRecent` (recent files outside the roots
   are never listed, opened, removed or named: `index` counts the files listed), `file.import`,
   `file.placeImage`, `image.place`, `file.save`, `file.saveAs`, `file.revert`, `file.recover`,
-  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, `project.open` and `project.update` (the project folder and its `uigen.json`), the images and variables JSON read next to an imported REST API
+  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, `project.open`, `project.update` and the source commands (`project.addSource`, `project.setSourceVersion`, `project.removeSource`: the project folder and its `uigen.json`), the images and variables JSON read next to an imported REST API
   file, `library.add` and the library files open documents link to, `variable.import` /
   `variable.export`, `codeConnect.import` / `codeConnect.export`, `component.playground {path}`,
   `plugin.import {path}`, a development plugin's module read again from disk,
@@ -809,8 +809,29 @@ The manifest is read and written only through the automation roots, and the comm
   (`appliedTheme: null` clears it), validate and rewrite it, keeping `sources` and every key it doesn't know; every
   tab of the project sees the change. A value that fails validation is refused naming the field, and the file is
   left alone. Not undoable.
+- `project.addSource {package, version?}`, `project.setSourceVersion {package, version}` and
+  `project.removeSource {package}`: manage the source libraries (npm packages) of the project through the capture
+  service, which installs them in `<project>/.uigen/sources`. Each validates first (`package` is an npm registry
+  name, `version` an exact semver or `latest`, default `latest`; `addSource` refuses a package already in the
+  project, the other two one that isn't, a removed source counting as not being there) and checks that the project
+  folder may be written, then submits a job and returns `{job}` at once; a failed check is a `bad` error naming
+  the cause and nothing is submitted. Without a capture service the error is `capture service not available`
+  (`capture service unavailable in the browser` in the web build). `uigen.json` changes only when the job
+  succeeds, as the app (each frame), the CLI (its wait loop) or an embedding calls `Session::pump_capture`: a
+  successful install writes `{package, version (the exact one installed), framework, license, removed: false}`
+  (adding the source, or updating it and bringing a removed one back), a successful uninstall keeps the source with
+  `removed: true`, its version and `.uigen/captures` untouched; a failure writes nothing. Every tab of the project
+  sees the change. Not undoable.
+- `capture.status {job?}` (`job` a whole number, otherwise refused): the jobs submitted to the capture service, oldest first: `{jobs: [{job, command,
+  package, root (the project folder), state: "queued" | "running" | "done" | "failed", error?}]}`; `error` carries the service's message of a
+  failed job. The service runs one job at a time, and a package with a job in flight refuses another change
+  (`already in progress`). The folder sent to the service is always absolute. A result naming another package, an unknown framework or
+  a license over 128 bytes or with control characters is refused (`Protocol`) and writes nothing. The last hundred finished jobs are kept.
 - `project.openFolder {}` and `project.newFolder {}`: ask the interface for a folder to open as a project, or to
   start one in (Home's "Open project" and "New library project"); a programmatic call opens no dialog.
+- `project.settings {}`: ask the interface to open the settings window of the current tab's library project, whose
+  "Source libraries" section adds, changes the version of and removes sources through the commands above. A file
+  outside a project is refused (`the current file is not in a library project`); a programmatic call opens no dialog.
 
 In a project every page is a component: `page.add {name?, template?}` names the new page `Component N` (or
 `template` with `{n}` for the counter), `page.rename` refuses a blank name, `page.duplicate` takes a free

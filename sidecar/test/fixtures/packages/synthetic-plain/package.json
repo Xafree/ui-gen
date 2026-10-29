@@ -1,0 +1,6 @@
+{
+  "name": "synthetic-plain",
+  "version": "3.0.0",
+  "description": "Synthetic fixture: a package with no framework and no license field",
+  "main": "index.js"
+}

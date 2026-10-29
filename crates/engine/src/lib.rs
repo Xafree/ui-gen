@@ -13,6 +13,7 @@ mod assets;
 mod automation;
 mod boards;
 mod canvas;
+pub mod capture;
 pub mod catalog;
 pub mod cmd;
 mod content;
@@ -148,6 +149,8 @@ pub struct Session {
     pub live: live::Lives,
     /// Commands the UI runs without waiting on a server ([`Session::start_background`]).
     pub background: background::Background,
+    /// The capture service the desktop apps install; none in the browser.
+    capture: capture::Capture,
 }
 
 impl Default for Session {
@@ -206,6 +209,10 @@ mod branch_versions_tests;
 mod brush_tests;
 #[cfg(test)]
 mod canvas_fixes_tests;
+#[cfg(test)]
+mod capture_review_tests;
+#[cfg(test)]
+mod capture_tests;
 #[cfg(test)]
 mod code_connect_tests;
 #[cfg(test)]
@@ -574,3 +581,6 @@ mod project_ui_requests_tests;
 
 #[cfg(test)]
 mod project_save_as_tests;
+
+#[cfg(test)]
+mod project_sources_tests;

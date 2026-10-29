@@ -24,6 +24,7 @@ const TABLE: &[(&str, u8)] = &[
     ("engine", 5),
     ("ui-egui", 6),
     ("mcp", 6),
+    ("capture", 6),
     // Live sessions over the network (WebSockets): above the engine, beside the UI.
     ("collab-net", 6),
 ];

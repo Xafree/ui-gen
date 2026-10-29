@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0.0",
+  "modules": [
+    {
+      "kind": "javascript-module",
+      "path": "chip.js",
+      "declarations": [
+        {
+          "kind": "class",
+          "name": "XChip",
+          "tagName": "x-chip",
+          "customElement": true,
+          "attributes": [{ "name": "label", "type": { "text": "string" } }]
+        }
+      ],
+      "exports": [
+        { "kind": "custom-element-definition", "name": "x-chip", "declaration": { "name": "XChip", "module": "chip.js" } }
+      ]
+    }
+  ]
+}

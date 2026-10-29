@@ -1600,6 +1600,7 @@ dependencies = [
  "eframe",
  "egui",
  "env_logger",
+ "figcraft-capture",
  "figcraft-collab-net",
  "figcraft-engine",
  "figcraft-format",
@@ -1619,9 +1620,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "figcraft-capture"
+version = "0.12.1"
+dependencies = [
+ "figcraft-dom",
+ "figcraft-engine",
+ "serde_json",
+]
+
+[[package]]
 name = "figcraft-cli"
 version = "0.12.1"
 dependencies = [
+ "figcraft-capture",
  "figcraft-doc",
  "figcraft-engine",
  "figcraft-format",
@@ -1927,6 +1938,7 @@ dependencies = [
  "figcraft-geom",
  "figcraft-layout",
  "figcraft-pathops",
+ "figcraft-project",
  "figcraft-render",
  "figcraft-text",
  "image",

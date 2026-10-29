@@ -8,10 +8,11 @@ tâche, et l'état de la RAM sous 70 % (`-j 4`, une commande cargo à la fois).
 
 ```
 uigen.exe (Rust, egui)
- ├─ figcraft-engine  (L5)  commandes project.*, import.*, page = composant, thèmes de tokens
+ ├─ figcraft-engine  (L5)  commandes project.*, capture.status, import.*, page = composant, thèmes de tokens ;
+ │                         port de capture (`CaptureBackend`, `Session::pump_capture`)
  ├─ uigen-dom        (L4)  NOUVEAU : instantané DOM (JSON) → arbre de calques FigCraft
  ├─ uigen-project    (L3)  NOUVEAU : dossier de projet, uigen.json, verrou des versions
- ├─ uigen-capture    (L6)  NOUVEAU : pilote du service de capture (processus enfant, JSON-lines)
+ ├─ figcraft-capture (L6)  NOUVEAU : adaptateur du port de capture, pilote le service (processus enfant, JSON-lines)
  └─ ui-egui          (L6)  onglet Composants, réglages du projet, onglet Comparer, toast Annuler
 
 service de capture (processus enfant, hors du code Rust)
@@ -28,16 +29,77 @@ service de capture (processus enfant, hors du code Rust)
   sans navigateur, sur des instantanés enregistrés.
 - **Web (wasm)** : l'import n'existe que sur le bureau (`cfg(not(target_arch = "wasm32"))`).
 
-## Protocole du service de capture
+## Service de capture
 
-Une requête par ligne, `{"id","method","params"}` ; réponse `{"id","ok","result"|"error"}`.
+Crate `figcraft-capture` (`crates/capture`, L6) : il implémente le port `CaptureBackend` du moteur en
+lançant `node sidecar/service.mjs`. Les applications de bureau l'installent dans la `Session`
+(`set_capture_backend`) ; la version web n'en installe aucun et les commandes répondent « capture service
+unavailable in the browser ». Un fil dédié exécute un travail à la fois ; l'interface n'attend jamais :
+`Session::pump_capture()` applique les travaux terminés à chaque image (boucle d'attente pour le CLI).
 
-| Méthode | Rôle |
-|---|---|
-| `install {dir, package, version}` | installe dans `.uigen/sources/`, rend la version exacte, la licence, le framework détecté |
-| `inspect {package}` | liste les composants exportés et leurs propriétés lues dans les types (`variant`, `size`…) |
-| `render {component, props, state, theme}` | affiche une combinaison, force l'état, rend l'instantané DOM (boîtes, styles calculés, textes, SVG, transitions) et une capture PNG |
-| `shutdown` | ferme Chromium et Node |
+**Protocole, version 1.** Une ligne JSON UTF-8 par message sur stdin / stdout de Node ; stderr est un
+journal libre, jamais lu comme protocole.
+
+- **Salut** : le service écrit d'abord `{"protocol":1,"service":"uigen-sidecar","node":"22.16.0"}`. Le client
+  refuse un autre numéro (erreur `Protocol` : « capture service speaks protocol N, UIGEN expects 1 »).
+- **Requête** : `{"id": n, "method", "params"}`, `id` entier ≥ 1. **Réponse** : `{"id","ok":true,"result"}` ou
+  `{"id","ok":false,"error":{"kind","message"}}`.
+- **Genres d'erreur** : `invalidRequest`, `install`, `uninstall`, `notInstalled`, `componentNotFound`,
+  `frameworkUnsupported`, `render`, `tooLarge`, `internal`. Côté Rust s'y ajoutent `Unavailable`, `Start`
+  (Node ou script introuvable, message qui nomme `UIGEN_NODE` et `UIGEN_SIDECAR_DIR`), `Timeout`,
+  `ServiceExited` et `Protocol`.
+
+| Méthode | Paramètres | Résultat |
+|---|---|---|
+| `install` | `dir`, `package`, `version` (exacte ou `latest`) | `{package, version, license, framework}` |
+| `uninstall` | `dir`, `package` | `{package}` |
+| `inspect` | `dir`, `package` | `{package, version, framework, components: [{name, props}]}` |
+| `render` | `dir`, `package`, `component`, `props`, `state`, `theme` | `{snapshot (instantané v1 de `figcraft-dom`), png (chemin relatif à `dir`)}` |
+| `shutdown` | `{}` | `{}` |
+
+`state` ∈ `default`, `hover`, `focus`, `pressed`, `disabled` ; `theme` ∈ `light`, `dark`. `framework` ∈ `react`,
+`vue`, `svelte`, `web-components`, `unknown` ; `render` n'accepte que `react` et `web-components`
+(`frameworkUnsupported` sinon).
+
+**Délais** (client, `Timeouts::default()`) : salut 15 s, `install` et `uninstall` 10 min, `inspect` 60 s, `render`
+30 s, `shutdown` 5 s puis arrêt forcé de l'arbre de processus. Un délai dépassé rend `Timeout`, le processus
+est tué et relancé à la requête suivante ; il en va de même quand le service sort ou sort du protocole.
+
+**Tailles** : requête ≤ 1 Mio (au-delà `tooLarge`, la ligne est ignorée et le service continue) ; réponse ≤ 32 Mio
+(au-delà `Protocol`) ; instantané dans les limites de `figcraft-dom` ; la capture PNG est écrite sur le disque, la
+réponse ne porte que son chemin.
+
+**Sécurité** : le service n'ouvre aucun port (ni HTTP, ni WebSocket) ; Chromium est lancé par Playwright en mode
+pipe, sans port de débogage. Le nom du paquet et la version sont validés côté Rust puis côté Node (nom de
+registre npm, semver exacte ou `latest` ; ni chemin, ni URL, ni `git+`, ni alias, ni plage). `npm` tourne
+toujours avec `--ignore-scripts` (et `npm_config_ignore_scripts=true` dans son environnement, qui l'emporte sur un
+`.npmrc` du projet), `--save-exact`, `--no-audit`, `--no-fund`.
+
+**Dossiers** : les paquets vivent dans `<projet>/.uigen/sources/` (`node_modules/` et un `package.json` privé), les
+captures dans `<projet>/.uigen/captures/<paquet>/<version>/`. Rien n'est commité ni embarqué. Retirer une
+source lance `npm uninstall` et garde les captures ; `uigen.json` n'enregistre une version qu'après une
+installation réussie.
+
+**Trouver Node et le script** : `UIGEN_NODE` sinon `node` dans le `PATH` (Node 22 ou plus) ; `UIGEN_SIDECAR_DIR`
+sinon `<dossier de l'exécutable>/sidecar`, sinon le `sidecar/` du dépôt en build de débogage. Chromium est celui de
+Playwright, déjà installé pour le lot 0.
+
+**Essai réel, à la main.** Les tests du crate n'utilisent jamais le réseau : ils jouent un faux service. Deux
+tests `#[ignore]` (`crates/capture/src/real_tests.rs`) pilotent le vrai service et **téléchargent depuis npm**,
+donc à lancer en connaissance de cause :
+
+```
+npm --prefix sidecar ci
+cargo test -p figcraft-capture -- --ignored --test-threads=1
+```
+
+- E2-8.1 : `install @mui/material 7.3.11` (`framework: "react"`), `inspect` liste `Button`, `render Button
+  {variant: "contained"} default light` rend un instantané que `figcraft_dom::parse_snapshot` accepte et un PNG,
+  `uninstall` retire le paquet, `shutdown` rend la main avant son délai de 5 s. Limite : le crate n'expose pas le pid
+  du fils (et le client tue l'arbre de processus en se libérant), donc l'absence de processus `node` ou Chromium
+  restants se vérifie à l'œil dans le gestionnaire de tâches, pas par le test.
+- E2-8.2 : `install @uigen-test/absent-404 1.0.0` rend `Install` avec un message lisible ; `render` d'un composant
+  `Nope` rend `ComponentNotFound`.
 
 ## Lots
 
@@ -61,12 +123,15 @@ titre d'information. Si l'essai échoue, on revoit l'approche avant d'aller plus
 5. Rail : « Ressources » devient « Composants » (22 langues).
 
 ### Lot 2 · Service de capture et installation
-1. `sidecar/` : script Node (install, inspect, render) ; dans un premier temps Node et Chromium
-   du poste en développement, embarqués au lot 6.
-2. `uigen-capture` : démarrage, arrêt, délais, erreurs lisibles (installation, rendu, composant
-   introuvable), sans bloquer l'interface (fil dédié).
-3. Réglages du projet, section « Bibliothèques sources » : ajouter, changer de version, retirer
-   (captures gardées, « source retirée »).
+- [x] 1. `sidecar/` : script Node (install, inspect, render) ; dans un premier temps Node et Chromium
+   du poste en développement, embarqués au lot 8.
+- [x] 2. `figcraft-capture` : démarrage, arrêt, délais, erreurs lisibles (installation, rendu, composant
+   introuvable), sans bloquer l'interface (fil dédié) ; port `CaptureBackend` dans le moteur, commandes
+   `project.addSource`, `project.setSourceVersion`, `project.removeSource`, `capture.status`.
+- [x] 3. Réglages du projet (`project.settings`), section « Bibliothèques sources » : ajouter, changer de
+   version, retirer (captures gardées, « source retirée »).
+- [ ] 4. Essai réel (`crates/capture/src/real_tests.rs`, E2-8.1 et E2-8.2) : écrit et compilé, à lancer à la
+   main (voir « Service de capture »).
 
 ### Lot 3 · Traduction en calques
 1. `uigen-dom` : boîtes → cadres, flex → auto layout, textes, SVG (`figcraft_svg::import_svg`),

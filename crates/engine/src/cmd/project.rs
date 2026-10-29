@@ -40,6 +40,13 @@ pub fn specs() -> Vec<CommandSpec> {
             |s, _| ask(s, "dialog.projectNew")
         ),
         spec!(
+            "project.settings",
+            "Project settings",
+            "{}  asks the interface to open the settings window of the current tab's library project (no dialog from a programmatic call)",
+            false,
+            settings
+        ),
+        spec!(
             "project.info",
             "Library project info",
             "{}  the library project of the current tab: {project: null | {root, name, designFiles, tagPrefix, litOutDir, appliedTheme, sources}, components: [{page, name, empty, layers}]}  (components: the pages that are no divider, in order; layers: top-level layers without a reference or note role; [] outside a project)",
@@ -59,6 +66,13 @@ pub fn specs() -> Vec<CommandSpec> {
 fn ask(s: &mut Session, dialog: &str) -> Result<Value> {
     s.request_ui(dialog, json!({}));
     super::ok()
+}
+
+fn settings(s: &mut Session, _: &Value) -> Result<Value> {
+    if !s.in_lib_project() {
+        return Err(bad("project.settings", "the current file is not in a library project"));
+    }
+    ask(s, "dialog.projectSettings")
 }
 
 fn text(cmd: &str, field: &str, value: &str) -> Result<String> {
@@ -256,11 +270,6 @@ fn update(s: &mut Session, p: &Value) -> Result<Value> {
     }
     config.validate().map_err(|e| bad(UPDATE, format!("{FILE_NAME}: {e}")))?;
     project::save(&binding.root, &config)?;
-    let updated = Arc::new(ProjectBinding { root: binding.root.clone(), config });
-    for ds in &mut s.docs {
-        if ds.project.as_ref().is_some_and(|b| file_access::same_file(&b.root, &updated.root)) {
-            ds.project = Some(Arc::clone(&updated));
-        }
-    }
+    let updated = s.rebind_project(&binding.root, config);
     Ok(json!({"project": describe(&updated)?}))
 }

@@ -139,6 +139,7 @@ impl FigApp {
                 "dialog.preferences" => self.ui.preferences = true,
                 "dialog.missingFonts" => missing_fonts::request(self),
                 "export.lit" => dialogs::lit_export::request(self),
+                "dialog.projectSettings" => dialogs::project_settings::request(self),
                 "panel.shortcuts" => self.ui.shortcuts_panel = !self.ui.shortcuts_panel,
                 "palette.actions" => menus::toggle_palette(&mut self.ui),
                 "panel.design" if self.session.doc().is_ok_and(figcraft_engine::board::is_board) => self.ui.board_panel = !self.ui.board_panel,
@@ -282,6 +283,7 @@ impl FigApp {
     /// lay out anything.
     pub fn background_tick(&mut self, ctx: &egui::Context) {
         crate::control::background(self, ctx);
+        dialogs::project_settings::pump(self);
         // What happened in a live session (the network woke us for it).
         if self.session.live_poll() {
             if let Some(m) = self.session.message.take() {

@@ -1,4 +1,5 @@
 use super::{Arc, Clipboard, DocState, Document, Prefs, Session, background, cmd, library, live, plugins, tools};
+use crate::capture;
 
 impl Session {
     /// A session with one new document.
@@ -28,6 +29,7 @@ impl Session {
             plugins: plugins::Runtime::default(),
             live: live::Lives::default(),
             background: background::Background::default(),
+            capture: capture::Capture::default(),
         }
     }
 
