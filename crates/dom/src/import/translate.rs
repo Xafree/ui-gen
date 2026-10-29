@@ -7,7 +7,7 @@ use figcraft_color::Color;
 use figcraft_doc::proto::Easing;
 use figcraft_doc::{Document, NodeId};
 
-use super::{Walk, cleanup, finite_or_zero, layout, names};
+use super::{Walk, cleanup, facts, finite_or_zero, layout, motion, names};
 use crate::error::ImportError;
 use crate::model::Snapshot;
 
@@ -89,5 +89,8 @@ pub fn translate_snapshot(
     if options.auto_layout {
         layout::apply(doc, root, &sources, &mut warnings);
     }
-    Ok(Translated { root, warnings: warnings.into_messages(), layers: names::facts(doc, root) })
+    let mut layers = names::facts(doc, root);
+    facts::fill(doc, &sources, &mut layers);
+    motion::apply(doc, &sources, &mut warnings, &mut layers);
+    Ok(Translated { root, warnings: warnings.into_messages(), layers })
 }

@@ -38,7 +38,7 @@ fn fate(doc: &Document, id: NodeId, element: &Element) -> Fate {
     }
 }
 
-fn is_ripple(element: &Element) -> bool {
+pub(super) fn is_ripple(element: &Element) -> bool {
     element.class_name.as_deref().is_some_and(|class_name| class_name.to_ascii_lowercase().contains("ripple"))
 }
 

@@ -4,9 +4,11 @@
 
 mod cleanup;
 mod css;
+mod facts;
 mod fonts;
 mod frame;
 mod layout;
+mod motion;
 mod names;
 mod notes;
 mod shadow;
@@ -49,6 +51,7 @@ use crate::error::ImportError;
 use crate::model::{DomBox, DomNode, Element, Snapshot};
 
 pub use fonts::nearest_weight;
+pub use motion::css_easing;
 pub use translate::{Effect, LayerFacts, TokenFact, TokenValue, TransitionFact, TranslateOptions, Translated, translate_snapshot};
 
 const MAX_WARNINGS: usize = 200;

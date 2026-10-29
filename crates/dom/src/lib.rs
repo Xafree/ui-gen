@@ -11,7 +11,7 @@ mod parse;
 
 pub use error::{ImportError, SnapshotError};
 pub use import::{
-    Effect, Imported, LayerFacts, TokenFact, TokenValue, TransitionFact, TranslateOptions, Translated, import_snapshot, nearest_weight,
+    Effect, Imported, LayerFacts, TokenFact, TokenValue, TransitionFact, TranslateOptions, Translated, css_easing, import_snapshot, nearest_weight,
     translate_snapshot,
 };
 pub use model::{DomAnimation, DomBox, DomNode, Element, Snapshot, Source, SvgNode, TextRun, Viewport};
