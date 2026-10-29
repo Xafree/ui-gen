@@ -7,7 +7,7 @@
 //! - [`Headless`] hosts an in-process [`figcraft_engine::Session`] and answers the control-channel
 //!   methods itself (rendering with `figcraft-render`), so agents can design without a window.
 //! - [`Attached`] talks to a running desktop app through its loopback JSON-lines control channel
-//!   (`figcraft --control PORT`): one `{"id","method","params"}` line in, one
+//!   (`uigen --control PORT`, which needs a file root and gives a session token): one `{"id","method","params"}` line in, one
 //!   `{"id","ok","result"|"error"}` line out.
 //!
 //! Entry points: [`Server::serve`] (stdio loop) and [`Server::handle_line`] (one message).
@@ -23,7 +23,7 @@ mod tools;
 #[cfg(test)]
 mod gradient_tests;
 
-pub use backend::{Attached, Backend, decode_data, page_children};
+pub use backend::{Attached, Backend, START_HINT, TOKEN_ENV, control_token, control_token_from, decode_data, page_children};
 pub use headless::Headless;
 pub use prompts::{PROMPTS, PromptArg, PromptDef};
 pub use resources::{COMMAND_TEMPLATE, COMMANDS_URI, DOC_URI, NODE_TEMPLATE};

@@ -51,8 +51,12 @@ fn first_line_received(port_listener: TcpListener) -> std::thread::JoinHandle<Va
     std::thread::spawn(move || {
         let (stream, _) = port_listener.accept().unwrap();
         stream.set_read_timeout(Some(std::time::Duration::from_secs(10))).unwrap();
+        let mut reader = BufReader::new(stream);
         let mut line = String::new();
-        BufReader::new(stream).read_line(&mut line).unwrap();
+        reader.read_line(&mut line).unwrap();
+        // The app keeps the connection until the client leaves, as the real one does.
+        let mut rest = String::new();
+        assert_eq!(reader.read_line(&mut rest).unwrap(), 0, "nothing follows the token: {rest}");
         serde_json::from_str(&line).unwrap()
     })
 }

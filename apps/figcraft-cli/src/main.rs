@@ -50,7 +50,11 @@ altogether. They reach the headless side only: `mcp` takes them to confine the a
 and `info`, `export`, `convert`, `render` and `run` to confine that one run; without them a
 subcommand reads and writes as the user who started it, as before. A `mcp --attach` server is
 confined by the app it attaches to, not by flags passed to the CLI: start that app with
-`figcraft --control PORT` and the same roots (`--attach` refuses them).
+`uigen --control PORT --automation-read-root DIR` (and/or `--automation-write-root DIR`: the app
+refuses `--control` without a root) and the roots you want (`--attach` refuses them). The app prints
+a session token and writes it to `control-token-PORT` in its configuration folder; `mcp --attach`
+reads it there, or from the FIGCRAFT_CONTROL_TOKEN environment variable when that is set, and sends
+it as the first line of the connection. Without a token it stops before connecting.
 See docs/cli.md and docs/mcp.md.";
 
 /// The automation roots a file subcommand was given, if any. Omitting both leaves the run
@@ -276,8 +280,21 @@ fn mcp(attach: Option<&str>, roots: Option<figcraft_engine::file_access::Roots>)
             } else {
                 format!("127.0.0.1:{}", p.parse::<u16>().map_err(|_| CliError::Usage(format!("--attach needs a port number, got `{p}`")))?)
             };
-            let b = figcraft_mcp::Attached::connect(&addr)
-                .map_err(|e| format!("can't reach the UIGEN app at {addr}: {e} (start it with `uigen --control PORT`)"))?;
+            let port = addr
+                .rsplit_once(':')
+                .and_then(|(_, port)| port.parse::<u16>().ok())
+                .ok_or_else(|| CliError::Usage(format!("--attach needs a port number or HOST:PORT, got `{p}`")))?;
+            let token = figcraft_mcp::control_token(port)?;
+            let b = figcraft_mcp::Attached::connect(&addr, &token).map_err(|e| {
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    format!(
+                        "the UIGEN app at {addr} refused the session token: {e} (check {} or the control-token-{port} file of the running app)",
+                        figcraft_mcp::TOKEN_ENV
+                    )
+                } else {
+                    format!("can't reach the UIGEN app at {addr}: {e} ({})", figcraft_mcp::START_HINT)
+                }
+            })?;
             Box::new(b)
         }
         None => Box::new(figcraft_mcp::Headless::new()),

@@ -32,7 +32,11 @@ fn fake_app() -> u16 {
             let mut lines = BufReader::new(stream).lines();
             let first: Value = lines.next().and_then(Result::ok).and_then(|l| serde_json::from_str(&l).ok()).unwrap_or(Value::Null);
             if first != json!({"auth": TOKEN}) {
-                let _ = writeln!(out, "{}", json!({"id": null, "ok": false, "error": "authentication failed: the first line must be {\"auth\": \"<token>\"}"}));
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    json!({"id": null, "ok": false, "error": "authentication failed: the first line must be {\"auth\": \"<token>\"}"})
+                );
                 continue;
             }
             for line in lines {
@@ -170,9 +174,8 @@ fn reconnect_failure_reports_request_not_sent() {
 #[test]
 fn a_wrong_token_is_refused_by_the_app_and_reported() {
     let port = fake_app();
-    let mut backend = Attached::port(port, "not-the-token").unwrap();
-    let error = backend.call("document.inspect", json!({})).unwrap_err();
-    assert!(error.contains("authentication failed"), "{error}");
+    let error = Attached::port(port, "not-the-token").err().unwrap();
+    assert!(error.to_string().contains("authentication failed"), "{error}");
 }
 
 #[test]

@@ -207,10 +207,13 @@ uigen-cli commands --filter autoLayout
 
 # Let an agent drive it over MCP (headless, or attached to the running app)
 uigen-cli mcp
+# (start the app with: uigen --control 47800 --automation-read-root DIR)
+# the session token is read from control-token-47800 in the app's configuration folder,
+# or from the FIGCRAFT_CONTROL_TOKEN environment variable
 uigen-cli mcp --attach 47800
 ```
 
-The desktop app also offers a loopback-only control channel (`uigen --control <port>`) for inspecting UI state, driving tools with pointer and key events, and taking screenshots. See [`docs/control-protocol.md`](docs/control-protocol.md), [`docs/mcp.md`](docs/mcp.md) and [`docs/cli.md`](docs/cli.md).
+The desktop app also offers a loopback-only control channel (`uigen --control <port> --automation-read-root <dir>`, which needs a folder to confine file access to and an authenticated connection) for inspecting UI state, driving tools with pointer and key events, and taking screenshots. See [`docs/control-protocol.md`](docs/control-protocol.md), [`docs/mcp.md`](docs/mcp.md) and [`docs/cli.md`](docs/cli.md).
 
 ## Under the hood
 

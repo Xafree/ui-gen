@@ -3,6 +3,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpStream, ToSocketAddrs};
+use std::path::Path;
 use std::time::Duration;
 
 use base64::Engine as _;
@@ -76,24 +77,68 @@ pub fn decode_data(v: &Value) -> Result<Vec<u8>, String> {
     base64::engine::general_purpose::STANDARD.decode(d.trim()).map_err(|e| format!("bad base64 from the app: {e}"))
 }
 
-/// A running FigCraft app, reached through its loopback control port (`figcraft --control PORT`).
+/// How long a new connection waits for the app to refuse its token.
+const AUTH_ANSWER_WINDOW: Duration = Duration::from_millis(150);
+
+/// The variable that gives the control channel's session token, ahead of the app's token file.
+pub const TOKEN_ENV: &str = "FIGCRAFT_CONTROL_TOKEN";
+
+/// The hint every "can't reach the app" message ends with.
+pub const START_HINT: &str = "start it with `uigen --control PORT --automation-read-root DIR` (and/or `--automation-write-root DIR`): the control channel needs a folder to confine file access to, and a session token";
+
+/// The session token of the app listening on `port`: `env` (the value of [`TOKEN_ENV`]) when it is
+/// not empty, else the `control-token-<port>` file the app wrote in its configuration folder
+/// `config_dir`. The error names that file and the variable.
+pub fn control_token_from(env: Option<&str>, config_dir: Option<&Path>, port: u16) -> Result<String, String> {
+    if let Some(token) = env.map(str::trim).filter(|t| !t.is_empty()) {
+        return Ok(token.to_string());
+    }
+    let expected = match config_dir {
+        Some(dir) => figcraft_engine::control_token::control_token_path(dir, port).display().to_string(),
+        None => format!("control-token-{port} in the UIGEN configuration folder"),
+    };
+    let missing = |why: String| {
+        format!(
+            "no control token for port {port}: {why}; the app writes its session token to {expected} when it starts with `--control {port}`; set {TOKEN_ENV} to use another"
+        )
+    };
+    let Some(dir) = config_dir else { return Err(missing("no configuration folder".into())) };
+    let path = figcraft_engine::control_token::control_token_path(dir, port);
+    match std::fs::read_to_string(&path) {
+        Ok(text) if !text.trim().is_empty() => Ok(text.trim().to_string()),
+        Ok(_) => Err(missing(format!("{} is empty", path.display()))),
+        Err(e) => Err(missing(format!("can't read {}: {e}", path.display()))),
+    }
+}
+
+/// [`control_token_from`] with the real environment and the app's real configuration folder.
+pub fn control_token(port: u16) -> Result<String, String> {
+    let env = std::env::var(TOKEN_ENV).ok();
+    control_token_from(env.as_deref(), figcraft_engine::control_token::config_dir().as_deref(), port)
+}
+
+/// A running FigCraft app, reached through its loopback control port (`uigen --control PORT`),
+/// which answers only a connection whose first line is `{"auth": "<session token>"}`.
 pub struct Attached {
     addr: String,
+    token: String,
     conn: Option<(BufReader<TcpStream>, TcpStream)>,
     next_id: u64,
 }
 
 impl Attached {
-    /// Connect to `addr` (e.g. `127.0.0.1:7979`), failing fast when nothing is listening.
-    pub fn connect(addr: &str) -> std::io::Result<Self> {
-        let mut r = Self { addr: addr.to_string(), conn: None, next_id: 1 };
+    /// Connect to `addr` (e.g. `127.0.0.1:7979`) with the app's session `token`, failing fast when
+    /// nothing is listening. A wrong token shows on the first call, the app answering it with an
+    /// error.
+    pub fn connect(addr: &str, token: &str) -> std::io::Result<Self> {
+        let mut r = Self { addr: addr.to_string(), token: token.to_string(), conn: None, next_id: 1 };
         r.reconnect()?;
         Ok(r)
     }
 
     /// Connect to `127.0.0.1:port`.
-    pub fn port(port: u16) -> std::io::Result<Self> {
-        Self::connect(&format!("127.0.0.1:{port}"))
+    pub fn port(port: u16, token: &str) -> std::io::Result<Self> {
+        Self::connect(&format!("127.0.0.1:{port}"), token)
     }
 
     pub fn addr(&self) -> &str {
@@ -107,16 +152,38 @@ impl Attached {
             match TcpStream::connect_timeout(&sa, Duration::from_millis(800)) {
                 Ok(s) => {
                     s.set_nodelay(true).ok();
-                    // The app answers within 60 s (its own timeout); leave headroom.
-                    s.set_read_timeout(Some(Duration::from_secs(90))).ok();
-                    let read = s.try_clone()?;
-                    self.conn = Some((BufReader::new(read), s));
+                    self.conn = Some(self.authenticate(s)?);
                     return Ok(());
                 }
                 Err(e) => last = e,
             }
         }
         Err(last)
+    }
+
+    /// Send the token as the first line. The app says nothing when it accepts it and answers an
+    /// error, then closes, when it doesn't: a short wait for that answer reports a wrong token
+    /// here rather than as a lost connection on the first request.
+    fn authenticate(&self, writer: TcpStream) -> std::io::Result<(BufReader<TcpStream>, TcpStream)> {
+        let mut writer = writer;
+        let mut reader = BufReader::new(writer.try_clone()?);
+        writeln!(writer, "{}", json!({"auth": self.token}))?;
+        writer.flush()?;
+        reader.get_ref().set_read_timeout(Some(AUTH_ANSWER_WINDOW))?;
+        let mut answer = String::new();
+        match reader.read_line(&mut answer) {
+            Ok(0) => return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "the app closed the connection after the token")),
+            Ok(_) => {
+                let reason =
+                    serde_json::from_str::<Value>(answer.trim()).ok().and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_string));
+                return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, reason.unwrap_or_else(|| answer.trim().to_string())));
+            }
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+            Err(e) => return Err(e),
+        }
+        // The app answers a request within 60 s (its own timeout); leave headroom.
+        reader.get_ref().set_read_timeout(Some(Duration::from_secs(90)))?;
+        Ok((reader, writer))
     }
 
     /// The app already closed this connection (it drops ones idle past its socket timeout), or
@@ -154,7 +221,11 @@ impl Backend for Attached {
         let line = json!({"id": id, "method": method, "params": params}).to_string();
         if self.conn.is_none() || self.stale() {
             self.reconnect().map_err(|e| {
-                format!("UIGEN app at {} is not reachable: {e} (request was not sent; start it with `uigen --control PORT`)", self.addr)
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    format!("UIGEN app at {} refused the session token: {e} (request was not sent; check {TOKEN_ENV} or the control-token file of the running app)", self.addr)
+                } else {
+                    format!("UIGEN app at {} is not reachable: {e} (request was not sent; {START_HINT})", self.addr)
+                }
             })?;
         }
         // A lost reply does not mean the app failed to apply the request.

@@ -81,7 +81,7 @@ fn token_matches(expected: &str, given: &str) -> bool {
 
 fn write_token_file(dir: &Path, port: u16, token: &str) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(dir)?;
-    let path = dir.join(format!("control-token-{port}"));
+    let path = figcraft_engine::control_token::control_token_path(dir, port);
     match std::fs::remove_file(&path) {
         Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
         _ => {}
