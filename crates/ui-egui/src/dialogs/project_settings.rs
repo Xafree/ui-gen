@@ -1,11 +1,13 @@
 //! File ▸ Project settings…: the window of a library project. Its "Source libraries" section adds
 //! an npm package, changes its version and removes it through the `project.*` commands; the
-//! capture service works in the background, so the rows follow `capture.status` and the project's
+//! capture service works in the background, so the rows follow the capture jobs of the project and its
 //! sources and no frame waits. Programmatic `project.settings` calls never open it.
 
 use egui::{Align, Context, CornerRadius, Label, Layout, Margin, RichText, ScrollArea, Stroke, Ui, vec2};
+use figcraft_engine::capture::JobState;
+use figcraft_engine::file_access;
 use figcraft_project::npm;
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::window;
 use crate::FigApp;
@@ -102,7 +104,7 @@ impl ProjectSettings {
 
     fn refresh(&mut self, app: &mut FigApp) -> bool {
         let Some(binding) = app.session.project().cloned() else { return false };
-        let jobs = jobs(app);
+        let jobs = jobs(app, &binding.root);
         let working = |package: &str, command: &str| {
             jobs.iter().any(|j| j.package == package && j.command == command && matches!(j.state.as_str(), "queued" | "running"))
         };
@@ -162,18 +164,21 @@ impl ProjectSettings {
     }
 }
 
-fn jobs(app: &mut FigApp) -> Vec<Job> {
-    let Ok(status) = app.session.execute("capture.status", &json!({})) else { return Vec::new() };
-    let text = |job: &Value, key: &str| job.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
-    status
-        .get("jobs")
-        .and_then(Value::as_array)
-        .map(|jobs| {
-            jobs.iter()
-                .map(|job| Job { command: text(job, "command"), package: text(job, "package"), state: text(job, "state"), error: text(job, "error") })
-                .collect()
+fn jobs(app: &FigApp, root: &str) -> Vec<Job> {
+    app.session
+        .capture_jobs()
+        .into_iter()
+        .filter(|job| file_access::same_file(&job.root, root))
+        .map(|job| {
+            let (state, error) = match job.state {
+                JobState::Queued => ("queued", String::new()),
+                JobState::Running => ("running", String::new()),
+                JobState::Done => ("done", String::new()),
+                JobState::Failed(message) => ("failed", message),
+            };
+            Job { command: job.command, package: job.package, state: state.to_string(), error }
         })
-        .unwrap_or_default()
+        .collect()
 }
 
 fn failure_text(command: &str, package: &str, cause: &str) -> String {

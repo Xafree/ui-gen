@@ -210,6 +210,8 @@ mod project_open_tests;
 #[cfg(test)]
 mod project_pages_ui_tests;
 #[cfg(test)]
+mod project_settings_review_tests;
+#[cfg(test)]
 mod project_sources_ui_tests;
 #[cfg(test)]
 mod ui_scale_tests;

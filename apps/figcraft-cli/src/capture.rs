@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use figcraft_engine::Session;
-use serde_json::{Value, json};
+use figcraft_engine::capture::JobState;
 
 const POLL: Duration = Duration::from_millis(100);
 const SOURCE_COMMANDS: [&str; 3] = ["project.addSource", "project.setSourceVersion", "project.removeSource"];
@@ -22,12 +22,8 @@ pub fn install(session: &mut Session) {
     }
 }
 
-fn working(session: &mut Session) -> bool {
-    let Ok(status) = session.execute("capture.status", &json!({})) else { return false };
-    status
-        .get("jobs")
-        .and_then(Value::as_array)
-        .is_some_and(|jobs| jobs.iter().any(|job| matches!(job.get("state").and_then(Value::as_str), Some("queued" | "running"))))
+fn working(session: &Session) -> bool {
+    session.capture_jobs().iter().any(|job| matches!(job.state, JobState::Queued | JobState::Running))
 }
 
 /// Wait for every job submitted so far and apply the results; the failures come back as messages.

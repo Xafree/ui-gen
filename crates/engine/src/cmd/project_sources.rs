@@ -1,14 +1,14 @@
 //! Source libraries of a library project: the commands hand an npm job to the capture service and
 //! `uigen.json` changes only when [`apply`] brings the success back through `Session::pump_capture`.
 
-use std::path::Path;
+use std::path::{self, Path};
 use std::sync::Arc;
 
 use figcraft_project::{Project, Source, WORK_DIR, npm};
 use serde_json::{Value, json};
 
 use super::CommandSpec;
-use crate::capture::{CaptureJob, JobState};
+use crate::capture::{CaptureError, CaptureErrorKind, CaptureJob, JobState};
 use crate::file_access::{self, Access};
 use crate::project::{self, ProjectBinding};
 use crate::{EngineError, Result, Session, bad, spec};
@@ -18,6 +18,8 @@ const SET_VERSION: &str = "project.setSourceVersion";
 const REMOVE: &str = "project.removeSource";
 const LATEST: &str = "latest";
 const SOURCES_DIR: &str = "sources";
+const FRAMEWORKS: [&str; 5] = ["react", "vue", "svelte", "web-components", "unknown"];
+const MAX_LICENSE_BYTES: usize = 128;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -45,7 +47,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "capture.status",
             "Capture jobs",
-            "{job? (only that job)}  the jobs submitted to the capture service: {jobs: [{job, command, package, state: \"queued\"|\"running\"|\"done\"|\"failed\", error? (the message of a failed job)}]}, oldest first",
+            "{job? (a whole number: only that job)}  the jobs submitted to the capture service: {jobs: [{job, command, package, root (the project folder), state: \"queued\"|\"running\"|\"done\"|\"failed\", error? (the message of a failed job)}]}, oldest first",
             false,
             status
         ),
@@ -83,14 +85,32 @@ fn require_active_source(cmd: &str, binding: &ProjectBinding, package: &str) -> 
     Err(bad(cmd, format!("package \"{package}\" is not a source of this project")))
 }
 
+fn absolute_root(cmd: &str, root: &str) -> Result<String> {
+    let absolute = path::absolute(root).map_err(|e| bad(cmd, format!("cannot resolve the project folder {root}: {e}")))?;
+    Ok(absolute.to_string_lossy().into_owned())
+}
+
+fn in_flight(s: &Session, root: &str, package: &str) -> bool {
+    s.capture_jobs().iter().any(|job| {
+        job.package == package
+            && matches!(job.state, JobState::Queued | JobState::Running)
+            && [ADD, SET_VERSION, REMOVE].contains(&job.command.as_str())
+            && file_access::same_file(&job.root, root)
+    })
+}
+
 fn submit(s: &mut Session, cmd: &str, binding: &ProjectBinding, package: &str, job: CaptureJob) -> Result<Value> {
     file_access::allow(Path::new(&binding.root).join(WORK_DIR).join(SOURCES_DIR), Access::Write)?;
+    file_access::allow(project::manifest_path(&binding.root), Access::Write)?;
+    if in_flight(s, job.root(), package) {
+        return Err(bad(cmd, format!("a change to package \"{package}\" is already in progress")));
+    }
     let id = s.submit_capture(cmd, package, job).map_err(|e| bad(cmd, e.message))?;
     Ok(json!({"job": id}))
 }
 
 fn install(s: &mut Session, cmd: &str, binding: &ProjectBinding, package: String, version: String) -> Result<Value> {
-    let job = CaptureJob::Install { root: binding.root.clone(), package: package.clone(), version };
+    let job = CaptureJob::Install { root: absolute_root(cmd, &binding.root)?, package: package.clone(), version };
     submit(s, cmd, binding, &package, job)
 }
 
@@ -116,12 +136,15 @@ fn remove(s: &mut Session, p: &Value) -> Result<Value> {
     let binding = binding(s, REMOVE)?;
     let package = package(REMOVE, p)?;
     require_active_source(REMOVE, &binding, &package)?;
-    let job = CaptureJob::Uninstall { root: binding.root.clone(), package: package.clone() };
+    let job = CaptureJob::Uninstall { root: absolute_root(REMOVE, &binding.root)?, package: package.clone() };
     submit(s, REMOVE, &binding, &package, job)
 }
 
 fn status(s: &mut Session, p: &Value) -> Result<Value> {
-    let only = p.get("job").and_then(Value::as_u64);
+    let only = match p.get("job") {
+        None => None,
+        Some(value) => Some(value.as_u64().ok_or_else(|| bad("capture.status", "job must be a whole number"))?),
+    };
     let jobs: Vec<Value> = s
         .capture_jobs()
         .into_iter()
@@ -133,7 +156,7 @@ fn status(s: &mut Session, p: &Value) -> Result<Value> {
                 JobState::Done => ("done", None),
                 JobState::Failed(message) => ("failed", Some(message)),
             };
-            let mut entry = json!({"job": job.job, "command": job.command, "package": job.package, "state": state});
+            let mut entry = json!({"job": job.job, "command": job.command, "package": job.package, "root": job.root, "state": state});
             if let (Some(message), Some(fields)) = (error, entry.as_object_mut()) {
                 fields.insert("error".to_string(), Value::String(message));
             }
@@ -145,12 +168,17 @@ fn status(s: &mut Session, p: &Value) -> Result<Value> {
 
 /// Write what the finished job `command` on `package` changed into the `uigen.json` of folder
 /// `root`, read again first, and give every tab of the project the new manifest. A command that
-/// is not a source command changes nothing.
-pub(crate) fn apply(s: &mut Session, command: &str, package: &str, root: &str, result: &Value) -> Result<()> {
+/// is not a source command changes nothing; a result the service must not be believed on, or a
+/// manifest that can't be written, comes back as the failure of the job.
+pub(crate) fn apply(s: &mut Session, command: &str, package: &str, root: &str, result: &Value) -> std::result::Result<(), CaptureError> {
     if !matches!(command, ADD | SET_VERSION | REMOVE) {
         return Ok(());
     }
-    let mut config = project::load(root)?;
+    let not_saved = |cause: EngineError| {
+        let done = if command == REMOVE { "uninstalled" } else { "installed" };
+        CaptureError { kind: CaptureErrorKind::Internal, message: format!("{package} was {done} but uigen.json could not be updated: {cause}") }
+    };
+    let mut config = project::load(root).map_err(not_saved)?;
     if command == REMOVE {
         match config.sources.iter_mut().find(|source| source.package == package) {
             Some(source) => source.removed = true,
@@ -159,15 +187,39 @@ pub(crate) fn apply(s: &mut Session, command: &str, package: &str, root: &str, r
     } else {
         upsert(&mut config, package, result)?;
     }
-    project::save(root, &config)?;
+    project::save(root, &config).map_err(not_saved)?;
     s.rebind_project(root, config);
     Ok(())
 }
 
-fn upsert(config: &mut Project, package: &str, result: &Value) -> Result<()> {
-    let text = |key: &str| result.get(key).and_then(Value::as_str).map(str::to_string);
-    let version = text("version").ok_or_else(|| EngineError::Other(format!("the install of {package} reported no version")))?;
-    let (framework, license) = (text("framework"), text("license"));
+fn refused(message: String) -> CaptureError {
+    CaptureError { kind: CaptureErrorKind::Protocol, message }
+}
+
+fn optional_text<'a>(result: &'a Value, package: &str, key: &str) -> std::result::Result<Option<&'a str>, CaptureError> {
+    match result.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(text)) => Ok(Some(text)),
+        Some(_) => Err(refused(format!("the install of {package} reported a {key} that is not text"))),
+    }
+}
+
+fn upsert(config: &mut Project, package: &str, result: &Value) -> std::result::Result<(), CaptureError> {
+    let reported = result.get("package").and_then(Value::as_str);
+    if reported != Some(package) {
+        return Err(refused(format!("the install of {package} answered for {}", reported.unwrap_or("no package"))));
+    }
+    let version =
+        result.get("version").and_then(Value::as_str).ok_or_else(|| refused(format!("the install of {package} reported no version")))?.to_string();
+    let framework = optional_text(result, package, "framework")?;
+    if let Some(framework) = framework.filter(|framework| !FRAMEWORKS.contains(framework)) {
+        return Err(refused(format!("the install of {package} reported the unknown framework \"{}\"", framework.escape_debug())));
+    }
+    let license = optional_text(result, package, "license")?;
+    if license.is_some_and(|license| license.len() > MAX_LICENSE_BYTES || license.chars().any(char::is_control)) {
+        return Err(refused(format!("the install of {package} reported a license longer than {MAX_LICENSE_BYTES} bytes or with control characters")));
+    }
+    let (framework, license) = (framework.map(str::to_string), license.map(str::to_string));
     match config.sources.iter_mut().find(|source| source.package == package) {
         Some(source) => {
             source.version = version;

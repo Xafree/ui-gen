@@ -69,7 +69,7 @@ pub struct CaptureEvent {
 const MAX_FINISHED_JOBS: usize = 100;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum JobState {
+pub enum JobState {
     Queued,
     Running,
     Done,
@@ -77,10 +77,11 @@ pub(crate) enum JobState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct JobStatus {
+pub struct JobStatus {
     pub job: JobId,
     pub command: String,
     pub package: String,
+    pub root: String,
     pub state: JobState,
 }
 
@@ -93,7 +94,7 @@ struct JobRecord {
 }
 
 impl CaptureJob {
-    fn root(&self) -> &str {
+    pub(crate) fn root(&self) -> &str {
         match self {
             Self::Install { root, .. } | Self::Uninstall { root, .. } | Self::Inspect { root, .. } | Self::Render { root, .. } => root,
         }
@@ -133,6 +134,7 @@ impl Drop for Capture {
 impl Session {
     pub fn set_capture_backend(&mut self, backend: Box<dyn CaptureBackend>) {
         self.capture.stop();
+        self.capture.jobs.clear();
         self.capture.backend = Some(backend);
     }
 
@@ -155,16 +157,13 @@ impl Session {
         };
         let mut events = Vec::new();
         for (job, outcome) in backend.poll() {
-            let Some(record) = self.capture.jobs.iter().find(|record| record.id == job && record.finished.is_none()) else {
+            let Some(position) = self.capture.jobs.iter().position(|record| record.id == job && record.finished.is_none()) else {
                 continue;
             };
+            let Some(record) = self.capture.jobs.get(position) else { continue };
             let (command, package, root) = (record.command.clone(), record.package.clone(), record.root.clone());
-            let outcome = outcome.and_then(|value| {
-                crate::cmd::project_sources::apply(self, &command, &package, &root, &value)
-                    .map(|()| value)
-                    .map_err(|e| CaptureError { kind: CaptureErrorKind::Internal, message: e.to_string() })
-            });
-            if let Some(record) = self.capture.jobs.iter_mut().find(|record| record.id == job) {
+            let outcome = outcome.and_then(|value| crate::cmd::project_sources::apply(self, &command, &package, &root, &value).map(|()| value));
+            if let Some(record) = self.capture.jobs.get_mut(position) {
                 record.finished = Some(outcome.as_ref().map(|_| ()).map_err(|e| e.message.clone()));
             }
             events.push(CaptureEvent { job, command, package, outcome });
@@ -173,7 +172,8 @@ impl Session {
         events
     }
 
-    pub(crate) fn capture_jobs(&self) -> Vec<JobStatus> {
+    /// The jobs submitted to the capture service, oldest first, with the project folder each one works in.
+    pub fn capture_jobs(&self) -> Vec<JobStatus> {
         let mut running = true;
         self.capture
             .jobs
@@ -185,7 +185,7 @@ impl Session {
                     None if std::mem::take(&mut running) => JobState::Running,
                     None => JobState::Queued,
                 };
-                JobStatus { job: record.id, command: record.command.clone(), package: record.package.clone(), state }
+                JobStatus { job: record.id, command: record.command.clone(), package: record.package.clone(), root: record.root.clone(), state }
             })
             .collect()
     }

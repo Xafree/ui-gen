@@ -210,6 +210,8 @@ mod brush_tests;
 #[cfg(test)]
 mod canvas_fixes_tests;
 #[cfg(test)]
+mod capture_review_tests;
+#[cfg(test)]
 mod capture_tests;
 #[cfg(test)]
 mod code_connect_tests;

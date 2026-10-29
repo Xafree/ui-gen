@@ -822,9 +822,11 @@ The manifest is read and written only through the automation roots, and the comm
   (adding the source, or updating it and bringing a removed one back), a successful uninstall keeps the source with
   `removed: true`, its version and `.uigen/captures` untouched; a failure writes nothing. Every tab of the project
   sees the change. Not undoable.
-- `capture.status {job?}`: the jobs submitted to the capture service, oldest first: `{jobs: [{job, command,
-  package, state: "queued" | "running" | "done" | "failed", error?}]}`; `error` carries the service's message of a
-  failed job. The service runs one job at a time. The last hundred finished jobs are kept.
+- `capture.status {job?}` (`job` a whole number, otherwise refused): the jobs submitted to the capture service, oldest first: `{jobs: [{job, command,
+  package, root (the project folder), state: "queued" | "running" | "done" | "failed", error?}]}`; `error` carries the service's message of a
+  failed job. The service runs one job at a time, and a package with a job in flight refuses another change
+  (`already in progress`). The folder sent to the service is always absolute. A result naming another package, an unknown framework or
+  a license over 128 bytes or with control characters is refused (`Protocol`) and writes nothing. The last hundred finished jobs are kept.
 - `project.openFolder {}` and `project.newFolder {}`: ask the interface for a folder to open as a project, or to
   start one in (Home's "Open project" and "New library project"); a programmatic call opens no dialog.
 - `project.settings {}`: ask the interface to open the settings window of the current tab's library project, whose
