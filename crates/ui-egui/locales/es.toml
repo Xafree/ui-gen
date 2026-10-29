@@ -12,6 +12,7 @@ status = "draft — needs native review"
 "Add column" = "Añadir columna"
 "Add measurement" = "Añadir medición"
 "Add row" = "Añadir fila"
+"Added because another component uses it" = "Añadido porque otro componente lo usa"
 "All objects" = "Todos los objetos"
 "Along the bottom" = "A lo largo del borde inferior"
 "Along the left" = "A lo largo del borde izquierdo"
@@ -31,7 +32,17 @@ status = "draft — needs native review"
 "Connector" = "Conector"
 "Couldn't download the variables" = "No se pudieron descargar las variables"
 "Couldn't download {name}" = "No se pudo descargar {name}"
+"Dark mode name" = "Nombre del modo oscuro"
+"Element name prefix" = "Prefijo de los nombres de elemento"
+"Export library as Lit" = "Exportar la biblioteca como Lit"
+"Export package" = "Exportar paquete"
+"Files" = "Archivos"
+"Light mode name" = "Nombre del modo claro"
+"Lowercase letters, digits and hyphens, up to 20 characters" = "Letras minúsculas, dígitos y guiones, hasta 20 caracteres"
+"Notes" = "Notas"
 "Relative to" = "Relativa a"
+"This file has no components to export" = "Este archivo no tiene componentes que exportar"
+"Token prefix" = "Prefijo de los tokens"
 "Trigger layer" = "Capa que la abre"
 "Whole screen" = "Pantalla completa"
 
@@ -1821,12 +1832,15 @@ status = "draft — needs native review"
 "{n} removed" = { one = "{n} eliminada", other = "{n} eliminadas" }
 "{n} replies" = { one = "{n} respuesta", other = "{n} respuestas" }
 "{n} rows" = { one = "{n} fila", other = "{n} filas" }
+"{n} skipped" = { one = "{n} omitido", other = "{n} omitidos" }
 "{n} styles" = { one = "{n} estilo", other = "{n} estilos" }
 "{n} text layers" = { one = "{n} capa de texto", other = "{n} capas de texto" }
+"{n} unchanged" = { one = "{n} sin cambios", other = "{n} sin cambios" }
 "{n} variables" = { one = "{n} variable", other = "{n} variables" }
 "{n} votes" = { one = "{n} voto", other = "{n} votos" }
 "{n} votes left" = { one = "Te queda {n} voto", other = "Te quedan {n} votos" }
 "{n} weeks ago" = { one = "hace {n} semana", other = "hace {n} semanas" }
+"{n} written" = { one = "{n} escrito", other = "{n} escritos" }
 "{n} years ago" = { one = "hace {n} año", other = "hace {n} años" }
 "{n}d" = "{n} d"
 "{n}h" = "{n} h"
@@ -2017,6 +2031,8 @@ status = "draft — needs native review"
 "effect.remove" = "Quitar efecto"
 "effect.set" = "Establecer efecto"
 "export.add" = "Añadir ajuste de exportación"
+"export.lit" = "Exportar la biblioteca como Lit"
+"export.litWindow" = "Exportar la biblioteca como Lit"
 "export.remove" = "Quitar ajuste de exportación"
 "export.update" = "Editar ajuste de exportación"
 "file.close" = "Cerrar pestaña"

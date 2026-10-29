@@ -1536,7 +1536,9 @@ permissions: without it nothing is downloaded); `plugin.directory.publish {path 
   `package.json` (sorted keys), `tsconfig.json` and `README.md`, the same text on every call. `prefix` and `tokenPrefix` are lowercase
   letters, digits and hyphens; `packageName` an npm name (`@scope/name` allowed); `version` a semantic version. A `path` is
   refused while a component has an issue (nothing is written, the error names the components). `export.litWindow {}`
-  opens the export window.
+  opens the export window (File ▸ Export library as Lit…, Alt+Shift+Cmd+E, Ctrl+Alt+Shift+E on Windows): it plans the package with
+  the same rules, lists the components with their element name, and writes the checked ones to a folder it asks for. A programmatic
+  `export.lit` never opens it.
   With a `path` the package is written to that folder (created when missing, inside the automation write roots; not in
   the browser) and `files` have no `text`. The answer adds `written`, `unchanged`, `kept` (files the export did not
   generate, left as they are, hand-made ones included), `skipped: [{path, reason}]` and `stale`, every path relative

@@ -7,7 +7,18 @@
 name = "Svenska"
 
 [ui]
+"Added because another component uses it" = "Tillagd eftersom en annan komponent använder den"
+"Dark mode name" = "Namn på det mörka läget"
+"Element name prefix" = "Prefix för elementnamn"
+"Export library as Lit" = "Exportera biblioteket som Lit"
+"Export package" = "Exportera paket"
+"Files" = "Filer"
+"Light mode name" = "Namn på det ljusa läget"
+"Lowercase letters, digits and hyphens, up to 20 characters" = "Små bokstäver, siffror och bindestreck, högst 20 tecken"
+"Notes" = "Anmärkningar"
 "Relative to" = "Relativt till"
+"This file has no components to export" = "Den här filen har inga komponenter att exportera"
+"Token prefix" = "Prefix för tokens"
 "Trigger layer" = "Utlösande lager"
 "Whole screen" = "Hela skärmen"
 
@@ -1793,12 +1804,15 @@ name = "Svenska"
 "{n} removed" = { one = "{n} borttagen", other = "{n} borttagna" }
 "{n} replies" = { one = "{n} svar", other = "{n} svar" }
 "{n} rows" = { one = "{n} rad", other = "{n} rader" }
+"{n} skipped" = { one = "{n} överhoppad", other = "{n} överhoppade" }
 "{n} styles" = { one = "{n} formatmall", other = "{n} formatmallar" }
 "{n} text layers" = { one = "{n} textlager", other = "{n} textlager" }
+"{n} unchanged" = { one = "{n} oförändrad", other = "{n} oförändrade" }
 "{n} variables" = { one = "{n} variabel", other = "{n} variabler" }
 "{n} votes" = { one = "{n} röst", other = "{n} röster" }
 "{n} votes left" = { one = "{n} röst kvar", other = "{n} röster kvar" }
 "{n} weeks ago" = { one = "för {n} vecka sedan", other = "för {n} veckor sedan" }
+"{n} written" = { one = "{n} skriven", other = "{n} skrivna" }
 "{n} years ago" = { one = "för {n} år sedan", other = "för {n} år sedan" }
 "{n}d" = "{n} d"
 "{n}h" = "{n} h"
@@ -1988,6 +2002,8 @@ name = "Svenska"
 "effect.remove" = "Ta bort effekt"
 "effect.set" = "Ange effekt"
 "export.add" = "Lägg till export"
+"export.lit" = "Exportera biblioteket som Lit"
+"export.litWindow" = "Exportera biblioteket som Lit"
 "export.remove" = "Ta bort export"
 "export.update" = "Uppdatera export"
 "file.close" = "Stäng"

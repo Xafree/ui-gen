@@ -8,7 +8,18 @@ name = "Bahasa Indonesia"
 status = "draft — needs native review"
 
 [ui]
+"Added because another component uses it" = "Ditambahkan karena component lain menggunakannya"
+"Dark mode name" = "Nama mode gelap"
+"Element name prefix" = "Prefiks nama elemen"
+"Export library as Lit" = "Ekspor pustaka sebagai Lit"
+"Export package" = "Ekspor paket"
+"Files" = "File"
+"Light mode name" = "Nama mode terang"
+"Lowercase letters, digits and hyphens, up to 20 characters" = "Huruf kecil, angka, dan tanda hubung, maksimal 20 karakter"
+"Notes" = "Catatan"
 "Relative to" = "Relatif terhadap"
+"This file has no components to export" = "File ini tidak memiliki component untuk diekspor"
+"Token prefix" = "Prefiks token"
 "Trigger layer" = "Layer pemicu"
 "Whole screen" = "Seluruh layar"
 
@@ -1746,11 +1757,14 @@ status = "draft — needs native review"
 "{n} removed" = { other = "{n} dihapus" }
 "{n} replies" = { other = "{n} balasan" }
 "{n} rows" = { other = "{n} baris" }
+"{n} skipped" = { other = "{n} dilewati" }
 "{n} styles" = { other = "{n} gaya" }
+"{n} unchanged" = { other = "{n} tidak berubah" }
 "{n} variables" = { other = "{n} variabel" }
 "{n} votes" = { other = "{n} suara" }
 "{n} votes left" = { other = "Sisa {n} suara" }
 "{n} weeks ago" = { other = "{n} minggu lalu" }
+"{n} written" = { other = "{n} ditulis" }
 "{n} years ago" = { other = "{n} tahun lalu" }
 "{n}d" = "{n} hr"
 "{n}h" = "{n} j"
@@ -1936,6 +1950,8 @@ status = "draft — needs native review"
 "effect.remove" = "Hapus efek"
 "effect.set" = "Atur efek"
 "export.add" = "Tambah pengaturan ekspor"
+"export.lit" = "Ekspor pustaka sebagai Lit"
+"export.litWindow" = "Ekspor pustaka sebagai Lit"
 "export.remove" = "Hapus pengaturan ekspor"
 "export.update" = "Edit pengaturan ekspor"
 "file.close" = "Tutup tab"

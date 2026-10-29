@@ -73,6 +73,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Add variant" = "ვარიანტის დამატება"
 "Add variant with a new value" = "ვარიანტის დამატება ახალი მნიშვნელობით"
 "Added" = "დამატებულია"
+"Added because another component uses it" = "დამატებულია, რადგან სხვა კომპონენტი იყენებს"
 "Added the library \"{name}\"" = "ბიბლიოთეკა „{name}“ დამატებულია"
 "Adding to {name}" = "დამატება: {name}"
 "Adjust" = "კორექცია"
@@ -365,6 +366,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Custom size" = "მორგებული ზომა"
 "Cut" = "ამოჭრა"
 "Dark" = "ბნელი"
+"Dark mode name" = "ბნელი რეჟიმის სახელი"
 "Darken" = "ჩამუქება"
 "Dash" = "ტირე"
 "Dashboard" = "სამართავი დაფა"
@@ -461,6 +463,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Effects" = "ეფექტები"
 "Curved" = "მრუდი"
 "Elbow" = "კუთხოვანი"
+"Element name prefix" = "ელემენტების სახელების პრეფიქსი"
 "Ellipse" = "ელიფსი"
 "Ellipses" = "ელიფსები"
 "Else" = "სხვა შემთხვევაში"
@@ -490,6 +493,8 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Export" = "ექსპორტირება"
 "Export all" = "ყველაფრის ექსპორტირება"
 "Export frames and layers as PNG, JPG, SVG or PDF" = "ჩარჩოები და შრეები PNG, JPG, SVG ან PDF ფორმატში"
+"Export library as Lit" = "ბიბლიოთეკის ექსპორტი Lit-ად"
+"Export package" = "პაკეტის ექსპორტი"
 "Export page as PNG" = "გვერდის PNG ფაილად ექსპორტირება"
 "Export settings" = "ექსპორტის პარამეტრები"
 "Export variables" = "ცვლადების ექსპორტირება"
@@ -517,6 +522,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "File name" = "ფაილის სახელი"
 "File not found" = "ფაილი ვერ მოიძებნა"
 "File published" = "ფაილი გამოქვეყნდა"
+"Files" = "ფაილები"
 "Files aren't end-to-end encrypted: the server's operator can read them." = "ფაილები ბოლომდე არ არის დაშიფრული: სერვერის ოპერატორს შეუძლია მათი წაკითხვა."
 "Files nobody opens for {n} days are deleted." = { one = "ფაილები, რომლებსაც არავინ ხსნის, იშლება. დღე: {n}.", other = "ფაილები, რომლებსაც არავინ ხსნის, იშლება. დღე: {n}." }
 "Fill" = "შევსება"
@@ -740,6 +746,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Library: click to expand" = "ბიბლიოთეკა: დაწკაპეთ გასაშლელად"
 "Library: its variables are read-only here; edit them in the library file and publish it" = "ბიბლიოთეკა: მისი ცვლადები აქ მხოლოდ წასაკითხია; შეცვალეთ ისინი ბიბლიოთეკის ფაილში და გამოაქვეყნეთ"
 "Light" = "ღია"
+"Light mode name" = "ღია რეჟიმის სახელი"
 "Lighten" = "გაღიავება"
 "Light|glass" = "ღია"
 "Line" = "ხაზი"
@@ -767,6 +774,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Lock/Unlock" = "ჩაკეტვა/განბლოკვა"
 "Locked" = "ჩაკეტილი"
 "Lowercase" = "პატარა ასოები"
+"Lowercase letters, digits and hyphens, up to 20 characters" = "მცირე ასოები, ციფრები და დეფისები, არაუმეტეს 20 სიმბოლო"
 "Luminance" = "სიკაშკაშე"
 "Luminosity" = "ნათება"
 "Main" = "მთავარი"
@@ -910,6 +918,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Not read yet" = "ჯერ არ არის წაკითხული"
 "Not shared" = "არ არის გაზიარებული"
 "Note {n}" = "შენიშვნა {n}"
+"Notes" = "შენიშვნები"
 "Nothing changed since this was marked ready for dev." = "მას შემდეგ, რაც მზად დეველოპერისთვის მოინიშნა, არაფერი შეცვლილა."
 "Nothing here yet. Set a frame's status to list it." = "აქ ჯერ არაფერია. ჩარჩოს სიაში გამოსაჩენად მიანიჭეთ სტატუსი."
 "Nothing online yet. Use Share on a file to put it online and it is listed here." = "ონლაინ ჯერ არაფერია. ფაილის ონლაინ განსათავსებლად გამოიყენეთ „გაზიარება“ და ის აქ გამოჩნდება."
@@ -1437,6 +1446,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "This computer remembers the owner token, so the file can be managed from the home screen's Online list. Copy it to manage the file from somewhere else: it is a password for this file and won't be shown again." = "ეს კომპიუტერი იმახსოვრებს მფლობელის ტოკენს, ამიტომ ფაილის მართვა საწყისი ეკრანის „ონლაინ“ სიიდან შეიძლება. ფაილის სხვა ადგილიდან სამართავად დააკოპირეთ ის: ეს ამ ფაილის პაროლია და აღარ გამოჩნდება."
 "This condition is edited as an expression" = "ეს პირობა ექსპრესიად რედაქტირდება"
 "This file" = "ეს ფაილი"
+"This file has no components to export" = "ამ ფაილში არ არის საექსპორტო კომპონენტები"
 "This file has unsaved changes" = "ამ ფაილს შეუნახავი ცვლილებები აქვს"
 "This file uses fonts that aren't installed on this computer. Their text is drawn in a fallback font until you install them." = "ეს ფაილი იყენებს შრიფტებს, რომლებიც ამ კომპიუტერზე დაინსტალირებული არ არის. მათი ტექსტი სათადარიგო შრიფტით გამოისახება, სანამ მათ არ დააინსტალირებთ."
 "This file is on {server}, open only to you. Share it to let others in with a new code." = "ეს ფაილი {server}-ზეა და მხოლოდ თქვენთვისაა ღია. გააზიარეთ, რომ სხვები ახალი კოდით შემოუშვათ."
@@ -1458,6 +1468,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Toggle" = "გადართვა"
 "Toggle light/dark theme" = "ღია/ბნელი თემის გადართვა"
 "Toggle visibility" = "ხილვადობის ჩართვა/გამორთვა"
+"Token prefix" = "ტოკენების პრეფიქსი"
 "Tools" = "ხელსაწყოები"
 "Top" = "ზემოთ"
 "Top & bottom" = "ზემოთ და ქვემოთ"
@@ -1779,12 +1790,15 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "{n} removed" = { one = "წაშლილია: {n}", other = "წაშლილია: {n}" }
 "{n} replies" = { one = "პასუხი: {n}", other = "პასუხი: {n}" }
 "{n} rows" = { one = "სტრიქონი: {n}", other = "სტრიქონი: {n}" }
+"{n} skipped" = { one = "გამოტოვებულია: {n}", other = "გამოტოვებულია: {n}" }
 "{n} styles" = { one = "სტილი: {n}", other = "სტილი: {n}" }
 "{n} text layers" = { one = "ტექსტის შრე: {n}", other = "ტექსტის შრე: {n}" }
+"{n} unchanged" = { one = "უცვლელია: {n}", other = "უცვლელია: {n}" }
 "{n} variables" = { one = "ცვლადი: {n}", other = "ცვლადი: {n}" }
 "{n} votes" = { one = "ხმა: {n}", other = "ხმა: {n}" }
 "{n} votes left" = { one = "დარჩენილი ხმა: {n}", other = "დარჩენილი ხმა: {n}" }
 "{n} weeks ago" = { one = "{n} კვირის წინ", other = "{n} კვირის წინ" }
+"{n} written" = { one = "ჩაწერილია: {n}", other = "ჩაწერილია: {n}" }
 "{n} years ago" = { one = "{n} წლის წინ", other = "{n} წლის წინ" }
 "{n}d" = "{n} დღ"
 "{n}h" = "{n} სთ"
@@ -1971,6 +1985,8 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "effect.remove" = "ეფექტის წაშლა"
 "effect.set" = "ეფექტის დაყენება"
 "export.add" = "ექსპორტის პარამეტრის დამატება"
+"export.lit" = "ბიბლიოთეკის ექსპორტი Lit-ად"
+"export.litWindow" = "ბიბლიოთეკის ექსპორტი Lit-ად"
 "export.remove" = "ექსპორტის პარამეტრის წაშლა"
 "export.update" = "ექსპორტის პარამეტრის რედაქტირება"
 "file.close" = "ჩანართის დახურვა"

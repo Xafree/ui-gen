@@ -306,6 +306,7 @@ pub static KEYS: &[Binding] = &[
     k(Edit, "edit.pasteProperties", &["Alt+Cmd+V"]),
     k(Edit, "edit.copyAsPng", &["Shift+Cmd+C"]),
     k(Edit, "file.export", &["Shift+Cmd+E"]),
+    k(Edit, "export.litWindow", &["Alt+Shift+Cmd+E"]),
     k(Edit, "file.import", &["Shift+Cmd+I"]),
     // Transform
     k(Transform, "object.flipH", &["Shift+H"]),
