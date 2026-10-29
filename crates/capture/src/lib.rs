@@ -26,4 +26,6 @@ fn error(kind: CaptureErrorKind, message: impl Into<String>) -> CaptureError {
 #[cfg(test)]
 mod locate_tests;
 #[cfg(test)]
+mod real_tests;
+#[cfg(test)]
 mod service_tests;

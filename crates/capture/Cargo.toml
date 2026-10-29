@@ -11,3 +11,6 @@ workspace = true
 [dependencies]
 figcraft-engine = { workspace = true }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+figcraft-dom = { workspace = true }
