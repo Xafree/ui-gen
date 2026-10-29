@@ -5,11 +5,11 @@ use figcraft_doc::{Document, NodeId, NodeKind};
 use serde_json::{Value, json};
 
 use super::package::{valid_name, valid_version};
-use super::{ExportOptions, plan};
+use super::{ExportOptions, plan, write};
 use crate::cmd::CommandSpec;
 use crate::lit::{LitOptions, valid_prefix};
 use crate::params::{get, id_of};
-use crate::{EngineError, Result, bad, spec};
+use crate::{Result, bad, spec};
 
 const CMD: &str = "export.lit";
 
@@ -18,7 +18,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "export.lit",
             "Export library as Lit",
-            "{ids? (components and sets; default all), prefix?: \"ui-\" (custom element names), tokenPrefix? (custom properties; default the prefix without hyphens), collections? (names or ids; default all), lightMode?, darkMode?, packageName?: \"uigen-lib\", version?: \"0.1.0\"} → {ready, components: [{id, name, tag, className, file, status: ok|empty|invalid|dependency, issues: [{code: empty|leadingDigit|duplicate|reserved|noHyphen|tooLong, message}]}], files: [{path, kind, bytes, text}], notes}. Writes nothing: `path` is refused while a component has an issue",
+            "{ids? (components and sets; default all), prefix?: \"ui-\" (custom element names), tokenPrefix? (custom properties; default the prefix without hyphens), collections? (names or ids; default all), lightMode?, darkMode?, packageName?: \"uigen-lib\", version?: \"0.1.0\", path? (folder to write the package to), force?: false (replace files that were edited by hand or not generated)} → {ready, components: [{id, name, tag, className, file, status: ok|empty|invalid|dependency, issues: [{code: empty|leadingDigit|duplicate|reserved|noHyphen|tooLong, message}]}], files: [{path, kind, bytes, text (without `path`)}], notes, written?, unchanged?, kept?, skipped?: [{path, reason: edited|not-generated}], stale?}. Without `path` nothing is written; `path` is refused while a component has an issue, and keeps `.uigen/export.json`, a manifest of the generated files, to tell its files from the ones you add",
             false,
             |s, p| run(s.doc()?, p)
         ),
@@ -93,14 +93,40 @@ fn options(doc: &Document, p: &Value) -> Result<ExportOptions> {
     Ok(out)
 }
 
+fn flag(p: &Value, key: &str) -> Result<bool> {
+    match get(p, key) {
+        None => Ok(false),
+        Some(Value::Bool(b)) => Ok(*b),
+        Some(_) => Err(bad(CMD, format!("`{key}` must be true or false"))),
+    }
+}
+
 fn run(doc: &Document, p: &Value) -> Result<Value> {
     let plan = plan(doc, &options(doc, p)?);
-    if text(p, "path")?.is_some() {
-        if !plan.ready() {
+    let force = flag(p, "force")?;
+    let report = match text(p, "path")? {
+        None => None,
+        Some(_) if !plan.ready() => {
             return Err(bad(CMD, format!("nothing was written; fix these components first: {}", plan.blockers().join(", "))));
         }
-        return Err(EngineError::Disabled(CMD.to_string(), "writing the package to a folder is not available yet".to_string()));
+        Some(dir) => Some(write(&plan, &dir, force)?),
+    };
+    let files: Vec<Value> = plan
+        .files
+        .iter()
+        .map(|f| match report {
+            None => json!({"path": f.path, "kind": f.kind, "bytes": f.text.len(), "text": f.text}),
+            Some(_) => json!({"path": f.path, "kind": f.kind, "bytes": f.text.len()}),
+        })
+        .collect();
+    let mut out = json!({"ready": plan.ready(), "components": plan.components, "files": files});
+    let mut notes = plan.notes;
+    if let (Some(report), Some(all)) = (report, out.as_object_mut()) {
+        notes.extend(report.notes.iter().cloned());
+        if let Ok(Value::Object(done)) = serde_json::to_value(&report) {
+            all.extend(done);
+        }
     }
-    let files: Vec<Value> = plan.files.iter().map(|f| json!({"path": f.path, "kind": f.kind, "bytes": f.text.len(), "text": f.text})).collect();
-    Ok(json!({"ready": plan.ready(), "components": plan.components, "files": files, "notes": plan.notes}))
+    out["notes"] = json!(notes);
+    Ok(out)
 }

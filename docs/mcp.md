@@ -1527,7 +1527,7 @@ permissions: without it nothing is downloaded); `plugin.directory.publish {path 
   {id?, language?}` returns the parts: `{component, name, set, properties: [{name, param, type,
   default, value? (instances)}], definition, usage? (instances)}`.
 - **Export as Lit:** `export.lit {ids?, prefix?, tokenPrefix?, collections?, lightMode?, darkMode?,
-  packageName?, version?}` plans a Lit package without touching the document: `{ready, components: [{id, name, tag,
+  packageName?, version?, path?, force?}` plans a Lit package without touching the document: `{ready, components: [{id, name, tag,
   className, file, status: ok|empty|invalid|dependency, issues: [{code, message}]}], files: [{path, kind, bytes, text}],
   notes}`. `ids` takes components and component sets (default: all of them); a component that draws another is
   exported with it (`dependency`, noted `dependency-added`), a component with nothing in it is `empty` and has no file. A name
@@ -1535,8 +1535,17 @@ permissions: without it nothing is downloaded); `plugin.directory.publish {path 
   `tooLong`) and `ready` is false. The files are `components/<tag>.ts`, `tokens/tokens.css`, `index.ts`,
   `package.json` (sorted keys), `tsconfig.json` and `README.md`, the same text on every call. `prefix` and `tokenPrefix` are lowercase
   letters, digits and hyphens; `packageName` an npm name (`@scope/name` allowed); `version` a semantic version. A `path` is
-  refused while a component has an issue (nothing is written, the error names the components); writing to a folder
-  is not available yet. `export.litWindow {}` opens the export window.
+  refused while a component has an issue (nothing is written, the error names the components). `export.litWindow {}`
+  opens the export window.
+  With a `path` the package is written to that folder (created when missing, inside the automation write roots; not in
+  the browser) and `files` have no `text`. The answer adds `written`, `unchanged`, `kept` (files the export did not
+  generate, left as they are, hand-made ones included), `skipped: [{path, reason}]` and `stale`, every path relative
+  to the folder with `/`. `.uigen/export.json` (`{version: 1, generator: "uigen-lit", files: [{path, sha256,
+  component?}]}`, sorted, written last) lists what the export generated. A listed file nobody changed is replaced, or
+  `unchanged` when identical; a listed file edited by hand is `skipped` as `edited`; a file the manifest does not
+  list under a generated name is `skipped` as `not-generated`; `force: true` replaces both. A component that is
+  gone leaves its file in place and it is `stale`; nothing is ever deleted. A manifest that is unreadable or of
+  another version counts as absent: nothing existing is replaced without `force`, and a `manifest-ignored` note says so.
 - **Code connect:** link a component (a variant links its set) to the code component it is built
   as, per language (`react`, `leptos`, `vue`, `swiftui`, `compose`, `arkui`): `codeConnect.set {id?, language?, importPath?,
   name?, template?}` (undoable; fields left out keep their value; the defaults are the generated
