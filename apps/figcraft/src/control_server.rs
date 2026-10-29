@@ -15,7 +15,6 @@ type CtxSlot = Arc<Mutex<Option<egui::Context>>>;
 
 const MAX_LINE: usize = 32 * 1024 * 1024;
 const MAX_AUTH_LINE: usize = 1024;
-const TOKEN_BYTES: usize = 32;
 const MAX_CONNECTIONS: usize = 8;
 const MAX_QUEUED_REQUESTS: usize = 8;
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -67,11 +66,10 @@ pub fn drain_queue(queue: &Queue, target: &mut Vec<ControlRequest>) {
 }
 
 fn generate_token() -> String {
-    let mut bytes = [0u8; TOKEN_BYTES];
-    if getrandom::fill(&mut bytes).is_err() {
-        return String::new();
-    }
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    figcraft_collab_net::token::secret_256_hex().unwrap_or_else(|e| {
+        log::error!("control server: can't make a session token: {e}");
+        String::new()
+    })
 }
 
 fn token_matches(expected: &str, given: &str) -> bool {
