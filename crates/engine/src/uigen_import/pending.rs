@@ -1,0 +1,161 @@
+//! The imports in progress. An import owns its capture jobs: the `inspect` job (whose id the command
+//! returned and the final event carries) and the renders it submits when `inspect` is back. One failed
+//! job ends it; the jobs still running are skipped when they come back.
+
+use std::collections::BTreeMap;
+
+use figcraft_doc::NodeId;
+use figcraft_dom::Snapshot;
+use serde_json::Value;
+
+use super::assemble::{self, Finished, Variant};
+use super::plan::{Cell, Plan, State, Theme, plan};
+use crate::Session;
+use crate::capture::{CaptureError, CaptureErrorKind, CaptureEvent, CaptureJob, CaptureOutcome, JobId};
+
+pub(crate) const COMMAND: &str = "uigen.importComponent";
+
+pub(crate) struct Request {
+    pub root: String,
+    pub package: String,
+    pub version: String,
+    pub component: String,
+    pub style_prop: String,
+    pub size_prop: String,
+    pub styles: Option<Vec<String>>,
+    pub sizes: Option<Vec<String>>,
+    pub states: Option<Vec<State>>,
+    pub themes: Vec<Theme>,
+}
+
+pub(crate) struct Destination {
+    pub uid: u64,
+    pub parent: NodeId,
+    pub at: Option<(f64, f64)>,
+}
+
+struct Rendering {
+    cells: Vec<Cell>,
+    rows: usize,
+    columns: usize,
+    waiting: BTreeMap<JobId, (usize, Theme)>,
+    snapshots: Vec<Option<Snapshot>>,
+}
+
+enum Stage {
+    Inspecting,
+    Rendering(Rendering),
+}
+
+pub(crate) struct PendingImport {
+    head: JobId,
+    jobs: Vec<JobId>,
+    request: Request,
+    destination: Destination,
+    stage: Stage,
+}
+
+/// Submit the `inspect` job of `request`; its id is the import's.
+pub(crate) fn start(s: &mut Session, request: Request, destination: Destination) -> Result<JobId, CaptureError> {
+    let job = CaptureJob::Inspect { root: request.root.clone(), package: request.package.clone() };
+    let head = s.submit_capture(COMMAND, &request.package, job)?;
+    s.capture.imports.push(PendingImport { head, jobs: vec![head], request, destination, stage: Stage::Inspecting });
+    Ok(head)
+}
+
+/// Take in the result of `job`. An import that has all its renders writes the set; the event comes
+/// out when the import ends, in success or failure.
+pub(crate) fn advance(s: &mut Session, job: JobId, outcome: CaptureOutcome) -> Option<CaptureEvent> {
+    let position = s.capture.imports.iter().position(|pending| pending.jobs.contains(&job))?;
+    let mut pending = s.capture.imports.remove(position);
+    let result = match pending.receive(s, job, outcome) {
+        Ok(None) => {
+            s.capture.imports.insert(position, pending);
+            return None;
+        }
+        Ok(Some(finished)) => assemble::write(s, &pending.request, &pending.destination, finished),
+        Err(error) => Err(error),
+    };
+    let ended = result.as_ref().map(|_| ()).map_err(|error| error.message.clone());
+    for id in &pending.jobs {
+        s.capture.finish(*id, if *id == pending.head { ended.clone() } else { Err("skipped: the import ended".to_string()) });
+    }
+    Some(CaptureEvent { job: pending.head, command: COMMAND.to_string(), package: pending.request.package.clone(), outcome: result })
+}
+
+fn failure(step: &str, cause: CaptureError) -> CaptureError {
+    CaptureError { kind: cause.kind, message: format!("{step}: {}", cause.message) }
+}
+
+fn snapshot_of(result: &Value) -> Result<Snapshot, String> {
+    let snapshot = result.get("snapshot").filter(|snapshot| snapshot.is_object()).ok_or("the result has no snapshot")?;
+    let text = serde_json::to_string(snapshot).map_err(|e| e.to_string())?;
+    figcraft_dom::parse_snapshot(&text).map_err(|e| e.to_string())
+}
+
+impl PendingImport {
+    fn receive(&mut self, s: &mut Session, job: JobId, outcome: CaptureOutcome) -> Result<Option<Finished>, CaptureError> {
+        if job != self.head {
+            s.capture.finish(job, outcome.as_ref().map(|_| ()).map_err(|error| error.message.clone()));
+        }
+        match &mut self.stage {
+            Stage::Inspecting => {
+                let inspected = outcome.map_err(|cause| failure("inspect", cause))?;
+                let rendering = self.submit_renders(s, plan(&self.request, &inspected)?)?;
+                self.stage = Stage::Rendering(rendering);
+                Ok(None)
+            }
+            Stage::Rendering(rendering) => {
+                let Some((index, theme)) = rendering.waiting.remove(&job) else { return Ok(None) };
+                let Some(cell) = rendering.cells.get(index) else { return Ok(None) };
+                let step = format!("render {} {} {}", self.request.component, cell.label, theme.render());
+                let rendered = outcome.map_err(|cause| failure(&step, cause))?;
+                let snapshot =
+                    snapshot_of(&rendered).map_err(|cause| CaptureError { kind: CaptureErrorKind::Protocol, message: format!("{step}: {cause}") })?;
+                if self.request.themes.first() == Some(&theme)
+                    && let Some(slot) = rendering.snapshots.get_mut(index)
+                {
+                    *slot = Some(snapshot);
+                }
+                if rendering.waiting.is_empty() { rendering.finish().map(Some) } else { Ok(None) }
+            }
+        }
+    }
+
+    fn submit_renders(&mut self, s: &mut Session, plan: Plan) -> Result<Rendering, CaptureError> {
+        let mut waiting = BTreeMap::new();
+        for (index, cell) in plan.cells.iter().enumerate() {
+            for theme in &self.request.themes {
+                let job = CaptureJob::Render {
+                    root: self.request.root.clone(),
+                    package: self.request.package.clone(),
+                    component: self.request.component.clone(),
+                    props: cell.props.clone(),
+                    state: cell.state.render().to_string(),
+                    theme: theme.render().to_string(),
+                };
+                let id = s.submit_capture(COMMAND, &self.request.package, job)?;
+                self.jobs.push(id);
+                waiting.insert(id, (index, *theme));
+            }
+        }
+        let snapshots = plan.cells.iter().map(|_| None).collect();
+        Ok(Rendering { cells: plan.cells, rows: plan.rows, columns: plan.columns, waiting, snapshots })
+    }
+}
+
+impl Rendering {
+    fn finish(&mut self) -> Result<Finished, CaptureError> {
+        let cells = std::mem::take(&mut self.cells);
+        let snapshots = std::mem::take(&mut self.snapshots);
+        let mut variants = Vec::with_capacity(cells.len());
+        for (cell, snapshot) in cells.into_iter().zip(snapshots) {
+            let snapshot = snapshot.ok_or_else(|| CaptureError {
+                kind: CaptureErrorKind::Internal,
+                message: format!("{}: no render came back for the theme the layers are made from", cell.label),
+            })?;
+            variants.push(Variant { label: cell.label, row: cell.row, column: cell.column, snapshot });
+        }
+        Ok(Finished { variants, rows: self.rows, columns: self.columns })
+    }
+}

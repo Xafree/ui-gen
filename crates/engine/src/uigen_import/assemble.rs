@@ -1,0 +1,146 @@
+//! Writing an import into the document: every variant translated from its snapshot, combined in a
+//! component set laid out as a grid, and the variable collection of the package, all in one undo step.
+
+use figcraft_doc::{Document, NodeId, NodeKind};
+use figcraft_dom::{Snapshot, TranslateOptions};
+use figcraft_geom::Affine;
+use serde_json::{Value, json};
+
+use super::pending::{COMMAND, Destination, Request};
+use crate::capture::{CaptureError, CaptureErrorKind};
+use crate::params::id_of;
+use crate::{EngineError, Result, Session, bad};
+
+const GAP: f64 = 20.0;
+const LABEL: &str = "Import component";
+const SOURCE_KEY: &str = "uigen.source";
+const MAX_WARNINGS: usize = 200;
+
+pub(super) struct Variant {
+    pub label: String,
+    pub row: usize,
+    pub column: usize,
+    pub snapshot: Snapshot,
+}
+
+pub(super) struct Finished {
+    pub variants: Vec<Variant>,
+    pub rows: usize,
+    pub columns: usize,
+}
+
+fn failed(kind: CaptureErrorKind, message: impl Into<String>) -> CaptureError {
+    CaptureError { kind, message: message.into() }
+}
+
+/// Write the import into the tab it was started in, whichever tab is in front now. Nothing is
+/// written when that tab is gone or the write fails.
+pub(super) fn write(s: &mut Session, request: &Request, destination: &Destination, finished: Finished) -> std::result::Result<Value, CaptureError> {
+    let Some(tab) = s.docs.iter().position(|ds| ds.uid == destination.uid) else {
+        return Err(failed(CaptureErrorKind::InvalidRequest, "the document was closed before the import finished: nothing was imported"));
+    };
+    let in_front = s.active;
+    s.grouped(LABEL, |s| {
+        s.active = tab;
+        let written = build(s, request, destination, &finished);
+        s.active = in_front;
+        written
+    })
+    .map_err(|e: EngineError| failed(CaptureErrorKind::Internal, format!("the layers could not be written: {e}")))
+}
+
+fn build(s: &mut Session, request: &Request, destination: &Destination, finished: &Finished) -> Result<Value> {
+    let parent = destination.parent;
+    let page = s.page()?;
+    let allowed = s.doc()?.node(parent).is_some_and(|node| node.is_page() || matches!(node.kind, NodeKind::Frame | NodeKind::Component { .. }));
+    if !allowed {
+        return Err(bad(COMMAND, "the layer the import was started in is gone or is no longer a frame or a page"));
+    }
+    figcraft_text::scan_system_fonts();
+    let (x, y) = origin(s.doc()?, parent, page, destination.at);
+    let collection = collection(s, request)?;
+    let mut warnings: Vec<String> = Vec::new();
+    let mut placed: Vec<(NodeId, usize, usize)> = Vec::with_capacity(finished.variants.len());
+    for variant in &finished.variants {
+        let translated = figcraft_dom::translate_snapshot(s.doc_mut()?, &variant.snapshot, parent, 0.0, 0.0, &TranslateOptions::default())
+            .map_err(|e| bad(COMMAND, format!("{}: {e}", variant.label)))?;
+        for warning in translated.warnings {
+            if warnings.len() < MAX_WARNINGS && !warnings.contains(&warning) {
+                warnings.push(warning);
+            }
+        }
+        let made = s.execute("component.create", &json!({"ids": [translated.root]}))?;
+        let id = id_of(&made["id"]).ok_or_else(|| bad(COMMAND, format!("{}: the variant could not become a component", variant.label)))?;
+        s.doc_mut()?.get_mut(id)?.name.clone_from(&variant.label);
+        placed.push((id, variant.row, variant.column));
+    }
+    let ids: Vec<NodeId> = placed.iter().map(|(id, ..)| *id).collect();
+    let combined = s.execute("component.combineVariants", &json!({"ids": ids}))?;
+    let set = id_of(&combined["id"]).ok_or_else(|| bad(COMMAND, "the variants could not be combined into a component set"))?;
+    lay_out(s.doc_mut()?, set, &placed, (finished.rows, finished.columns), (x, y))?;
+    let node = s.doc_mut()?.get_mut(set)?;
+    node.name.clone_from(&request.component);
+    let source = json!({"package": request.package, "version": request.version, "component": request.component});
+    node.plugin_data.insert(SOURCE_KEY.to_string(), source.to_string());
+    s.set_selection(vec![set]);
+    Ok(json!({"set": set, "collection": collection, "variants": placed.len(), "warnings": warnings}))
+}
+
+fn origin(doc: &Document, parent: NodeId, page: NodeId, at: Option<(f64, f64)>) -> (f64, f64) {
+    match at {
+        Some(at) => at,
+        None if parent == page => doc.page_content_bounds(page).map_or((0.0, 0.0), |bounds| (bounds.x1 + 4.0 * GAP, bounds.y0)),
+        None => (0.0, 0.0),
+    }
+}
+
+/// The variable collection of the package at this version: the one the document has, else a new one
+/// with a mode per theme.
+fn collection(s: &mut Session, request: &Request) -> Result<String> {
+    let name = format!("{} {}", request.package, request.version);
+    if let Some(existing) = s.doc()?.variables.collections.iter().find(|collection| collection.name == name) {
+        return Ok(existing.id.clone());
+    }
+    let modes: Vec<&str> = request.themes.iter().map(|theme| theme.mode()).collect();
+    let made = s.execute("variable.createCollection", &json!({"name": name, "modes": modes}))?;
+    made["id"].as_str().map(str::to_string).ok_or_else(|| bad(COMMAND, "the variable collection could not be created"))
+}
+
+fn finite(size: f64) -> f64 {
+    if size.is_finite() { size.max(0.0) } else { 0.0 }
+}
+
+/// Starts of the cells along one axis, then the total: a gap before each cell and after the last.
+fn starts(sizes: &[f64]) -> Vec<f64> {
+    let mut starts = vec![GAP];
+    for size in sizes {
+        starts.push(starts.last().copied().unwrap_or(GAP) + size + GAP);
+    }
+    starts
+}
+
+/// Columns are the widest variant of their column, rows the tallest of their row; each variant sits
+/// at the top left of its cell and the set wraps them all.
+fn lay_out(doc: &mut Document, set: NodeId, placed: &[(NodeId, usize, usize)], (rows, columns): (usize, usize), (x, y): (f64, f64)) -> Result<()> {
+    let mut widths = vec![0.0_f64; columns];
+    let mut heights = vec![0.0_f64; rows];
+    for (id, row, column) in placed {
+        let node = doc.get(*id)?;
+        if let Some(width) = widths.get_mut(*column) {
+            *width = width.max(finite(node.width));
+        }
+        if let Some(height) = heights.get_mut(*row) {
+            *height = height.max(finite(node.height));
+        }
+    }
+    let (xs, ys) = (starts(&widths), starts(&heights));
+    for (id, row, column) in placed {
+        let (Some(left), Some(top)) = (xs.get(*column), ys.get(*row)) else { continue };
+        doc.get_mut(*id)?.transform = Affine::translate((*left, *top));
+    }
+    let node = doc.get_mut(set)?;
+    node.width = xs.last().copied().unwrap_or(GAP);
+    node.height = ys.last().copied().unwrap_or(GAP);
+    node.transform = Affine::translate((x, y));
+    Ok(())
+}

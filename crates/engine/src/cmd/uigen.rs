@@ -34,14 +34,14 @@ fn coordinate(p: &Value, key: &str) -> Result<f64> {
     }
 }
 
-fn parent_of(s: &Session, p: &Value) -> Result<figcraft_doc::NodeId> {
+pub(super) fn parent_of(s: &Session, cmd: &str, p: &Value) -> Result<figcraft_doc::NodeId> {
     let Some(v) = get(p, "parent") else { return s.page() };
-    let id = id_of(v).ok_or_else(|| bad(IMPORT_DOM, "`parent` must be a layer id"))?;
-    let node = s.doc()?.node(id).ok_or_else(|| bad(IMPORT_DOM, format!("`parent` {id} does not exist")))?;
+    let id = id_of(v).ok_or_else(|| bad(cmd, "`parent` must be a layer id"))?;
+    let node = s.doc()?.node(id).ok_or_else(|| bad(cmd, format!("`parent` {id} does not exist")))?;
     if node.is_page() || matches!(node.kind, NodeKind::Frame | NodeKind::Component { .. }) {
         return Ok(id);
     }
-    Err(bad(IMPORT_DOM, format!("`parent` {id} is a {}: only a frame or a page can receive imported layers", node.kind.type_name())))
+    Err(bad(cmd, format!("`parent` {id} is a {}: only a frame or a page can receive imported layers", node.kind.type_name())))
 }
 
 fn full_translation(p: &Value) -> Result<bool> {
@@ -53,7 +53,7 @@ fn full_translation(p: &Value) -> Result<bool> {
 
 fn import_dom(s: &mut Session, p: &Value) -> Result<Value> {
     let snapshot = figcraft_dom::parse_snapshot(&snapshot_text(p)?).map_err(|e| bad(IMPORT_DOM, e.to_string()))?;
-    let parent = parent_of(s, p)?;
+    let parent = parent_of(s, IMPORT_DOM, p)?;
     let x = coordinate(p, "x")?;
     let y = coordinate(p, "y")?;
     let full = full_translation(p)?;

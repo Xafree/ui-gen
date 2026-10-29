@@ -107,6 +107,7 @@ mod error;
 mod prefs;
 pub mod project;
 mod session;
+mod uigen_import;
 mod view_state;
 
 pub use derived::{changed_nodes, normalize};
