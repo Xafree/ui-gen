@@ -2,7 +2,9 @@
   "name": "uigen-sidecar",
   "version": "1.0.0",
   "description": "UIGEN capture service: installs npm UI libraries and captures their rendered DOM in Chromium",
-  "scripts": {},
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
   "type": "module",
   "private": true,
   "dependencies": {
