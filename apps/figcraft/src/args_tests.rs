@@ -1,6 +1,6 @@
 //! Command-line parsing: files, the control port and invite links.
 
-use crate::args::{Args, file_url_path, is_invite, parse};
+use crate::args::{Args, control_port, file_url_path, is_invite, parse, require_roots_for_control};
 
 fn args(a: &[&str]) -> Vec<String> {
     a.iter().map(ToString::to_string).collect()
@@ -71,4 +71,50 @@ fn file_urls_are_paths() {
     for bad in ["file://server/share/a.svg", "file:///broken%2", "file:///bad%zz", "file:///%FF", "file:", "fi", "ü€file:///x"] {
         assert_eq!(file_url_path(bad), None, "{bad}");
     }
+}
+
+// covers: K1
+#[test]
+fn the_control_port_comes_from_the_flag_then_the_environment() {
+    assert_eq!(control_port(&parse(&args(&["--control", "1"])), Some("2")), Some(1), "the flag wins");
+    assert_eq!(control_port(&parse(&args(&[])), Some("7980")), Some(7980));
+    assert_eq!(control_port(&parse(&args(&[])), Some("nope")), None);
+    assert_eq!(control_port(&parse(&args(&[])), None), None);
+}
+
+// covers: K1
+#[test]
+fn the_control_channel_refuses_to_start_without_file_roots() {
+    for given in [args(&["--control", "4242"]), args(&["--control=4242", "a.figcraft"])] {
+        let a = parse(&given);
+        let message = require_roots_for_control(control_port(&a, None), &a).unwrap_err();
+        for expected in ["--control", "--automation-read-root", "--automation-write-root"] {
+            assert!(message.contains(expected), "{expected} missing from: {message}");
+        }
+    }
+    // The port from FIGCRAFT_CONTROL_PORT is the same control channel.
+    let a = parse(&args(&["a.figcraft"]));
+    assert!(require_roots_for_control(control_port(&a, Some("4242")), &a).is_err());
+}
+
+// covers: K1
+#[test]
+fn the_control_channel_starts_once_it_has_a_root() {
+    for given in [
+        args(&["--control", "4242", "--automation-read-root", "in", "--automation-write-root", "out"]),
+        args(&["--control", "4242", "--automation-read-root=in"]),
+        args(&["--control", "4242", "--automation-write-root=out"]),
+    ] {
+        let a = parse(&given);
+        assert_eq!(require_roots_for_control(control_port(&a, None), &a), Ok(()), "{given:?}");
+    }
+    let a = parse(&args(&["--automation-write-root=out"]));
+    assert_eq!(require_roots_for_control(control_port(&a, Some("4242")), &a), Ok(()), "roots with the port from the environment");
+}
+
+// covers: K1
+#[test]
+fn without_a_control_port_no_roots_are_required() {
+    let a = parse(&args(&["a.figcraft"]));
+    assert_eq!(require_roots_for_control(control_port(&a, None), &a), Ok(()));
 }
