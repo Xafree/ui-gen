@@ -1,6 +1,7 @@
 import { closeBrowser } from './browser.mjs';
 import { inspect } from './inspect.mjs';
 import { install, uninstall } from './install.mjs';
+import * as playground from './playground.mjs';
 import { render } from './render.mjs';
 import { killRunningNpm, runNpm } from './run-npm.mjs';
 import { ServiceError, createLineReader, encodeLine, errorResponse, greeting, okResponse, parseRequest } from './protocol.mjs';
@@ -15,6 +16,13 @@ methods.set('install', (params) => install(params, { runNpm }));
 methods.set('uninstall', (params) => uninstall(params, { runNpm }));
 methods.set('inspect', (params) => inspect(params));
 methods.set('render', (params) => render(params));
+methods.set('playground.open', (params) => playground.open(params));
+methods.set('playground.setTemplate', (params) => playground.setTemplate(params));
+methods.set('playground.apply', (params) => playground.apply(params));
+methods.set('playground.resize', (params) => playground.resize(params));
+methods.set('playground.frame', (params) => playground.frame(params));
+methods.set('playground.input', (params) => playground.input(params));
+methods.set('playground.close', () => playground.close());
 
 const inFlight = new Set();
 let stopping = false;
