@@ -181,6 +181,7 @@ impl Session {
             }
             events.push(CaptureEvent { job, command, package, outcome });
         }
+        events.extend(uigen_import::resume(self));
         self.capture.forget_oldest_finished();
         events
     }

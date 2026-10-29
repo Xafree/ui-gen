@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use super::motion;
 use super::pending::{COMMAND, Destination, Request};
 use super::plan::State;
-use super::tokens::{self, VariantTokens};
+use super::tokens::{self, Theming, VariantTokens};
 use crate::capture::{CaptureError, CaptureErrorKind};
 use crate::params::id_of;
 use crate::{EngineError, Result, Session, bad};
@@ -34,6 +34,7 @@ pub(super) struct Finished {
     pub variants: Vec<Variant>,
     pub rows: usize,
     pub columns: usize,
+    pub warnings: Vec<String>,
 }
 
 fn failed(kind: CaptureErrorKind, message: impl Into<String>) -> CaptureError {
@@ -58,15 +59,14 @@ pub(super) fn write(s: &mut Session, request: &Request, destination: &Destinatio
 
 fn build(s: &mut Session, request: &Request, destination: &Destination, finished: &Finished) -> Result<Value> {
     let parent = destination.parent;
-    let page = s.page()?;
     let allowed = s.doc()?.node(parent).is_some_and(|node| node.is_page() || matches!(node.kind, NodeKind::Frame | NodeKind::Component { .. }));
     if !allowed {
         return Err(bad(COMMAND, "the layer the import was started in is gone or is no longer a frame or a page"));
     }
     figcraft_text::scan_system_fonts();
-    let (x, y) = origin(s.doc()?, parent, page, destination.at);
-    let collection = collection(s, request)?;
-    let mut warnings: Vec<String> = Vec::new();
+    let (x, y) = origin(s.doc()?, parent, destination.page, destination.at);
+    let (collection, added_modes) = collection(s, request)?;
+    let mut warnings: Vec<String> = finished.warnings.clone();
     let mut placed: Vec<(NodeId, usize, usize)> = Vec::with_capacity(finished.variants.len());
     let mut themed: Vec<VariantTokens> = Vec::with_capacity(finished.variants.len());
     for variant in &finished.variants {
@@ -98,7 +98,15 @@ fn build(s: &mut Session, request: &Request, destination: &Destination, finished
     node.name.clone_from(&request.component);
     let source = json!({"package": request.package, "version": request.version, "component": request.component});
     node.plugin_data.insert(SOURCE_KEY.to_string(), source.to_string());
-    tokens::apply(s, &collection, &request.themes, &themed)?;
+    for warning in tokens::apply(
+        s,
+        &Theming { collection: &collection, component: &request.component, added_modes: &added_modes, themes: &request.themes },
+        &themed,
+    )? {
+        if warnings.len() < MAX_WARNINGS && !warnings.contains(&warning) {
+            warnings.push(warning);
+        }
+    }
     let linked: Vec<motion::Variant> = finished
         .variants
         .iter()
@@ -132,16 +140,27 @@ fn origin(doc: &Document, parent: NodeId, page: NodeId, at: Option<(f64, f64)>) 
     }
 }
 
-/// The variable collection of the package at this version: the one the document has, else a new one
-/// with a mode per theme.
-fn collection(s: &mut Session, request: &Request) -> Result<String> {
+/// The variable collection of the package at this version and the ids of the modes this import had to
+/// add to it: the collection the document has, with a mode added for each theme it lacks, else a new
+/// one with a mode per theme.
+fn collection(s: &mut Session, request: &Request) -> Result<(String, Vec<String>)> {
     let name = format!("{} {}", request.package, request.version);
-    if let Some(existing) = s.doc()?.variables.collections.iter().find(|collection| collection.name == name) {
-        return Ok(existing.id.clone());
+    let existing = s.doc()?.variables.collections.iter().find(|collection| collection.name == name).cloned();
+    let Some(existing) = existing else {
+        let modes: Vec<&str> = request.themes.iter().map(|theme| theme.mode()).collect();
+        let made = s.execute("variable.createCollection", &json!({"name": name, "modes": modes}))?;
+        let id = made["id"].as_str().map(str::to_string).ok_or_else(|| bad(COMMAND, "the variable collection could not be created"))?;
+        return Ok((id, Vec::new()));
+    };
+    let mut added = Vec::new();
+    for theme in &request.themes {
+        if existing.modes.iter().any(|mode| mode.name == theme.mode()) {
+            continue;
+        }
+        let made = s.execute("variable.addMode", &json!({"collection": existing.id, "name": theme.mode()}))?;
+        added.push(made["id"].as_str().map(str::to_string).ok_or_else(|| bad(COMMAND, "the variable collection could not get its mode"))?);
     }
-    let modes: Vec<&str> = request.themes.iter().map(|theme| theme.mode()).collect();
-    let made = s.execute("variable.createCollection", &json!({"name": name, "modes": modes}))?;
-    made["id"].as_str().map(str::to_string).ok_or_else(|| bad(COMMAND, "the variable collection could not be created"))
+    Ok((existing.id, added))
 }
 
 fn finite(size: f64) -> f64 {

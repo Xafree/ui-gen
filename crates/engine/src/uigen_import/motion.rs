@@ -4,10 +4,10 @@
 
 use figcraft_doc::proto::{Action, Easing, Interaction, Transition, Trigger};
 use figcraft_doc::{Annotation, Document, NodeId};
-use figcraft_dom::{LayerFacts, TransitionFact};
+use figcraft_dom::{LayerFacts, NOTE_PREFIX, TransitionFact};
 
 use super::plan::State;
-use super::tokens::NOTE_PREFIX;
+
 use crate::Result;
 
 pub(super) struct Variant<'a> {

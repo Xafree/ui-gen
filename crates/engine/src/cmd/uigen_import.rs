@@ -9,7 +9,6 @@ use serde_json::{Value, json};
 
 use super::CommandSpec;
 use super::project_sources::{absolute_root, binding};
-use super::uigen::parent_of;
 use crate::file_access::{self, Access};
 use crate::params::{f64_of, get};
 use crate::uigen_import::{self, Destination, MAX_RENDERS, Request, State, Theme};
@@ -100,8 +99,17 @@ fn at(p: &Value) -> Result<Option<(f64, f64)>> {
     };
     match (coordinate("x")?, coordinate("y")?) {
         (None, None) => Ok(None),
-        (x, y) => Ok(Some((x.unwrap_or(0.0), y.unwrap_or(0.0)))),
+        (Some(x), Some(y)) => Ok(Some((x, y))),
+        _ => Err(bad(IMPORT, "x and y go together: give both or neither")),
     }
+}
+
+fn parent_of(s: &Session, p: &Value) -> Result<figcraft_doc::NodeId> {
+    let parent = super::uigen::parent_of(s, IMPORT, p)?;
+    if crate::assets::components::inside_instance(s.doc()?, parent) {
+        return Err(bad(IMPORT, format!("`parent` {parent} is inside an instance: layers can't be added to it")));
+    }
+    Ok(parent)
 }
 
 fn source_of(s: &Session, p: &Value) -> Result<(String, Source, String)> {
@@ -145,7 +153,7 @@ fn import_component(s: &mut Session, p: &Value) -> Result<Value> {
             ),
         ));
     }
-    let destination = Destination { uid: s.ds()?.uid, parent: parent_of(s, IMPORT, p)?, at: at(p)? };
+    let destination = Destination { uid: s.ds()?.uid, page: s.page()?, parent: parent_of(s, p)?, at: at(p)? };
     file_access::allow(Path::new(&project_root).join(WORK_DIR).join(CAPTURES_DIR), Access::Write).map_err(|e| bad(IMPORT, e.to_string()))?;
     let job = uigen_import::start(s, request, destination).map_err(|e| bad(IMPORT, e.message))?;
     Ok(json!({"job": job}))

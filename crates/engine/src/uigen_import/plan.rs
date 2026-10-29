@@ -91,6 +91,7 @@ pub(super) struct Cell {
 
 pub(super) struct Plan {
     pub cells: Vec<Cell>,
+    pub warnings: Vec<String>,
     pub rows: usize,
     pub columns: usize,
 }
@@ -135,8 +136,11 @@ fn props_of(inspected: &Value, request: &Request) -> Result<Vec<Prop>, CaptureEr
     Ok(listed.iter().take(MAX_PROPS).filter_map(prop_of).collect())
 }
 
-fn axis(prop: &str, given: Option<&[String]>, props: &[Prop]) -> Result<Vec<Option<String>>, CaptureError> {
+type Axis = (Vec<Option<String>>, Vec<String>);
+
+fn axis(prop: &str, given: Option<&[String]>, props: &[Prop], component: &str) -> Result<Axis, CaptureError> {
     let read = props.iter().find(|candidate| candidate.name == prop && candidate.kind == "enum").map(|candidate| candidate.values.as_slice());
+    let listed = props.iter().any(|candidate| candidate.name == prop);
     let chosen: Vec<String> = match (given, read) {
         (Some(given), Some(read)) => {
             if let Some(missing) = given.iter().find(|value| !read.contains(value)) {
@@ -145,14 +149,18 @@ fn axis(prop: &str, given: Option<&[String]>, props: &[Prop]) -> Result<Vec<Opti
             }
             given.to_vec()
         }
+        (Some(_), None) if !listed && !props.is_empty() => {
+            let known: Vec<&str> = props.iter().map(|candidate| candidate.name.as_str()).collect();
+            let message = format!("inspect: {component} has no prop `{prop}` (it has {})", known.join(", "));
+            return Err(refuse(CaptureErrorKind::InvalidRequest, message));
+        }
         (Some(given), None) => given.to_vec(),
         (None, Some(read)) => read.to_vec(),
         (None, None) => Vec::new(),
     };
-    if let Some(unusable) = chosen.iter().find(|value| !usable_value(value)) {
-        return Err(refuse(CaptureErrorKind::Protocol, format!("inspect: the value \"{unusable}\" of `{prop}` can't be part of a variant name")));
-    }
-    Ok(if chosen.is_empty() { vec![None] } else { chosen.into_iter().map(Some).collect() })
+    let (usable, unusable): (Vec<String>, Vec<String>) = chosen.into_iter().partition(|value| usable_value(value));
+    let warnings = unusable.iter().map(|value| format!("the value \"{value}\" of `{prop}` can't be part of a variant name: left out")).collect();
+    Ok((if usable.is_empty() { vec![None] } else { usable.into_iter().map(Some).collect() }, warnings))
 }
 
 fn label(style: Option<&String>, size: Option<&String>, state: State) -> String {
@@ -184,8 +192,8 @@ fn render_props(request: &Request, style: Option<&String>, size: Option<&String>
 /// The grid of variants: states across, styles then sizes down.
 pub(super) fn plan(request: &Request, inspected: &Value) -> Result<Plan, CaptureError> {
     let props = props_of(inspected, request)?;
-    let styles = axis(&request.style_prop, request.styles.as_deref(), &props)?;
-    let sizes = axis(&request.size_prop, request.sizes.as_deref(), &props)?;
+    let (styles, style_warnings) = axis(&request.style_prop, request.styles.as_deref(), &props, &request.component)?;
+    let (sizes, size_warnings) = axis(&request.size_prop, request.sizes.as_deref(), &props, &request.component)?;
     let has_loading = props.iter().any(|prop| prop.name == LOADING && prop.kind == "boolean");
     let states: Vec<State> = match &request.states {
         Some(chosen) if chosen.contains(&State::Loading) && !has_loading => {
@@ -218,5 +226,5 @@ pub(super) fn plan(request: &Request, inspected: &Value) -> Result<Plan, Capture
             }
         }
     }
-    Ok(Plan { cells, rows, columns: states.len() })
+    Ok(Plan { cells, warnings: [style_warnings, size_warnings].concat(), rows, columns: states.len() })
 }

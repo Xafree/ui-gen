@@ -6,14 +6,13 @@ use std::collections::BTreeMap;
 use std::collections::btree_map::Entry as MapEntry;
 
 use figcraft_doc::{Annotation, Collection, Document, NodeId, NodeKind, Variable, VariableType, VariableValue};
-use figcraft_dom::{LayerFacts, TokenFact, TokenValue};
+use figcraft_dom::{LayerFacts, NOTE_PREFIX, TokenFact, TokenValue};
 use serde_json::json;
 
 use super::pending::COMMAND;
 use super::plan::Theme;
 use crate::{Result, Session, bad};
 
-pub(super) const NOTE_PREFIX: &str = "UIGEN import: ";
 const PATH_SEPARATOR: &str = " / ";
 const AXES: usize = 3;
 const NUMBER_STEP: f64 = 1e-3;
@@ -23,6 +22,21 @@ pub(super) struct VariantTokens {
     pub layers: Vec<LayerFacts>,
     pub others: Vec<Vec<LayerFacts>>,
 }
+
+pub(super) struct Theming<'a> {
+    pub collection: &'a str,
+    pub component: &'a str,
+    pub added_modes: &'a [String],
+    pub themes: &'a [Theme],
+}
+
+struct Ctx<'a> {
+    owner: &'a Collection,
+    themes: &'a [Theme],
+    added: &'a [String],
+}
+
+const IDENTICAL_DARK: &str = "the dark render is identical to the light one: the library does not follow prefers-color-scheme";
 
 type Slot = (String, String);
 type Varying = BTreeMap<String, [bool; AXES]>;
@@ -69,21 +83,27 @@ impl Notes {
     }
 }
 
-/// Bind the layers of every variant to the variables of `collection`, creating the ones it lacks.
-/// `themes` are the modes the facts speak for, the first being the render the layers come from.
-pub(super) fn apply(s: &mut Session, collection: &str, themes: &[Theme], variants: &[VariantTokens]) -> Result<()> {
+/// Bind the layers of every variant to the variables of the collection, creating the ones it lacks and
+/// giving the existing ones a value in the modes this import added. `themes` are the modes the facts
+/// speak for, the first being the render the layers come from. Returns the warnings to report.
+pub(super) fn apply(s: &mut Session, theming: &Theming, variants: &[VariantTokens]) -> Result<Vec<String>> {
+    let Theming { collection, component, added_modes, themes } = *theming;
     let mut notes = Notes::default();
-    let entries = entries(s.doc()?, themes, variants, &mut notes);
+    let entries = entries(s.doc()?, component, themes, variants, &mut notes);
+    let identical = themes.len() == 2
+        && !entries.is_empty()
+        && entries.iter().all(|entry| matches!(entry.values.as_slice(), [light, dark] if holds(&stored(*light), dark)));
     let by_role = varying(&entries, variants, |entry| Some(entry.role.as_str()));
     let by_exposed = varying(&entries, variants, |entry| entry.exposed.as_deref());
     let owner = s.doc()?.variables.collection(collection).cloned().ok_or_else(|| bad(COMMAND, "the variable collection is gone"))?;
+    let ctx = Ctx { owner: &owner, themes, added: added_modes };
 
     let mut claims: BTreeMap<String, Claim> = BTreeMap::new();
     let mut bindings: BTreeMap<(String, String), Vec<NodeId>> = BTreeMap::new();
     for entry in &entries {
         let flags = entry.exposed.as_ref().map_or_else(|| by_role.get(&entry.role), |name| by_exposed.get(name));
         let axes = variants.get(entry.variant).map(|variant| &variant.axes);
-        let taken = claim(s.doc_mut()?, &owner, themes, &mut claims, &name_of(entry, flags, axes), entry);
+        let taken = claim(s.doc_mut()?, &ctx, &mut claims, &name_of(entry, flags, axes), entry);
         if let Some(disagreement) = &taken.disagreement {
             notes.add(entry.layer, &format!("{} keeps {}; this render has {}", taken.name, disagreement.kept, disagreement.imported));
         }
@@ -96,12 +116,13 @@ pub(super) fn apply(s: &mut Session, collection: &str, themes: &[Theme], variant
     for (layer, label) in notes.0 {
         doc.get_mut(layer)?.annotations.push(Annotation { label, ..Annotation::default() });
     }
-    Ok(())
+    Ok(if identical { vec![IDENTICAL_DARK.to_string()] } else { Vec::new() })
 }
 
-fn entries(doc: &Document, themes: &[Theme], variants: &[VariantTokens], notes: &mut Notes) -> Vec<Entry> {
+fn entries(doc: &Document, component: &str, themes: &[Theme], variants: &[VariantTokens], notes: &mut Notes) -> Vec<Entry> {
     let mut out = Vec::new();
     for (index, variant) in variants.iter().enumerate() {
+        let root = variant.layers.first().map_or("", |layer| layer.path.as_str());
         let others: Vec<BTreeMap<&str, &LayerFacts>> =
             variant.others.iter().map(|layers| layers.iter().map(|layer| (layer.path.as_str(), layer)).collect()).collect();
         for layer in &variant.layers {
@@ -121,20 +142,28 @@ fn entries(doc: &Document, themes: &[Theme], variants: &[VariantTokens], notes: 
                         }
                     });
                 }
-                out.push(entry(index, layer, fact, (family, property), values));
+                let under_root = layer.path.strip_prefix(root).map_or(layer.path.as_str(), |rest| rest.trim_start_matches(PATH_SEPARATOR));
+                out.push(entry(index, layer, fact, (family, property), (component, under_root), values));
             }
         }
     }
     out
 }
 
-fn entry(variant: usize, layer: &LayerFacts, fact: &TokenFact, (family, property): (&str, &str), values: Vec<TokenValue>) -> Entry {
+fn entry(
+    variant: usize,
+    layer: &LayerFacts,
+    fact: &TokenFact,
+    (family, property): (&str, &str),
+    (component, under_root): (&str, &str),
+    values: Vec<TokenValue>,
+) -> Entry {
     Entry {
         variant,
         layer: layer.id,
         slot: (layer.path.clone(), fact.field.clone()),
         exposed: fact.exposed.as_deref().map(|name| name.trim_start_matches('-')).filter(|name| !name.is_empty()).map(str::to_owned),
-        role: format!("{family}/{}/{property}", kebab_path(&layer.path)),
+        role: role_name(family, component, under_root, property),
         kind: if matches!(fact.value, TokenValue::Color(_)) { VariableType::Color } else { VariableType::Number },
         values,
     }
@@ -176,8 +205,13 @@ fn kebab(text: &str) -> String {
     if words.is_empty() { "layer".to_string() } else { words.join("-") }
 }
 
-fn kebab_path(path: &str) -> String {
-    path.split(PATH_SEPARATOR).map(kebab).collect::<Vec<_>>().join("/")
+fn role_name(family: &str, component: &str, under_root: &str, property: &str) -> String {
+    let mut segments = vec![family.to_string(), kebab(component)];
+    if !under_root.is_empty() {
+        segments.extend(under_root.split(PATH_SEPARATOR).map(kebab));
+    }
+    segments.push(property.to_string());
+    segments.join("/")
 }
 
 /// For every key, the axes whose value changes it: two variants that differ in that axis only give
@@ -225,7 +259,7 @@ fn name_of(entry: &Entry, varying: Option<&[bool; AXES]>, axes: Option<&[Option<
 /// The variable `entry` binds to. Within an import a name holds one set of values: an entry with
 /// other values takes the next free name. A variable the collection already has is never changed,
 /// even when this render disagrees with it.
-fn claim(doc: &mut Document, owner: &Collection, themes: &[Theme], claims: &mut BTreeMap<String, Claim>, name: &str, entry: &Entry) -> Taken {
+fn claim(doc: &mut Document, ctx: &Ctx, claims: &mut BTreeMap<String, Claim>, name: &str, entry: &Entry) -> Taken {
     let mut number = 1_u32;
     loop {
         let candidate = if number == 1 { name.to_owned() } else { format!("{name} {number}") };
@@ -236,16 +270,19 @@ fn claim(doc: &mut Document, owner: &Collection, themes: &[Theme], claims: &mut 
             }
             continue;
         }
-        let existing = doc.variables.variables.iter().find(|variable| variable.collection == owner.id && variable.name == candidate);
+        let existing = doc.variables.variables.iter_mut().find(|variable| variable.collection == ctx.owner.id && variable.name == candidate);
         let claim = match existing {
-            Some(variable) if variable.kind == entry.kind => Claim {
-                id: variable.id.clone(),
-                kind: entry.kind,
-                values: entry.values.clone(),
-                disagreement: disagreement(variable, owner, themes, &entry.values),
-            },
+            Some(variable) if variable.kind == entry.kind => {
+                fill(variable, ctx, &entry.values, true);
+                Claim {
+                    id: variable.id.clone(),
+                    kind: entry.kind,
+                    values: entry.values.clone(),
+                    disagreement: disagreement(variable, ctx.owner, ctx.themes, &entry.values),
+                }
+            }
             Some(_) => continue,
-            None => Claim { id: create(doc, owner, themes, &candidate, entry), kind: entry.kind, values: entry.values.clone(), disagreement: None },
+            None => Claim { id: create(doc, ctx, &candidate, entry), kind: entry.kind, values: entry.values.clone(), disagreement: None },
         };
         let taken = Taken { name: candidate.clone(), id: claim.id.clone(), disagreement: claim.disagreement.clone() };
         claims.insert(candidate, claim);
@@ -253,29 +290,34 @@ fn claim(doc: &mut Document, owner: &Collection, themes: &[Theme], claims: &mut 
     }
 }
 
-fn create(doc: &mut Document, owner: &Collection, themes: &[Theme], name: &str, entry: &Entry) -> String {
-    let values = owner
-        .modes
-        .iter()
-        .filter_map(|mode| {
-            let position = themes.iter().position(|theme| theme.mode() == mode.name).unwrap_or(0);
-            entry.values.get(position).map(|value| (mode.id.clone(), stored(*value)))
-        })
-        .collect();
+/// Give `variable` the value of each theme in the mode of that name: only in the modes this import added
+/// when `only_added` (the other modes hold the variable's own values), else in every mode a theme names.
+fn fill(variable: &mut Variable, ctx: &Ctx, values: &[TokenValue], only_added: bool) {
+    for (theme, value) in ctx.themes.iter().zip(values) {
+        let mode = ctx.owner.modes.iter().find(|mode| mode.name == theme.mode() && (!only_added || ctx.added.contains(&mode.id)));
+        if let Some(mode) = mode {
+            variable.values.insert(mode.id.clone(), stored(*value));
+        }
+    }
+}
+
+fn create(doc: &mut Document, ctx: &Ctx, name: &str, entry: &Entry) -> String {
     let id = doc.new_variable_id();
-    doc.variables.variables.push(Variable {
+    let mut variable = Variable {
         id: id.clone(),
         name: name.to_owned(),
-        collection: owner.id.clone(),
+        collection: ctx.owner.id.clone(),
         kind: entry.kind,
-        values,
+        values: Default::default(),
         description: String::new(),
         scopes: None,
         hidden_from_publishing: false,
         extends: None,
         overrides: Default::default(),
         code_syntax: Default::default(),
-    });
+    };
+    fill(&mut variable, ctx, &entry.values, false);
+    doc.variables.variables.push(variable);
     id
 }
 

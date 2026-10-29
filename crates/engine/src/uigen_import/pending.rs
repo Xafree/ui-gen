@@ -30,12 +30,14 @@ pub(crate) struct Request {
 
 pub(crate) struct Destination {
     pub uid: u64,
+    pub page: NodeId,
     pub parent: NodeId,
     pub at: Option<(f64, f64)>,
 }
 
 struct Rendering {
     cells: Vec<Cell>,
+    warnings: Vec<String>,
     rows: usize,
     columns: usize,
     waiting: BTreeMap<JobId, (usize, usize)>,
@@ -53,34 +55,62 @@ pub(crate) struct PendingImport {
     request: Request,
     destination: Destination,
     stage: Stage,
+    done: Option<Finished>,
 }
 
 /// Submit the `inspect` job of `request`; its id is the import's.
 pub(crate) fn start(s: &mut Session, request: Request, destination: Destination) -> Result<JobId, CaptureError> {
     let job = CaptureJob::Inspect { root: request.root.clone(), package: request.package.clone() };
     let head = s.submit_capture(COMMAND, &request.package, job)?;
-    s.capture.imports.push(PendingImport { head, jobs: vec![head], request, destination, stage: Stage::Inspecting });
+    s.capture.imports.push(PendingImport { head, jobs: vec![head], request, destination, stage: Stage::Inspecting, done: None });
     Ok(head)
 }
 
-/// Take in the result of `job`. An import that has all its renders writes the set; the event comes
-/// out when the import ends, in success or failure.
+/// Take in the result of `job`. An import that has all its renders writes the set, or waits for the
+/// gesture, version or text preview its tab is in; the event comes out when the import ends, in
+/// success or failure.
 pub(crate) fn advance(s: &mut Session, job: JobId, outcome: CaptureOutcome) -> Option<CaptureEvent> {
     let position = s.capture.imports.iter().position(|pending| pending.jobs.contains(&job))?;
     let mut pending = s.capture.imports.remove(position);
     let result = match pending.receive(s, job, outcome) {
-        Ok(None) => {
-            s.capture.imports.insert(position, pending);
-            return None;
+        Ok(None) => None,
+        Ok(Some(finished)) if busy(s, &pending.destination) => {
+            pending.done = Some(finished);
+            None
         }
-        Ok(Some(finished)) => assemble::write(s, &pending.request, &pending.destination, finished),
-        Err(error) => Err(error),
+        Ok(Some(finished)) => Some(assemble::write(s, &pending.request, &pending.destination, finished)),
+        Err(error) => Some(Err(error)),
     };
+    let Some(result) = result else {
+        s.capture.imports.insert(position, pending);
+        return None;
+    };
+    Some(conclude(s, &pending, result))
+}
+
+/// Write the imports that were waiting for their tab to be free again.
+pub(crate) fn resume(s: &mut Session) -> Vec<CaptureEvent> {
+    let mut events = Vec::new();
+    while let Some(position) = s.capture.imports.iter().position(|pending| pending.done.is_some() && !busy(s, &pending.destination)) {
+        let mut pending = s.capture.imports.remove(position);
+        if let Some(finished) = pending.done.take() {
+            let result = assemble::write(s, &pending.request, &pending.destination, finished);
+            events.push(conclude(s, &pending, result));
+        }
+    }
+    events
+}
+
+fn busy(s: &Session, destination: &Destination) -> bool {
+    s.docs.iter().find(|ds| ds.uid == destination.uid).is_some_and(|ds| ds.interaction.is_some() || ds.preview.is_some() || ds.text_preview.is_some())
+}
+
+fn conclude(s: &mut Session, pending: &PendingImport, result: Result<Value, CaptureError>) -> CaptureEvent {
     let ended = result.as_ref().map(|_| ()).map_err(|error| error.message.clone());
     for id in &pending.jobs {
         s.capture.finish(*id, if *id == pending.head { ended.clone() } else { Err("skipped: the import ended".to_string()) });
     }
-    Some(CaptureEvent { job: pending.head, command: COMMAND.to_string(), package: pending.request.package.clone(), outcome: result })
+    CaptureEvent { job: pending.head, command: COMMAND.to_string(), package: pending.request.package.clone(), outcome: result }
 }
 
 fn failure(step: &str, cause: CaptureError) -> CaptureError {
@@ -139,7 +169,7 @@ impl PendingImport {
             }
         }
         let snapshots = plan.cells.iter().map(|_| self.request.themes.iter().map(|_| None).collect()).collect();
-        Ok(Rendering { cells: plan.cells, rows: plan.rows, columns: plan.columns, waiting, snapshots })
+        Ok(Rendering { cells: plan.cells, warnings: plan.warnings, rows: plan.rows, columns: plan.columns, waiting, snapshots })
     }
 }
 
@@ -168,6 +198,6 @@ impl Rendering {
                 others,
             });
         }
-        Ok(Finished { variants, rows: self.rows, columns: self.columns })
+        Ok(Finished { variants, rows: self.rows, columns: self.columns, warnings: std::mem::take(&mut self.warnings) })
     }
 }
