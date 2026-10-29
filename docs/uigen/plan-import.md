@@ -124,18 +124,24 @@ instantané du lot 0 se relit à l'identique.
   (`values: null`). Les types viennent des `.d.ts` du paquet installé, lus avec l'API du compilateur
   `typescript` ; le code du paquet n'est jamais exécuté dans Node. Sont écartés `children`, `className`, `style`,
   `ref`, `key`, les `on[A-Z]…`, les props de type fonction et celles qui ne viennent que de React ou du DOM.
-  Au plus 64 props par composant et 64 valeurs par prop. Bornes de lecture : 20 s, 4 000 fichiers, 64 Mio, confinée à
-  `.uigen/sources/node_modules/` ; une borne atteinte ou un paquet sans types rend `props: []` et une phrase dans
-  `notes`, jamais une erreur. Composant web : `custom-elements.json`.
+  Au plus 64 props par composant et 64 valeurs par prop. Bornes de lecture : 20 s, 4 000 fichiers, 64 Mio, 512 Mio de
+  mémoire, confinée à `.uigen/sources/node_modules/` (un lien qui sort du paquet est tenu pour inexistant) ; la lecture
+  tourne dans un `worker_thread` interrompu à l'échéance, et la taille d'un fichier est lue avant le fichier. Une borne
+  atteinte ou un paquet sans types rend `props: []` et une phrase dans `notes`, jamais une erreur. Composant web :
+  `custom-elements.json`.
 - **`style`** d'un élément gagne les clés de mise en page `flexDirection`, `flexWrap`, `justifyContent`,
   `alignItems`, `alignContent`, `alignSelf`, `flexGrow`, `flexShrink`, `rowGap`, `columnGap`, `paddingTop`,
   `paddingRight`, `paddingBottom`, `paddingLeft`, `position`, `boxSizing` et `gridTemplateColumns`.
 - **`className`** : l'attribut `class` (256 caractères au plus). **`vars`** : pour chaque clé de `style` dont la
   déclaration d'auteur gagnante est un `var(--nom…)` nu, `{"<clé>": "--nom"}` (64 entrées au plus, nom
   `--[A-Za-z0-9_-]{1,128}`). **`animations`** : les animations CSS en cours (`element.getAnimations()`, 16 au
-  plus) `{name, durationMs, easing, iterations (nombre ou "infinite"), properties}`.
-- `figcraft-dom` valide ces champs à la frontière (`MAX_VARS`, `MAX_ANIMATIONS`, `MAX_VAR_NAME_CHARS`) : un nom de
-  variable invalide ou un nombre d'entrées hors limite refuse l'instantané en nommant le nœud.
+  plus) `{name, durationMs, easing, iterations (nombre ou "infinite"), properties}` ; un nœud `svg` porte les mêmes
+  `animations` (un spinner est souvent un `<svg>` qui tourne, par `transform` ou par la propriété `rotate`).
+- `parse_snapshot` (`figcraft-dom`) valide ces champs à la frontière et refuse l'instantané en nommant le nœud :
+  `vars` au plus `MAX_VARS` (64) entrées dont le nom suit `MAX_VAR_NAME_CHARS` (128) ; `animations` au plus
+  `MAX_ANIMATIONS` (16) par élément ou `svg` ; `className` au plus 256 caractères ; `name` et `easing` d'une animation
+  au plus 256 caractères ; `properties` d'une animation au plus 64 entrées de 128 caractères. Le service coupe ces
+  textes avant d'écrire l'instantané ; seul un instantané qui ne vient pas de lui est refusé.
 
 ### Traduction et assemblage (lot 3)
 
@@ -156,6 +162,15 @@ instantané du lot 0 se relit à l'identique.
   pose les interactions `ChangeTo` et les effets (`plugin_data["uigen.effect"]`). Le tout s'écrit dans un seul
   `Session::grouped("Import component")` : un pas d'annulation. La commande est décrite dans
   [`docs/mcp.md`](../mcp.md#component-import).
+
+### Limites connues (lot 3)
+
+- La cascade de `vars` ignore `@layer` et le CSS imbriqué : une déclaration posée dans l'un d'eux n'est pas
+  comptée. Seul le nom exposé (`--nom`) est perdu ; la valeur du calque reste celle que Chromium a calculée.
+- Les animations terminées avant la capture ne sont pas relevées (`getAnimations()` ne rend que celles en cours) ;
+  le ripple est reconnu par sa classe (`ripple`, casse ignorée), pas par son animation.
+- Les chemins de calques écrivent un `/` d'un nom `\/` et un `\` d'un nom `\\`, pour que deux calques distincts
+  n'aient jamais le même chemin ; les noms affichés ne changent pas.
 
 ## Lots
 
