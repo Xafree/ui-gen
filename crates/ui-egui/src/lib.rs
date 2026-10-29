@@ -177,6 +177,8 @@ mod proto_reorder_tests;
 #[cfg(test)]
 mod proto_responsive_tests;
 #[cfg(test)]
+mod rail_components_tests;
+#[cfg(test)]
 mod resources_tests;
 #[cfg(test)]
 mod save_as_tests;
