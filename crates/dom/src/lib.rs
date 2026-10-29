@@ -10,11 +10,17 @@ mod model;
 mod parse;
 
 pub use error::{ImportError, SnapshotError};
-pub use import::{Imported, import_snapshot, nearest_weight};
-pub use model::{DomBox, DomNode, Element, Snapshot, Source, SvgNode, TextRun, Viewport};
+pub use import::{
+    Effect, Imported, LayerFacts, TokenFact, TokenValue, TransitionFact, TranslateOptions, Translated, import_snapshot, nearest_weight,
+    translate_snapshot,
+};
+pub use model::{DomAnimation, DomBox, DomNode, Element, Snapshot, Source, SvgNode, TextRun, Viewport};
 pub use parse::parse_snapshot;
 
 pub const SUPPORTED_VERSION: u32 = 1;
+pub const MAX_VARS: usize = 64;
+pub const MAX_ANIMATIONS: usize = 16;
+pub const MAX_VAR_NAME_CHARS: usize = 128;
 pub const MAX_JSON_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_NODES: usize = 5000;
 pub const MAX_DEPTH: usize = 64;

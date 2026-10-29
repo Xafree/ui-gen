@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 figcraft-doc = { workspace = true }
 figcraft-color = { workspace = true }
+figcraft-layout = { workspace = true }
 figcraft-svg = { workspace = true }
 figcraft-text = { workspace = true }
 serde = { workspace = true }

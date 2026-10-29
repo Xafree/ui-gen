@@ -1,8 +1,8 @@
 use serde::Deserialize;
 
 use crate::error::{SnapshotError, capped};
-use crate::model::{DomBox, DomNode, Snapshot};
-use crate::{MAX_DEPTH, MAX_JSON_BYTES, MAX_MARKUP_BYTES, MAX_NODES, SUPPORTED_VERSION};
+use crate::model::{DomBox, DomNode, Element, Snapshot};
+use crate::{MAX_ANIMATIONS, MAX_DEPTH, MAX_JSON_BYTES, MAX_MARKUP_BYTES, MAX_NODES, MAX_VAR_NAME_CHARS, MAX_VARS, SUPPORTED_VERSION};
 
 /// serde_json stops at 128 nested levels, a 64-level tree needs 129: the limit is lifted and this bound replaces it.
 const MAX_JSON_NESTING: usize = 2 * MAX_DEPTH + 8;
@@ -88,7 +88,11 @@ fn validate_tree(root: &DomNode) -> Result<(), SnapshotError> {
 
 fn validate_node(node: &DomNode) -> Result<(), SnapshotError> {
     match node {
-        DomNode::Element(element) => validate_box(&element.r#box, || format!("element <{}>", capped(&element.tag, MAX_TAG_CHARS))),
+        DomNode::Element(element) => {
+            let node = || format!("element <{}>", capped(&element.tag, MAX_TAG_CHARS));
+            validate_box(&element.r#box, node)?;
+            validate_facts(element, node)
+        }
         DomNode::Text(text) => {
             validate_box(&text.r#box, || "text".to_owned())?;
             text.line_box.as_ref().map_or(Ok(()), |line_box| validate_box(line_box, || "text line box".to_owned()))
@@ -100,6 +104,24 @@ fn validate_node(node: &DomNode) -> Result<(), SnapshotError> {
             validate_box(&svg.r#box, || "svg".to_owned())
         }
     }
+}
+
+fn validate_facts(element: &Element, node: impl Fn() -> String) -> Result<(), SnapshotError> {
+    if element.vars.len() > MAX_VARS {
+        return Err(SnapshotError::TooManyVars { node: node(), count: element.vars.len() });
+    }
+    if let Some(name) = element.vars.values().find(|name| !is_custom_property(name)) {
+        return Err(SnapshotError::InvalidVar { node: node(), name: capped(name, MAX_TAG_CHARS) });
+    }
+    if element.animations.len() > MAX_ANIMATIONS {
+        return Err(SnapshotError::TooManyAnimations { node: node(), count: element.animations.len() });
+    }
+    Ok(())
+}
+
+fn is_custom_property(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix("--") else { return false };
+    (1..=MAX_VAR_NAME_CHARS).contains(&rest.len()) && rest.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
 }
 
 fn validate_box(dom_box: &DomBox, node: impl FnOnce() -> String) -> Result<(), SnapshotError> {

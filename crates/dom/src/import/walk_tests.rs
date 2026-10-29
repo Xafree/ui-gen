@@ -70,6 +70,7 @@ fn a_tree_deeper_than_the_parser_allows_does_not_overflow_the_stack() {
         r#box: DomBox { x: 0.0, y: 0.0, width: 1.0, height: 1.0 },
         style: Default::default(),
         children: vec![],
+        ..Default::default()
     });
     for _ in 0..1000 {
         node = DomNode::Element(Element {
@@ -78,6 +79,7 @@ fn a_tree_deeper_than_the_parser_allows_does_not_overflow_the_stack() {
             r#box: DomBox { x: 0.0, y: 0.0, width: 1.0, height: 1.0 },
             style: Default::default(),
             children: vec![node],
+            ..Default::default()
         });
     }
     let mut snapshot: Snapshot = snapshot(json!({ "type": "element", "tag": "x", "box": bounds(0.0, 0.0, 1.0, 1.0) }));
