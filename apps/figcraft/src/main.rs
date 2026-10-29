@@ -180,7 +180,6 @@ fn main() -> eframe::Result {
             std::process::exit(2);
         }
     };
-    let port = args.control.or_else(|| std::env::var("FIGCRAFT_CONTROL_PORT").ok().and_then(|p| p.parse().ok()));
     // System fonts: index them in the background, then wake the UI (an idle window draws no frames)
     // to lay text out again with them.
     let ctx_slot: Arc<Mutex<Option<egui::Context>>> = Arc::new(Mutex::new(None));
