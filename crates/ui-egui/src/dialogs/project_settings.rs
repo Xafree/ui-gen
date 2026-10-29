@@ -17,6 +17,7 @@ use crate::theme::{Tokens, regular, semibold};
 const ADD: &str = "project.addSource";
 const SET_VERSION: &str = "project.setSourceVersion";
 const REMOVE: &str = "project.removeSource";
+const IMPORT: &str = "uigen.importComponent";
 const LATEST: &str = "latest";
 
 const PACKAGE_W: f32 = 180.0;
@@ -168,7 +169,7 @@ fn jobs(app: &FigApp, root: &str) -> Vec<Job> {
     app.session
         .capture_jobs()
         .into_iter()
-        .filter(|job| file_access::same_file(&job.root, root))
+        .filter(|job| [ADD, SET_VERSION, REMOVE].contains(&job.command.as_str()) && file_access::same_file(&job.root, root))
         .map(|job| {
             let (state, error) = match job.state {
                 JobState::Queued => ("queued", String::new()),
@@ -197,10 +198,20 @@ pub(crate) fn request(app: &mut FigApp) {
 /// Bring back the jobs the capture service finished and say how each ended.
 pub(crate) fn pump(app: &mut FigApp) {
     for event in app.session.pump_capture() {
+        let package = event.package.as_str();
+        if event.command == IMPORT {
+            match &event.outcome {
+                Ok(_) => app.toast(trf("Imported a component from {package}", &[("package", &package)])),
+                Err(error) => {
+                    log::warn!("{IMPORT} {package}: {}", error.message);
+                    app.show_error(trf("Couldn't import from {package}: {cause}", &[("package", &package), ("cause", &error.message)]));
+                }
+            }
+            continue;
+        }
         if ![ADD, SET_VERSION, REMOVE].contains(&event.command.as_str()) {
             continue;
         }
-        let package = event.package.as_str();
         match &event.outcome {
             Ok(_) if event.command == REMOVE => app.toast(trf("Removed {package}", &[("package", &package)])),
             Ok(_) => app.toast(trf("Installed {package}", &[("package", &package)])),

@@ -1,5 +1,6 @@
 //! The capture service (Node sidecar) for the headless commands that change a project's source
-//! libraries: `run` waits for the jobs its steps submitted, `mcp` applies them as calls come in.
+//! libraries or import one of their components: `run` waits for the jobs its steps submitted, `mcp`
+//! applies them as calls come in.
 
 use std::time::Duration;
 
@@ -7,10 +8,10 @@ use figcraft_engine::Session;
 use figcraft_engine::capture::JobState;
 
 const POLL: Duration = Duration::from_millis(100);
-const SOURCE_COMMANDS: [&str; 3] = ["project.addSource", "project.setSourceVersion", "project.removeSource"];
+const CAPTURE_COMMANDS: [&str; 4] = ["project.addSource", "project.setSourceVersion", "project.removeSource", "uigen.importComponent"];
 
 pub fn needs_service(commands: &[&str]) -> bool {
-    commands.iter().any(|command| SOURCE_COMMANDS.contains(command))
+    commands.iter().any(|command| CAPTURE_COMMANDS.contains(command))
 }
 
 /// Give `session` the capture service. Without Node or the sidecar the commands that need it

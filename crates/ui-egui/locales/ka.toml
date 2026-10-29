@@ -343,6 +343,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Corner radius" = "კუთხის რადიუსი"
 "Corner smoothing" = "კუთხეების დარბილება"
 "Couldn't download the variables" = "ცვლადების ჩამოტვირთვა ვერ მოხერხდა"
+"Couldn't import from {package}: {cause}" = "{package}-დან იმპორტი ვერ მოხერხდა: {cause}"
 "Couldn't install {package}: {cause}" = "{package}-ის ინსტალაცია ვერ მოხერხდა: {cause}"
 "Couldn't reach {server}: showing what this computer remembers." = "{server}-თან დაკავშირება ვერ მოხერხდა: ნაჩვენებია ის, რაც ამ კომპიუტერს ახსოვს."
 "Couldn't remove {package}: {cause}" = "{package}-ის ამოღება ვერ მოხერხდა: {cause}"
@@ -669,6 +670,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Import plugin from manifest…" = "პლაგინის იმპორტი მანიფესტიდან…"
 "Import report" = "იმპორტის ანგარიში"
 "Import variables" = "ცვლადების იმპორტი"
+"Imported a component from {package}" = "კომპონენტი იმპორტირებულია {package}-დან"
 "Imported document" = "იმპორტირებული დოკუმენტი"
 "Imported {name}" = "იმპორტირებულია: {name}"
 "Imported {n} new variables, updated {updated}" = { one = "იმპორტირებულია ახალი ცვლადი: {n}; განახლდა: {updated}", other = "იმპორტირებულია ახალი ცვლადი: {n}; განახლდა: {updated}" }
