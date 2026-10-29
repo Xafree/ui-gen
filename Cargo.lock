@@ -1813,6 +1813,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "figcraft-project"
+version = "0.12.1"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "figcraft-render"
 version = "0.12.1"
 dependencies = [
