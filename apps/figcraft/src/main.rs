@@ -1,11 +1,13 @@
 //! FigCraft desktop app.
 //!
-//! Usage: `figcraft [--control <port>] [files…] [figcraft://join?…]` (an invite link joins that
+//! Usage: `figcraft [--control <port> --automation-read-root <dir>…] [files…] [figcraft://join?…]` (an invite link joins that
 //! live session; the app registers itself as the opener of such links: `collab.registerLinks`).
 //!
 //! `--control <port>` (or `FIGCRAFT_CONTROL_PORT`) starts a localhost JSON-lines control server:
 //! `{"id":1,"method":"engine.execute","params":{"command":"shape.rectangle","params":{"x":0,"y":0,"width":100,"height":100}}}`
-//! → `{"id":1,"ok":true,"result":{…}}`. Methods: `figcraft_ui_egui::control`.
+//! → `{"id":1,"ok":true,"result":{…}}`. Methods: `figcraft_ui_egui::control`. The first line of a
+//! connection is `{"auth":"<token>"}` (the token is printed at startup and kept in a private file),
+//! and the channel refuses to start without an automation root.
 //!
 //! `--automation-read-root <dir>` / `--automation-write-root <dir>` (each repeatable) confine the
 //! files the window and the control channel read and write (`figcraft_engine::file_access`); the
@@ -153,6 +155,11 @@ fn main() -> eframe::Result {
         eprintln!(
             "UIGEN: unknown option {flag}\nUsage: uigen [--control PORT] [--automation-read-root DIR]... [--automation-write-root DIR]... [FILE | figcraft://join?...]..."
         );
+        std::process::exit(2);
+    }
+    let port = args::control_port(&args, std::env::var("FIGCRAFT_CONTROL_PORT").ok().as_deref());
+    if let Err(message) = args::require_roots_for_control(port, &args) {
+        eprintln!("{message}");
         std::process::exit(2);
     }
     let roots = match (

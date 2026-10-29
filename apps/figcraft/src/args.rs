@@ -54,6 +54,20 @@ pub fn file_url_path(arg: &str) -> Option<String> {
     Some(if cfg!(windows) && drive { path.get(1..).unwrap_or_default().to_string() } else { path })
 }
 
+/// The control port: the `--control` flag, else `FIGCRAFT_CONTROL_PORT` (`env`) when it is a port.
+pub fn control_port(args: &Args, env: Option<&str>) -> Option<u16> {
+    args.control.or_else(|| env.and_then(|p| p.parse().ok()))
+}
+
+/// The control channel runs commands for any client that has its token, so it never starts
+/// without folders to confine their file access to.
+pub fn require_roots_for_control(port: Option<u16>, args: &Args) -> Result<(), String> {
+    if port.is_some() && args.read_roots.is_empty() && args.write_roots.is_empty() {
+        return Err("UIGEN: --control needs at least one of --automation-read-root DIR or --automation-write-root DIR: the control channel must not read or write files anywhere on the disk".into());
+    }
+    Ok(())
+}
+
 /// Read the arguments after the program name.
 pub fn parse(args: &[String]) -> Args {
     let mut out = Args::default();

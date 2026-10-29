@@ -1,10 +1,11 @@
 //! Localhost JSON-lines control server: each line `{"id", "method", "params"}` is queued for the UI
 //! thread; the reply line `{"id", "ok", "result" | "error"}` is written when the frame handled it.
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use figcraft_ui_egui::{ControlReply, ControlRequest, RequestGate, RequestState};
 use serde_json::{Value, json};
@@ -13,6 +14,8 @@ type Queue = Arc<Mutex<Vec<ControlRequest>>>;
 type CtxSlot = Arc<Mutex<Option<egui::Context>>>;
 
 const MAX_LINE: usize = 32 * 1024 * 1024;
+const MAX_AUTH_LINE: usize = 1024;
+const TOKEN_BYTES: usize = 32;
 const MAX_CONNECTIONS: usize = 8;
 const MAX_QUEUED_REQUESTS: usize = 8;
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -58,7 +61,46 @@ pub fn drain_queue(queue: &Queue, target: &mut Vec<ControlRequest>) {
     target.extend(queue.drain(..count));
 }
 
+fn generate_token() -> String {
+    let mut bytes = [0u8; TOKEN_BYTES];
+    if getrandom::fill(&mut bytes).is_err() {
+        return String::new();
+    }
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn token_matches(expected: &str, given: &str) -> bool {
+    // Every byte of the expected token is compared, so the time taken does not tell how much of a guess is right.
+    let given = given.as_bytes();
+    let mut diff = expected.len() ^ given.len();
+    for (i, &byte) in expected.as_bytes().iter().enumerate() {
+        diff |= usize::from(byte ^ given.get(i).copied().unwrap_or(0));
+    }
+    diff == 0 && !expected.is_empty()
+}
+
+fn write_token_file(dir: &Path, port: u16, token: &str) -> std::io::Result<PathBuf> {
+    std::fs::create_dir_all(dir)?;
+    let path = dir.join(format!("control-token-{port}"));
+    match std::fs::remove_file(&path) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
+        _ => {}
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options.open(&path)?.write_all(token.as_bytes())?;
+    Ok(path)
+}
+
 pub fn start(port: u16, queue: Queue, ctx: CtxSlot) {
+    let token = generate_token();
+    if token.is_empty() {
+        log::error!("control server: the system has no secure random numbers, so no session token can be made");
+        eprintln!("UIGEN control server not started: no secure random numbers for the session token");
+        return;
+    }
     let listener = match TcpListener::bind(("127.0.0.1", port)) {
         Ok(l) => l,
         Err(e) => {
@@ -68,10 +110,21 @@ pub fn start(port: u16, queue: Queue, ctx: CtxSlot) {
         }
     };
     eprintln!("UIGEN control server listening on 127.0.0.1:{port}");
+    let token_file = crate::services::config_dir()
+        .ok_or_else(|| std::io::Error::other("no configuration folder"))
+        .and_then(|dir| write_token_file(&dir, port, &token));
+    match token_file {
+        Ok(path) => eprintln!("UIGEN control token: {token} (also in {})", path.display()),
+        Err(e) => {
+            log::error!("control server: can't write the token file: {e}");
+            eprintln!("UIGEN control token: {token} (the token file could not be written: {e})");
+        }
+    }
+    let token: Arc<str> = Arc::from(token);
     let spawned = std::thread::Builder::new().name("figcraft-control".into()).spawn(move || {
         let mut workers = Vec::new();
         for stream in accepted(listener.incoming(), || std::thread::sleep(ACCEPT_RETRY)) {
-            spawn_connection(stream, queue.clone(), ctx.clone(), &mut workers, TIMEOUT);
+            spawn_connection(stream, queue.clone(), ctx.clone(), &mut workers, TIMEOUT, token.clone());
         }
     });
     if let Err(e) = spawned {
@@ -84,30 +137,84 @@ fn accepted<T>(incoming: impl Iterator<Item = std::io::Result<T>>, mut wait: imp
     incoming.filter_map(move |stream| stream.map_err(|_| wait()).ok())
 }
 
-fn spawn_connection(stream: TcpStream, queue: Queue, ctx: CtxSlot, workers: &mut Vec<std::thread::JoinHandle<()>>, timeout: Duration) {
+fn spawn_connection(
+    stream: TcpStream,
+    queue: Queue,
+    ctx: CtxSlot,
+    workers: &mut Vec<std::thread::JoinHandle<()>>,
+    timeout: Duration,
+    token: Arc<str>,
+) {
     workers.retain(|worker| !worker.is_finished());
     if workers.len() >= MAX_CONNECTIONS {
         return;
     }
     match std::thread::Builder::new().name("figcraft-control-conn".into()).spawn(move || {
-        let _ = serve(stream, queue, ctx, timeout);
+        let _ = serve(stream, queue, ctx, timeout, &token);
     }) {
         Ok(worker) => workers.push(worker),
         Err(e) => log::error!("control connection thread: {e}"),
     }
 }
 
-/// Serve one control connection: read bounded JSON lines, reject oversized frames and a
-/// full queue, queue one request, wait under its gate, and write one reply. Non-JSON input
-/// answers with an error and closes the connection so HTTP body lines cannot become commands.
-fn serve(mut out: TcpStream, queue: Queue, ctx: CtxSlot, timeout: Duration) -> std::io::Result<()> {
+/// Read one line of at most `limit` bytes (plus its newline) into `line`, within `timeout` in
+/// total: a client that sends one byte at a time cannot keep the connection open.
+fn read_frame(reader: &mut BufReader<TcpStream>, line: &mut Vec<u8>, limit: usize, timeout: Duration) -> std::io::Result<usize> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(std::io::ErrorKind::TimedOut.into());
+        }
+        reader.get_ref().set_read_timeout(Some(left))?;
+        let available = reader.fill_buf()?;
+        if available.is_empty() {
+            return Ok(line.len());
+        }
+        let room = limit + 1 - line.len();
+        let window = available.get(..available.len().min(room)).unwrap_or(available);
+        let newline = window.iter().position(|&b| b == b'\n');
+        let used = newline.map_or(window.len(), |i| i + 1);
+        line.extend_from_slice(window.get(..used).unwrap_or(window));
+        reader.consume(used);
+        if newline.is_some() || line.len() > limit {
+            return Ok(line.len());
+        }
+    }
+}
+
+/// The first line of a connection must be `{"auth": "<token>"}`. Anything else ends it before any
+/// request is read.
+fn authenticated(reader: &mut BufReader<TcpStream>, out: &mut TcpStream, timeout: Duration, token: &str) -> std::io::Result<bool> {
+    let mut line = Vec::new();
+    if read_frame(reader, &mut line, MAX_AUTH_LINE, timeout)? == 0 {
+        return Ok(false);
+    }
+    let given = std::str::from_utf8(&line).ok().and_then(|l| serde_json::from_str::<Value>(l).ok()).and_then(|v| match v {
+        Value::Object(fields) if fields.len() == 1 => fields.get("auth").and_then(Value::as_str).map(str::to_string),
+        _ => None,
+    });
+    if given.is_some_and(|given| token_matches(token, &given)) {
+        return Ok(true);
+    }
+    let _ = writeln!(out, "{}", json!({"id": null, "ok": false, "error": "authentication failed: the first line must be {\"auth\": \"<token>\"}"}));
+    Ok(false)
+}
+
+/// Serve one control connection: check the token, then read bounded JSON lines, reject oversized
+/// frames and a full queue, queue one request, wait under its gate, and write one reply. Non-JSON
+/// input answers with an error and closes the connection so HTTP body lines cannot become commands.
+fn serve(mut out: TcpStream, queue: Queue, ctx: CtxSlot, timeout: Duration, token: &str) -> std::io::Result<()> {
     out.set_read_timeout(Some(timeout))?;
     out.set_write_timeout(Some(timeout))?;
     let mut reader = BufReader::new(out.try_clone()?);
+    if !authenticated(&mut reader, &mut out, timeout, token)? {
+        return Ok(());
+    }
     let mut line = Vec::new();
     loop {
         line.clear();
-        if (&mut reader).take((MAX_LINE + 1) as u64).read_until(b'\n', &mut line)? == 0 {
+        if read_frame(&mut reader, &mut line, MAX_LINE, timeout)? == 0 {
             break;
         }
         if line.last() == Some(&b'\n') {

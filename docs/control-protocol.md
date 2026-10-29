@@ -4,11 +4,36 @@ The desktop app can be driven by other programs (tests, scripts, `figcraft-cli m
 sibling Crafting Apps) through a loopback socket:
 
 ```sh
-cargo run -p figcraft -- --control 7979 [file.figcraft|file.svg|image]
+cargo run -p figcraft -- --control 7979 --automation-write-root /work/out [file.figcraft|file.svg|image]
 ```
 
-The app listens on `127.0.0.1:<port>` only. Each connection carries **newline-delimited JSON**:
-one request object per line, one reply line per request, in order.
+The app listens on `127.0.0.1:<port>` only, and refuses to start `--control` (or
+`FIGCRAFT_CONTROL_PORT`) without at least one `--automation-read-root` or `--automation-write-root`:
+the channel never reads or writes files anywhere on the disk. See
+[Confining file access](#confining-file-access).
+
+## Authentication
+
+At startup the app makes a random session token (32 bytes from the system's secure random numbers,
+64 hex digits), prints it on stderr and writes it, without a newline, to `control-token-<port>` in
+its configuration folder (`%APPDATA%\FigCraft`, `~/Library/Application Support/FigCraft`,
+`$XDG_CONFIG_HOME/FigCraft` or `~/.config/FigCraft`). On Unix the file is readable by its owner only.
+Starting again replaces the token. If the system has no secure random numbers the channel does not
+start.
+
+The **first line** of every connection must be exactly `{"auth": "<token>"}`. The app answers
+nothing when it matches and the connection then takes requests as below. Any other first line (a
+command, a wrong token, an HTTP request) gets `{"id": null, "ok": false, "error": "authentication
+failed: …"}` and the connection is closed without reading or running anything else. The token is
+compared in constant time, and the first line is limited to 1 KiB.
+
+```text
+{"auth": "<token>"}
+{"id": 1, "method": "ui.inspect", "params": {}}
+```
+
+After the handshake, each connection carries **newline-delimited JSON**: one request object per
+line, one reply line per request, in order.
 
 ```text
 request:  {"id": 1, "method": "engine.execute", "params": {...}}
@@ -25,9 +50,10 @@ HTTP request a web page makes the browser send here never runs). The implementat
 A request line is limited to **32 MiB before the newline**, including whitespace. The reader stops
 at the first excess byte, replies `{"id": null, "ok": false, "error": "message too large"}`, then
 closes the connection without consuming the rest of the frame. The server accepts at most **8
-active connections**; additional connections are closed immediately. Socket reads and writes each
-have a **60 s inactivity timeout**, so idle clients and clients that stop reading release their
-worker. This bounds blocked socket operations, not the total duration of a frame arriving slowly.
+active connections**; additional connections are closed immediately. Waiting for a line (the
+first one included) has a **60 s deadline in total**, fixed when the wait starts and not restarted by
+each byte, so a client that trickles bytes cannot hold a worker; a write that makes no progress for
+60 s also ends the connection.
 Clients can reconnect after an idle timeout (the attached MCP backend already does).
 
 Both the socket queue and the UI queue hold at most **8 requests** each, including requests waiting
@@ -69,6 +95,9 @@ unknown id is an error.
 figcraft --control 7979 --automation-read-root /work/project --automation-write-root /work/project/out
 ```
 
+At least one of the two flags is required with `--control`; without it the app prints a message
+naming the three flags and exits with status 2.
+
 `--automation-read-root <dir>` and `--automation-write-root <dir>` (each repeatable, `--flag=<dir>`
 works too; the same flags as `figcraft-cli mcp`) confine the files the app reads and writes for
 whoever asks: every control request (`engine.execute`, `ui.render`, `ui.screenshot`, `window.new`,
@@ -79,7 +108,7 @@ read or write root and written only inside a write root; anything else is an ord
 resolved as `docs/mcp.md` › Confining file access describes. A root that isn't an existing folder
 stops the app before its window opens, and so does any option the app doesn't know (a mistyped
 flag such as `--automation-write-roots` exits with `unknown option`, never starts unconfined).
-Without the flags nothing changes. The flags arrived in FigCraft 0.7.0: 0.6.0 and earlier ignore
+Without `--control`, running without the flags changes nothing. The flags arrived in FigCraft 0.7.0: 0.6.0 and earlier ignore
 them and confine nothing.
 
 Not confined: opening the files given on the command line when the app starts and the documents
