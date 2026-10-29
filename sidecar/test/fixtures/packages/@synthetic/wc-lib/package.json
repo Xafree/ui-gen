@@ -1,0 +1,10 @@
+{
+  "name": "@synthetic/wc-lib",
+  "version": "1.3.0",
+  "description": "Synthetic fixture: a Lit based web components library",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "dependencies": {
+    "lit": "^3.0.0"
+  }
+}

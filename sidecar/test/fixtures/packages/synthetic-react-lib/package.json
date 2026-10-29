@@ -1,0 +1,11 @@
+{
+  "name": "synthetic-react-lib",
+  "version": "2.4.1",
+  "description": "Synthetic fixture: a React component library",
+  "license": "MIT",
+  "main": "index.js",
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  }
+}

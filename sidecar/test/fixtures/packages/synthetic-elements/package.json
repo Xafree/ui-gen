@@ -1,0 +1,8 @@
+{
+  "name": "synthetic-elements",
+  "version": "0.9.0",
+  "description": "Synthetic fixture: custom elements without any framework dependency",
+  "license": "ISC",
+  "main": "index.js",
+  "customElements": "custom-elements.json"
+}
