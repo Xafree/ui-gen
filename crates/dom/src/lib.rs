@@ -1,4 +1,4 @@
-//! DOM snapshots: the validated model and parser of a rendered component's tree, boxes and
+﻿//! DOM snapshots: the validated model and parser of a rendered component's tree, boxes and
 //! computed styles (format version 1, written by the capture service).
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
@@ -18,5 +18,4 @@ pub const MAX_DEPTH: usize = 64;
 pub const MAX_MARKUP_BYTES: usize = 1024 * 1024;
 
 #[cfg(test)]
-#[rustfmt::skip]
 mod snapshot_tests;

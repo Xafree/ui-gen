@@ -154,9 +154,8 @@ fn too_deep_tree_is_refused_while_the_limit_itself_is_accepted() {
 #[test]
 fn oversized_svg_markup_is_refused_naming_markup() {
     let markup = "a".repeat(MAX_MARKUP_BYTES + 1);
-    let json = snapshot_with_root(&format!(
-        r#"{{"type":"element","tag":"div","box":{BOX},"children":[{{"type":"svg","markup":"{markup}","box":{BOX}}}]}}"#
-    ));
+    let json =
+        snapshot_with_root(&format!(r#"{{"type":"element","tag":"div","box":{BOX},"children":[{{"type":"svg","markup":"{markup}","box":{BOX}}}]}}"#));
 
     let message = error_message(&json);
 
