@@ -30,6 +30,26 @@ pub(super) fn is_installed(family: &str) -> bool {
     figcraft_text::has_family(family)
 }
 
+const MAX_STYLE_WORDS: usize = 3;
+
+/// A platform font name like "Segoe UI Semibold" is a face of an installed family: its family and the style it names.
+pub(super) fn face_of_platform_name(name: &str) -> Option<(String, String)> {
+    let words: Vec<&str> = name.split_whitespace().collect();
+    (1..=MAX_STYLE_WORDS.min(words.len().saturating_sub(1))).find_map(|style_words| {
+        let (family, style) = words.split_at(words.len() - style_words);
+        let family = family.join(" ");
+        if !is_installed(&family) {
+            return None;
+        }
+        let wanted = squashed(&style.join(" "));
+        figcraft_text::family_styles(&family).into_iter().find(|candidate| squashed(candidate) == wanted).map(|found| (capped(&family), found))
+    })
+}
+
+fn squashed(style: &str) -> String {
+    style.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
+}
+
 /// The first family of `stack` that is installed; the system-ui keywords stand for the interface font of the platform.
 pub(super) fn installed_family(stack: &str) -> Option<String> {
     stack_families(stack).into_iter().find_map(|family| {

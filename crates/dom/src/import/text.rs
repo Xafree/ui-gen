@@ -47,15 +47,13 @@ fn text_style(style: &Style, report: &mut Report) -> TextStyle {
     }
     let weight = read(style, "fontWeight", report, font_weight).unwrap_or(REGULAR);
     let italic = read(style, "fontStyle", report, is_italic).unwrap_or(false);
-    let installed = match family_of(style, report) {
-        Some((family, installed)) => {
-            text.font_family = family;
-            installed
-        }
-        None => false,
-    };
-    text.font_style =
-        installed.then(|| fonts::installed_style(&text.font_family, weight, italic)).flatten().unwrap_or_else(|| style_name(weight, italic));
+    let face = family_of(style, report);
+    if let Some(face) = &face {
+        text.font_family.clone_from(&face.family);
+    }
+    text.font_style = face
+        .and_then(|face| face.style.or_else(|| face.installed.then(|| fonts::installed_style(&face.family, weight, italic)).flatten()))
+        .unwrap_or_else(|| style_name(weight, italic));
     let size = text.font_size;
     if let Some(height) = read(style, "lineHeight", report, |value| line_height(value, size)) {
         text.line_height = height;
@@ -66,18 +64,27 @@ fn text_style(style: &Style, report: &mut Report) -> TextStyle {
     text
 }
 
-/// The family the text is drawn in, and whether the font database has it.
-fn family_of(style: &Style, report: &mut Report) -> Option<(String, bool)> {
+struct Face {
+    family: String,
+    installed: bool,
+    style: Option<String>,
+}
+
+/// The face the text is drawn in; `style` is set when the platform named the face itself.
+fn family_of(style: &Style, report: &mut Report) -> Option<Face> {
     let first = read(style, "fontFamily", report, first_family);
     if let Some(platform) = get(style, "platformFont") {
         let family = capped(platform);
         let installed = fonts::is_installed(&family);
-        return Some((family, installed));
+        if !installed && let Some((base, face_style)) = fonts::face_of_platform_name(platform) {
+            return Some(Face { family: base, installed: true, style: Some(face_style) });
+        }
+        return Some(Face { family, installed, style: None });
     }
     if let Some(family) = get(style, "fontFamily").and_then(fonts::installed_family) {
-        return Some((family, true));
+        return Some(Face { family, installed: true, style: None });
     }
-    first.map(|family| (family, false))
+    first.map(|family| Face { family, installed: false, style: None })
 }
 
 fn first_family(stack: &str) -> Option<String> {
