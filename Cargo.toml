@@ -34,6 +34,7 @@ figcraft-mcp = { path = "crates/mcp" }
 figcraft-collab-net = { path = "crates/collab-net" }
 figcraft-plugin = { path = "crates/plugin" }
 figcraft-project = { path = "crates/project" }
+figcraft-capture = { path = "crates/capture" }
 
 # craft-libs crates all pin one rev (craftrules standards/shared-libraries.md): bump them together.
 # Which paths stored in a document may be followed (craft-libs).
