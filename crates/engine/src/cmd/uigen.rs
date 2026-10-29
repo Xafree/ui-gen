@@ -1,5 +1,6 @@
 //! UIGEN commands: bringing the output of the capture service into the document.
 
+use figcraft_doc::NodeKind;
 use serde_json::{Value, json};
 
 use super::CommandSpec;
@@ -12,7 +13,7 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![spec!(
         IMPORT_DOM,
         "Import DOM snapshot",
-        "{snapshot (object or JSON text: a DOM snapshot v1 from the UIGEN capture service), parent? (id; default the current page), x?, y? (where the root goes)}  → {root, warnings}",
+        "{snapshot (object or JSON text: a DOM snapshot v1 from the UIGEN capture service), parent? (a frame or page id; default the current page), x?, y? (where the root goes)}  → {root, warnings}",
         true,
         import_dom
     )]
@@ -34,10 +35,13 @@ fn coordinate(p: &Value, key: &str) -> Result<f64> {
 }
 
 fn parent_of(s: &Session, p: &Value) -> Result<figcraft_doc::NodeId> {
-    match get(p, "parent") {
-        None => s.page(),
-        Some(v) => id_of(v).ok_or_else(|| bad(IMPORT_DOM, "`parent` must be a layer id")),
+    let Some(v) = get(p, "parent") else { return s.page() };
+    let id = id_of(v).ok_or_else(|| bad(IMPORT_DOM, "`parent` must be a layer id"))?;
+    let node = s.doc()?.node(id).ok_or_else(|| bad(IMPORT_DOM, format!("`parent` {id} does not exist")))?;
+    if node.is_page() || matches!(node.kind, NodeKind::Frame | NodeKind::Component { .. }) {
+        return Ok(id);
     }
+    Err(bad(IMPORT_DOM, format!("`parent` {id} is a {}: only a frame or a page can receive imported layers", node.kind.type_name())))
 }
 
 fn import_dom(s: &mut Session, p: &Value) -> Result<Value> {
