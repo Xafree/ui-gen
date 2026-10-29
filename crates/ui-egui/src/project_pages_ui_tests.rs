@@ -131,7 +131,7 @@ fn three_components(language: &str, tag: &str) -> (Ui, Dir, [NodeId; 3]) {
 fn in_a_project_the_pages_plus_button_adds_a_component_named_in_the_french_ui() {
     let (mut u, _dir) = project_ui("fr", "add-fr");
     assert_eq!(components(&mut u).iter().map(|c| c.0.as_str()).collect::<Vec<_>>(), ["Composant 1"]);
-    click_button(&mut u, &i18n::tr("Add new page"));
+    click_button(&mut u, i18n::tr("Add new page"));
     let names: Vec<String> = components(&mut u).into_iter().map(|c| c.0).collect();
     assert_eq!(names, ["Composant 1", "Composant 2"]);
 }
@@ -140,7 +140,7 @@ fn in_a_project_the_pages_plus_button_adds_a_component_named_in_the_french_ui() 
 #[test]
 fn in_a_project_the_pages_plus_button_adds_a_component_named_in_the_english_ui() {
     let (mut u, _dir) = project_ui("en", "add-en");
-    click_button(&mut u, &i18n::tr("Add new page"));
+    click_button(&mut u, i18n::tr("Add new page"));
     let names: Vec<String> = components(&mut u).into_iter().map(|c| c.0).collect();
     assert_eq!(names, ["Component 1", "Component 2"]);
 }
@@ -151,7 +151,7 @@ fn outside_a_project_the_pages_plus_button_still_adds_page_n_in_any_language() {
     for language in ["en", "fr"] {
         let mut u = plain_ui(language);
         assert_eq!(page_names(&u), ["Page 1"]);
-        click_button(&mut u, &i18n::tr("Add new page"));
+        click_button(&mut u, i18n::tr("Add new page"));
         assert_eq!(page_names(&u), ["Page 1", "Page 2"], "language {language}");
     }
 }
