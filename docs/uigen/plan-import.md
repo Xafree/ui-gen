@@ -180,7 +180,7 @@ titre d'information. Si l'essai échoue, on revoit l'approche avant d'aller plus
    lib ; un composant absent est marqué, jamais remplacé.
 3. Barre de réglages (Accent, Base, Police, Rayon, Forme du rayon, Thème) : chaque réglage écrit
    des tokens du thème en mémoire et les pousse au modèle sans rechargement.
-4. Barre du haut : annuler, rétablir, revenir, hasard, clair / sombre, Claude, partager, code.
+4. Barre du haut : annuler, rétablir, revenir, hasard, clair / sombre, code.
 5. Enregistrer les réglages en thème de tokens (fenêtre Variables).
 
 ### Lot 8 · Livraison
