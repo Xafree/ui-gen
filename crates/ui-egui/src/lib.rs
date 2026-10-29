@@ -126,6 +126,8 @@ mod measure_nudge_tests;
 #[cfg(test)]
 mod menu_aim_tests;
 #[cfg(test)]
+mod help_menu_tests;
+#[cfg(test)]
 mod menu_contrast_tests;
 #[cfg(test)]
 mod menu_input_tests;
