@@ -1020,16 +1020,13 @@ fn draw(p: &P, icon: Icon) {
             p.poly(&[(10.5, 5.5), (13.0, 8.0), (10.5, 10.5)], false);
         }
         Logo => {
-            // FigCraft's own mark: the curled tail of the chameleon on the app icon. One bold
-            // stroke: a shaft along the bottom, then three half turns, each tighter than the last.
-            let mut tail = vec![(13.75, 13.0)];
-            tail.extend(arc_pts(7.25, 8.0, 5.0, FRAC_PI_2, 3.0 * FRAC_PI_2));
-            tail.extend(arc_pts(7.25, 6.5, 3.5, 3.0 * FRAC_PI_2, 5.0 * FRAC_PI_2));
-            tail.extend(arc_pts(7.25, 8.25, 1.75, FRAC_PI_2, 3.0 * FRAC_PI_2));
-            let v: Vec<Pos2> = tail.iter().map(|&(x, y)| p.raw(x, y)).collect();
-            p.painter.add(Shape::line(v, Stroke::new(1.7 * p.s, p.color)));
-            p.dot(13.75, 13.0, 0.85);
-            p.dot(7.25, 6.5, 0.85);
+            // UIGEN's own mark: a bold U with a dot between its arms, as on the app icon.
+            let mut u = vec![(3.75, 2.5), (3.75, 7.0)];
+            u.extend(arc_pts(8.0, 7.0, 4.25, PI, 0.0));
+            u.push((12.25, 2.5));
+            let v: Vec<Pos2> = u.iter().map(|&(x, y)| p.raw(x, y)).collect();
+            p.painter.add(Shape::line(v, Stroke::new(2.0 * p.s, p.color)));
+            p.dot(8.0, 3.25, 0.95);
         }
     }
 }

@@ -29,7 +29,7 @@ pub struct Prefs {
     pub highlight_on_hover: bool,
     pub number_keys_opacity: bool,
     pub show_dimensions: bool,
-    /// "system" by default; an explicit "light" or "dark" choice stays saved.
+    /// "dark" by default; an explicit "light", "dark" or "system" choice stays saved.
     pub theme: String,
     /// The widths of the main window's left and right panels (the interface keeps them within its
     /// limits; other windows have their own while they are open).
@@ -117,7 +117,7 @@ impl Default for Prefs {
             highlight_on_hover: true,
             number_keys_opacity: true,
             show_dimensions: true,
-            theme: "system".into(),
+            theme: "dark".into(),
             panel_widths: (240.0, 240.0),
             pages_height: None,
             language: "system".into(),
