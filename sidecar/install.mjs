@@ -1,4 +1,6 @@
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { rmSync } from 'node:fs';
+import { lstat, mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { validatePackageName, validateVersion } from './npm-name.mjs';
 import { ServiceError } from './protocol.mjs';
@@ -58,7 +60,35 @@ const lastUsefulLine = (stderr) => {
   return last === undefined ? 'no output from npm' : last.replace(NPM_PREFIX_LINE, '');
 };
 
-const npmEnv = () => ({ ...process.env, npm_config_ignore_scripts: 'true' });
+let emptyConfig = null;
+
+const emptyNpmConfig = () => {
+  emptyConfig ??= mkdtemp(path.join(os.tmpdir(), 'uigen-npm-')).then(async (folder) => {
+    process.once('exit', () => rmSync(folder, { recursive: true, force: true }));
+    const file = path.join(folder, 'empty.npmrc');
+    await writeFile(file, '');
+    return file;
+  });
+  return emptyConfig;
+};
+
+async function refuseProjectNpmrc(dir, kind) {
+  const present = await lstat(path.join(sourcesDir(dir), '.npmrc')).then(
+    () => true,
+    () => false,
+  );
+  if (present) {
+    throw new ServiceError(kind, 'the project has a .uigen/sources/.npmrc file; remove it, UIGEN does not run npm with a project configuration');
+  }
+}
+
+async function npmSettings() {
+  const config = await emptyNpmConfig();
+  return {
+    flags: ['--ignore-scripts', '--userconfig', config, '--globalconfig', config, '--no-audit', '--no-fund'],
+    env: { ...process.env, npm_config_ignore_scripts: 'true', npm_config_userconfig: config, npm_config_globalconfig: config },
+  };
+}
 
 async function ensureSourcesManifest(dir) {
   await mkdir(sourcesDir(dir), { recursive: true });
@@ -106,8 +136,10 @@ export async function install(params, { runNpm }) {
   checkVersion(version);
   await checkProject(dir);
   await ensureSourcesManifest(dir);
-  const args = ['install', '--ignore-scripts', '--save-exact', '--no-audit', '--no-fund', '--prefix', sourcesDir(dir), `${name}@${version}`];
-  const { code, stderr } = await runNpm(args, { cwd: sourcesDir(dir), env: npmEnv() });
+  await refuseProjectNpmrc(dir, 'install');
+  const { flags, env } = await npmSettings();
+  const args = ['install', ...flags, '--save-exact', '--prefix', sourcesDir(dir), `${name}@${version}`];
+  const { code, stderr } = await runNpm(args, { cwd: sourcesDir(dir), env });
   if (code !== 0) {
     throw new ServiceError('install', `npm could not install ${name}@${version}: ${lastUsefulLine(stderr)}`);
   }
@@ -127,8 +159,10 @@ export async function uninstall(params, { runNpm }) {
   if (!(await isDirectory(packageDir(dir, name)))) {
     throw new ServiceError('notInstalled', `${name} is not installed in this project`);
   }
-  const args = ['uninstall', '--ignore-scripts', '--no-audit', '--no-fund', '--prefix', sourcesDir(dir), name];
-  const { code, stderr } = await runNpm(args, { cwd: sourcesDir(dir), env: npmEnv() });
+  await refuseProjectNpmrc(dir, 'uninstall');
+  const { flags, env } = await npmSettings();
+  const args = ['uninstall', ...flags, '--prefix', sourcesDir(dir), name];
+  const { code, stderr } = await runNpm(args, { cwd: sourcesDir(dir), env });
   if (code !== 0) {
     throw new ServiceError('uninstall', `npm could not uninstall ${name}: ${lastUsefulLine(stderr)}`);
   }

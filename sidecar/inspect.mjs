@@ -6,7 +6,21 @@ import { ServiceError } from './protocol.mjs';
 const INSPECT_TIMEOUT_MS = 55_000;
 const EMPTY_PAGE = '<!doctype html><meta charset="utf-8"><body></body>';
 
+const MAX_EXPORTS = 10_000;
+const MAX_EXPORT_NAME_LENGTH = 128;
+
 const byName = (a, b) => (a.name < b.name ? -1 : Number(a.name > b.name));
+
+export function checkExportNames(value, packageName) {
+  const valid =
+    Array.isArray(value) &&
+    value.length <= MAX_EXPORTS &&
+    value.every((name) => typeof name === 'string' && name.length > 0 && name.length <= MAX_EXPORT_NAME_LENGTH);
+  if (!valid) {
+    throw new ServiceError('render', `${packageName} reported an invalid list of exports (at most ${MAX_EXPORTS} names of ${MAX_EXPORT_NAME_LENGTH} characters)`);
+  }
+  return value;
+}
 
 async function listReactExports(installed) {
   const code = await bundleEntry({
@@ -21,7 +35,7 @@ window.__uigenExports = Object.keys(lib).filter((key) => /^[A-Z]/.test(key) && i
     if (errors.length > 0) {
       throw new ServiceError('render', `${installed.name} throws when it loads: ${errors[0]}`);
     }
-    return page.evaluate(() => window.__uigenExports);
+    return checkExportNames(await page.evaluate(() => window.__uigenExports), installed.name);
   });
 }
 

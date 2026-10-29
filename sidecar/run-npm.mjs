@@ -7,21 +7,18 @@ const MAX_CAPTURED_BYTES = 64 * 1024;
 
 const running = new Set();
 
-const npmCliCandidates = () => {
-  const nodeDir = path.dirname(process.execPath);
+const npmCliCandidates = ({ execPath, npmExecPath }) => {
+  const nodeDir = path.dirname(execPath);
   return [
-    process.env.npm_execpath,
+    npmExecPath,
     path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
     path.join(nodeDir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
   ].filter((candidate) => typeof candidate === 'string' && candidate.endsWith('npm-cli.js'));
 };
 
-function npmCommand(args) {
-  const cli = npmCliCandidates().find((candidate) => existsSync(candidate));
-  if (cli !== undefined) {
-    return { command: process.execPath, args: [cli, ...args] };
-  }
-  return { command: process.platform === 'win32' ? 'npm.cmd' : 'npm', args };
+export function npmCommand(args, { execPath = process.execPath, npmExecPath = process.env.npm_execpath, exists = existsSync } = {}) {
+  const cli = npmCliCandidates({ execPath, npmExecPath }).find((candidate) => exists(candidate));
+  return cli === undefined ? null : { command: execPath, args: [cli, ...args] };
 }
 
 const tail = (text) => (text.length > MAX_CAPTURED_BYTES ? text.slice(-MAX_CAPTURED_BYTES) : text);
@@ -35,6 +32,10 @@ export function killRunningNpm() {
 export function runNpm(args, { cwd, env, timeoutMs = NPM_TIMEOUT_MS }) {
   return new Promise((resolve) => {
     const command = npmCommand(args);
+    if (command === null) {
+      resolve({ code: 1, stdout: '', stderr: 'npm-cli.js not found next to node' });
+      return;
+    }
     let stdout = '';
     let stderr = '';
     let child;

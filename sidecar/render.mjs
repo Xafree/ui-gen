@@ -3,6 +3,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { loadBundle, withPage } from './browser.mjs';
 import { IS_COMPONENT, bundleEntry } from './bundle.mjs';
+import { startBudget } from './deadline.mjs';
 import { insideRoot, readInstalledPackage } from './installed-package.mjs';
 import { ServiceError } from './protocol.mjs';
 import { captureSnapshot } from './snapshot.mjs';
@@ -12,7 +13,8 @@ const RENDERABLE = ['react', 'web-components'];
 const STATES = ['default', 'hover', 'focus', 'pressed', 'disabled'];
 const THEMES = ['light', 'dark'];
 const VIEWPORT = { width: 800, height: 600 };
-const RENDER_TIMEOUT_MS = 25_000;
+const RENDER_BUDGET_MS = 25_000;
+const SETTLE_CAP_MS = 3_000;
 const BACKGROUNDS = { light: '#ffffff', dark: '#1e1e1e' };
 
 const invalid = (message) => new ServiceError('invalidRequest', message);
@@ -76,14 +78,17 @@ function buildEntry(installed, component, props) {
   return reactEntry(installed.name, component, props);
 }
 
-const settle = (page) =>
-  page.evaluate(async () => {
-    await document.fonts.ready;
-    const finite = document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity);
-    await Promise.all(finite.map((animation) => animation.finished.catch(() => undefined)));
-  });
+const settle = (page, budget) =>
+  page.evaluate(async (capMs) => {
+    const settled = (async () => {
+      await document.fonts.ready;
+      const finite = document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity);
+      await Promise.all(finite.map((animation) => animation.finished.catch(() => undefined)));
+    })();
+    await Promise.race([settled, new Promise((resolve) => setTimeout(resolve, capMs))]);
+  }, Math.min(SETTLE_CAP_MS, budget.remaining()));
 
-async function forceState(page, state) {
+async function forceState(page, state, budget) {
   const target = page.locator(`${ROOT_SELECTOR} > :not(style, script)`).first();
   if (state === 'hover') {
     await target.hover();
@@ -93,7 +98,7 @@ async function forceState(page, state) {
   } else if (state === 'focus') {
     await target.focus();
   }
-  await settle(page);
+  await settle(page, budget);
 }
 
 function pngSegments(installed, { component, props, state, theme }) {
@@ -102,9 +107,9 @@ function pngSegments(installed, { component, props, state, theme }) {
   return ['.uigen', 'captures', safeSegment(installed.name), safeSegment(installed.version), name];
 }
 
-async function renderInPage(page, installed, params, code) {
+async function renderInPage(page, installed, params, code, budget) {
   const { component, props, state, theme } = params;
-  page.setDefaultTimeout(RENDER_TIMEOUT_MS);
+  page.setDefaultTimeout(Math.max(1, budget.remaining()));
   const errors = await loadBundle(page, { code, html: pageHtml(theme) });
   const failure = errors[0] ?? (await page.evaluate(() => window.__uigenError));
   if (failure !== undefined) {
@@ -113,8 +118,8 @@ async function renderInPage(page, installed, params, code) {
   if (await page.evaluate(() => window.__uigenMissing === true)) {
     throw new ServiceError('componentNotFound', `component "${component}" is not exported by ${installed.name}`);
   }
-  await settle(page);
-  await forceState(page, state);
+  await settle(page, budget);
+  await forceState(page, state, budget);
   const source = { package: installed.name, version: installed.version, component, props, state };
   const snapshot = await captureSnapshot(page, ROOT_SELECTOR, source);
   const segments = pngSegments(installed, { component, props, state, theme });
@@ -125,16 +130,19 @@ async function renderInPage(page, installed, params, code) {
 }
 
 export async function render(params) {
+  const budget = startBudget(RENDER_BUDGET_MS, `rendering did not finish within ${RENDER_BUDGET_MS / 1000} s`);
   const installed = await readInstalledPackage(params.dir, params.package);
   checkParams(params);
   if (!RENDERABLE.includes(installed.framework)) {
     throw new ServiceError('frameworkUnsupported', `${installed.framework} packages cannot be rendered yet (supported: ${RENDERABLE.join(', ')})`);
   }
   const props = params.state === 'disabled' ? { ...params.props, disabled: true } : params.props;
-  const code = await bundleEntry({ contents: buildEntry(installed, params.component, props), resolveDir: installed.sources });
+  const code = await budget.bound(bundleEntry({ contents: buildEntry(installed, params.component, props), resolveDir: installed.sources }));
   try {
-    return await withPage({ viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: params.theme }, (page) =>
-      renderInPage(page, installed, params, code),
+    return await budget.bound(
+      withPage({ viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: params.theme }, (page) =>
+        budget.bound(renderInPage(page, installed, params, code, budget)),
+      ),
     );
   } catch (error) {
     if (error instanceof ServiceError) {

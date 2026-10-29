@@ -1,27 +1,48 @@
 import { chromium } from 'playwright';
 
-const LAUNCH_OPTIONS = { args: ['--disable-lcd-text'] };
+const LAUNCH_OPTIONS = { args: ['--disable-lcd-text'], chromiumSandbox: true };
+const LOCAL_SCHEMES = new Set(['data:', 'about:', 'blob:']);
+const CLOSE_TIMEOUT_MS = 5_000;
 
 let launching = null;
 
+function launch() {
+  const attempt = chromium.launch(LAUNCH_OPTIONS);
+  attempt.catch(() => {
+    if (launching === attempt) {
+      launching = null;
+    }
+  });
+  launching = attempt;
+  return attempt;
+}
+
 async function ensureBrowser() {
   if (launching !== null) {
-    const current = await launching;
-    if (current.isConnected()) {
+    const current = await launching.catch(() => null);
+    if (current?.isConnected()) {
       return current;
     }
   }
-  launching = chromium.launch(LAUNCH_OPTIONS);
-  return launching;
+  return launch();
 }
+
+const blockRemote = (route) => {
+  const { protocol } = new URL(route.request().url());
+  return LOCAL_SCHEMES.has(protocol) ? route.continue() : route.abort('blockedbyclient');
+};
+
+const closeWithin = (context) =>
+  Promise.race([context.close(), new Promise((resolve) => setTimeout(resolve, CLOSE_TIMEOUT_MS).unref())]).catch(() => undefined);
 
 export async function withPage(options, work) {
   const browser = await ensureBrowser();
-  const context = await browser.newContext(options);
+  const context = await browser.newContext({ ...options, offline: true });
   try {
+    await context.route('**/*', blockRemote);
     return await work(await context.newPage());
   } finally {
-    await context.close().catch(() => undefined);
+    await closeWithin(context);
   }
 }
 
