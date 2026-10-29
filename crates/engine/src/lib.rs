@@ -524,3 +524,6 @@ mod widgets_tests;
 mod selection_reorder_tests;
 #[cfg(test)]
 mod selection_spacing_tests;
+
+#[cfg(test)]
+mod project_tests;
