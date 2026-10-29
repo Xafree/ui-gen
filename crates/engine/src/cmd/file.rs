@@ -352,6 +352,7 @@ pub fn export_file(doc: &Document, ids: &[NodeId], setting: &ExportSetting, scal
                 outline_text: setting.svg_outline_text,
                 simplify_stroke: setting.svg_simplify_stroke,
                 bounds: Some(area),
+                ..Default::default()
             };
             let svg = figcraft_svg::try_export_svg(&doc.in_srgb(), &drawn, &opts).map_err(|e| match e {
                 figcraft_svg::SvgError::Empty => nothing(),
