@@ -1,12 +1,20 @@
+import { closeBrowser } from './browser.mjs';
+import { inspect } from './inspect.mjs';
 import { install, uninstall } from './install.mjs';
+import { render } from './render.mjs';
 import { killRunningNpm, runNpm } from './run-npm.mjs';
 import { ServiceError, createLineReader, encodeLine, errorResponse, greeting, okResponse, parseRequest } from './protocol.mjs';
 
 export const methods = new Map();
 
-methods.set('shutdown', () => ({}));
+methods.set('shutdown', async () => {
+  await closeBrowser();
+  return {};
+});
 methods.set('install', (params) => install(params, { runNpm }));
 methods.set('uninstall', (params) => uninstall(params, { runNpm }));
+methods.set('inspect', (params) => inspect(params));
+methods.set('render', (params) => render(params));
 
 const inFlight = new Set();
 let stopping = false;
@@ -20,7 +28,9 @@ const stop = () => {
     return;
   }
   stopping = true;
-  Promise.allSettled([...inFlight]).then(() => process.stdout.write('', () => process.exit(0)));
+  Promise.allSettled([...inFlight])
+    .then(closeBrowser)
+    .finally(() => process.stdout.write('', () => process.exit(0)));
 };
 
 async function dispatch({ id, method, params }) {

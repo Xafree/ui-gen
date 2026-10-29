@@ -12,13 +12,13 @@ const FRAMEWORK_DEPENDENCIES = [
   ['lit', 'web-components'],
 ];
 
-const sourcesDir = (dir) => path.join(dir, '.uigen', 'sources');
+export const sourcesDir = (dir) => path.join(dir, '.uigen', 'sources');
 
-const packageDir = (dir, name) => path.join(sourcesDir(dir), 'node_modules', ...name.split('/'));
+export const packageDir = (dir, name) => path.join(sourcesDir(dir), 'node_modules', ...name.split('/'));
 
-const invalid = (message) => new ServiceError('invalidRequest', message);
+export const invalid = (message) => new ServiceError('invalidRequest', message);
 
-const isDirectory = async (target) => {
+export const isDirectory = async (target) => {
   try {
     return (await stat(target)).isDirectory();
   } catch {
@@ -26,7 +26,7 @@ const isDirectory = async (target) => {
   }
 };
 
-async function checkProject(dir) {
+export async function checkProject(dir) {
   if (typeof dir !== 'string' || !path.isAbsolute(dir)) {
     throw invalid('"dir" must be an absolute path');
   }
@@ -35,7 +35,7 @@ async function checkProject(dir) {
   }
 }
 
-function checkPackage(name) {
+export function checkPackage(name) {
   const verdict = validatePackageName(name);
   if (!verdict.ok) {
     throw invalid(verdict.reason);
