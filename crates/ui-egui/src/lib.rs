@@ -159,7 +159,11 @@ mod pen_mode_tests;
 #[cfg(test)]
 mod perf_tests;
 #[cfg(test)]
+mod playground_bars_tests;
+#[cfg(test)]
 mod playground_input_tests;
+#[cfg(test)]
+mod playground_save_tests;
 #[cfg(test)]
 mod playground_view_tests;
 #[cfg(test)]
