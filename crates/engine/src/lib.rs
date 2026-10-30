@@ -535,6 +535,8 @@ mod uigen_import_motion_tests;
 #[cfg(test)]
 mod uigen_import_review_tests;
 #[cfg(test)]
+mod uigen_import_stage_tests;
+#[cfg(test)]
 mod uigen_import_support;
 #[cfg(test)]
 mod uigen_import_tokens_tests;
