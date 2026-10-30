@@ -261,11 +261,23 @@ fn the_font_is_written_as_a_css_string_in_each_mode() {
     let f = fixture();
     let name = css_name(&f, "typo/police-famille");
     let longest = "a".repeat(64);
-    for font in ["Georgia", "Segoe UI", "system-ui", longest.as_str()] {
+    for font in ["Georgia", "Segoe UI", longest.as_str()] {
         let o = applied(&f, &with_font(font));
         assert_eq!(names_of(&o.light), vec![name.clone()], "{font}");
         assert_eq!(value_of(&o.light, &name), format!("\"{font}\""));
         assert_eq!(value_of(&o.dark, &name), format!("\"{font}\""));
+    }
+}
+
+// covers: E7-2.5
+#[test]
+fn a_generic_family_is_written_without_quotes() {
+    let f = fixture();
+    let name = css_name(&f, "typo/police-famille");
+    for font in ["system-ui", "serif", "monospace", "ui-rounded"] {
+        let o = applied(&f, &with_font(font));
+        assert_eq!(value_of(&o.light, &name), font);
+        assert_eq!(value_of(&o.dark, &name), font);
     }
 }
 
