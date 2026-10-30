@@ -59,9 +59,16 @@ impl History {
         }
     }
 
-    /// Empty settings, as one step that undo walks back.
-    pub fn revert(&mut self) {
-        self.commit(Settings::default());
+    /// The settings emptied, the mode, the theme and the radius shape kept, as one step that undo
+    /// walks back; no step when nothing is set. Whether a step was made.
+    pub fn revert(&mut self) -> bool {
+        let now = self.current();
+        let emptied = Settings { accent: None, base: None, font: None, radius: None, ..now.clone() };
+        if emptied == *now {
+            return false;
+        }
+        self.commit(emptied);
+        true
     }
 
     pub fn can_undo(&self) -> bool {

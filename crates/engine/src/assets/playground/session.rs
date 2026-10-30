@@ -12,8 +12,9 @@ use serde_json::{Value, json};
 use super::{Composed, History, Mode, RadiusShape, Settings, Template, overrides, overrides_css};
 use crate::capture::{CaptureError, CaptureErrorKind, CaptureEvent, CaptureOutcome, JobId};
 use crate::codegen::LitNames;
+use crate::dev::lit_export::tokens_css_named;
 use crate::lit_export::ExportPlan;
-use crate::lit_export::{TokenOptions, tokens_css};
+use crate::lit_export::TokenOptions;
 use crate::{Session, bad};
 
 const MAX_FRAME_BYTES: usize = 8 << 20;
@@ -21,6 +22,10 @@ const MAX_FRAME_BASE64: usize = MAX_FRAME_BYTES.div_ceil(3) * 4;
 const OPEN_COMMAND: &str = "playground.open";
 const MAX_TOKENS_BYTES: usize = 512 << 10;
 const MAX_OVERRIDES_BYTES: usize = 256 << 10;
+/// Calls of one kind the service may have in front of it; the next ones wait, only the latest kept.
+pub(crate) const MAX_IN_FLIGHT: usize = 8;
+const MAX_EVENTS_PER_CALL: usize = 64;
+const MAX_EVENTS_WAITING: usize = 256;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum Status {
@@ -63,6 +68,7 @@ pub(crate) struct Target {
     pub composed: Composed,
     pub base_theme: String,
     pub token_prefix: String,
+    pub names: LitNames,
 }
 
 enum Purpose {
@@ -83,6 +89,8 @@ pub(crate) struct PlaygroundState {
     latest: Option<Frame>,
     history: History,
     shown_theme: String,
+    waiting_input: Vec<Value>,
+    waiting_apply: Option<(Value, String)>,
 }
 
 impl PlaygroundState {
@@ -123,7 +131,40 @@ impl PlaygroundState {
         self.jobs.values().any(|purpose| matches!(purpose, Purpose::Frame))
     }
 
+    fn room_for(&self, wanted: fn(&Purpose) -> bool) -> bool {
+        self.jobs.values().filter(|purpose| wanted(purpose)).count() < MAX_IN_FLIGHT
+    }
+
+    /// How many input events wait for the page to take them.
+    pub(crate) fn input_waiting(&self) -> usize {
+        self.waiting_input.len()
+    }
+
+    /// Whether some settings wait for the page to take them.
+    pub(crate) fn apply_waiting(&self) -> bool {
+        self.waiting_apply.is_some()
+    }
+
+    fn wait_for_input(&mut self, events: Vec<Value>) -> Result<(), CaptureError> {
+        if self.waiting_input.len() + events.len() > MAX_EVENTS_WAITING {
+            return Err(CaptureError {
+                kind: CaptureErrorKind::InvalidRequest,
+                message: "too many input events are waiting for the page".to_string(),
+            });
+        }
+        for event in events {
+            let moves = |event: &Value| event.get("type").and_then(Value::as_str) == Some("move");
+            match self.waiting_input.last_mut() {
+                Some(last) if moves(last) && moves(&event) => *last = event,
+                _ => self.waiting_input.push(event),
+            }
+        }
+        Ok(())
+    }
+
     fn forget_pending(&mut self) {
+        self.waiting_input.clear();
+        self.waiting_apply = None;
         self.jobs.retain(|_, purpose| matches!(purpose, Purpose::Open { .. }));
         for purpose in self.jobs.values_mut() {
             if let Purpose::Open { current, .. } = purpose {
@@ -155,6 +196,12 @@ fn frame_of(answer: &Value, after: u64) -> Option<Frame> {
 }
 
 pub(crate) fn advance(s: &mut Session, job: JobId, outcome: CaptureOutcome) -> Option<CaptureEvent> {
+    let event = settle(s, job, outcome);
+    s.playground_flush();
+    event
+}
+
+fn settle(s: &mut Session, job: JobId, outcome: CaptureOutcome) -> Option<CaptureEvent> {
     let state = &mut s.capture.playground;
     match state.jobs.remove(&job)? {
         Purpose::Open { command, current } => {
@@ -204,6 +251,7 @@ impl Session {
     /// Ask for a newer image of the page when it is ready and nothing precedes the request.
     pub fn playground_poll(&mut self) -> bool {
         self.playground_sync();
+        self.playground_flush();
         let state = &self.capture.playground;
         if *state.status() != Status::Ready || state.waiting_for_frame() || self.capture.busy() {
             return false;
@@ -263,6 +311,22 @@ impl Session {
         Ok(job)
     }
 
+    /// The settings of the page that was open, shown again on the page just opened once it is ready,
+    /// when the theme they name is still in the document.
+    pub(crate) fn playground_restore(&mut self, history: History) {
+        if *history.current() == Settings::default() {
+            return;
+        }
+        match self.capture.playground.prepare(OPEN_COMMAND, history.current()) {
+            Ok(prepared) => {
+                if let Err(cause) = self.playground_push(prepared, history) {
+                    log::warn!("the playground settings were not shown again: {}", cause.message);
+                }
+            }
+            Err(cause) => log::info!("the playground settings were dropped: {cause}"),
+        }
+    }
+
     pub(crate) fn playground_set_template(&mut self) -> Result<JobId, CaptureError> {
         self.relay_playground("playground.setTemplate", json!({}), Purpose::SetTemplate)
     }
@@ -276,8 +340,40 @@ impl Session {
         Ok(job)
     }
 
-    pub(crate) fn playground_input(&mut self, events: Value) -> Result<JobId, CaptureError> {
-        self.relay_playground("playground.input", json!({"events": events}), Purpose::Input)
+    /// Hand input events to the page: a few calls at a time, none while the service has other work to do;
+    /// the events that come meanwhile wait, successive moves reduced to the last.
+    pub(crate) fn playground_input(&mut self, events: Vec<Value>) -> Result<(), CaptureError> {
+        self.capture.playground.wait_for_input(events)?;
+        self.playground_flush();
+        Ok(())
+    }
+
+    /// Submit what waits for the page when nothing precedes it.
+    pub(crate) fn playground_flush(&mut self) {
+        let state = &mut self.capture.playground;
+        if state.target.is_none() || *state.status() != Status::Ready {
+            return;
+        }
+        if state.room_for(|purpose| matches!(purpose, Purpose::Apply))
+            && let Some((params, theme)) = state.waiting_apply.take()
+        {
+            match self.relay_playground("playground.apply", params, Purpose::Apply) {
+                Ok(_) => self.capture.playground.shown_theme = theme,
+                Err(cause) => log::warn!("playground.apply was not sent: {}", cause.message),
+            }
+        }
+        while !self.capture.busy() && self.capture.playground.room_for(|purpose| matches!(purpose, Purpose::Input)) {
+            let state = &mut self.capture.playground;
+            let count = state.waiting_input.len().min(MAX_EVENTS_PER_CALL);
+            if count == 0 {
+                return;
+            }
+            let events: Vec<Value> = state.waiting_input.drain(..count).collect();
+            if let Err(cause) = self.relay_playground("playground.input", json!({"events": events}), Purpose::Input) {
+                log::warn!("playground.input was not sent: {}", cause.message);
+                return;
+            }
+        }
     }
 
     fn relay_playground(&mut self, method: &str, params: Value, purpose: Purpose) -> Result<JobId, CaptureError> {
@@ -313,12 +409,15 @@ impl PlaygroundState {
     pub(crate) fn prepare(&self, command: &str, settings: &Settings) -> crate::Result<Prepared> {
         let target = self.target.as_ref().ok_or_else(|| bad(command, "the playground is not open"))?;
         let theme = self.theme_of(settings).ok_or_else(|| bad(command, "unknown theme: no collection of that name in the document"))?;
-        let names = LitNames::new(&target.doc, &target.token_prefix);
+        let names = match target.doc.variables.collections.iter().find(|c| c.name == target.base_theme) {
+            Some(exported) => target.names.follow_theme(&target.doc, &target.token_prefix, exported, theme),
+            None => target.names.clone(),
+        };
         let found = overrides(&target.doc, theme, &names, settings).map_err(|cause| bad(command, cause.to_string()))?;
         let css = overrides_css(&found);
         let tokens = (theme.name != self.shown_theme).then(|| {
             let options = TokenOptions { prefix: target.token_prefix.clone(), light: None, dark: None };
-            tokens_css(&target.doc, &[theme], &options).text
+            tokens_css_named(&target.doc, &[theme], &options, &names).text
         });
         if css.len() > MAX_OVERRIDES_BYTES || tokens.as_ref().is_some_and(|text| text.len() > MAX_TOKENS_BYTES) {
             return Err(bad(command, "the theme is too large to show in the playground"));
@@ -328,16 +427,20 @@ impl PlaygroundState {
 }
 
 impl Session {
-    /// Send `prepared` to the page; `history` becomes the playground's only once it is on its way.
-    pub(crate) fn playground_push(&mut self, prepared: Prepared, history: History) -> Result<JobId, CaptureError> {
+    /// Send `prepared` to the page, or keep it for when the call before it is done: the page then takes
+    /// only the latest. `history` becomes the playground's once the request is taken.
+    pub(crate) fn playground_push(&mut self, prepared: Prepared, history: History) -> Result<(), CaptureError> {
         let mut params = json!({"overrides": prepared.overrides, "theme": prepared.mode.id(), "shape": prepared.shape.id()});
         if let Some(tokens) = prepared.tokens {
             params["tokens"] = Value::String(tokens);
         }
-        let job = self.relay_playground("playground.apply", params, Purpose::Apply)?;
         let state = &mut self.capture.playground;
+        if state.target.is_none() {
+            return Err(CaptureError { kind: CaptureErrorKind::InvalidRequest, message: "the playground is not open".to_string() });
+        }
         state.history = history;
-        state.shown_theme = prepared.theme;
-        Ok(job)
+        state.waiting_apply = Some((params, prepared.theme));
+        self.playground_flush();
+        Ok(())
     }
 }

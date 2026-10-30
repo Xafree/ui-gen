@@ -923,15 +923,18 @@ unavailable in the browser`). The service protocol is in
   components the library lacks for that model.
 - `playground.resize {width?, height?, scale?}`: set the window of the page (each value kept as it is when absent).
 - `playground.state {}`: `{status: closed|opening|ready|failed, error, template, stale, busy, themes: [collection
-  names], applied, settings, effective, targets, canUndo, canRedo, missing}`. `stale`: the document changed since the
-  export. `busy`: an install, an inspect or a render comes first in the service's queue. `missing`: the components the
+  names], applied, settings, effective, targets, canUndo, canRedo, missing, notes, inputWaiting, applyWaiting}`.
+  `notes`: what the export could not do (`{code, component, message}`, e.g. `token-missing`). `inputWaiting` and
+  `applyWaiting`: the input events and the settings the page has not taken yet (a few calls at most are in flight, the
+  later ones wait and only the latest settings are kept). `stale`: the document changed since the export. `busy`: an install, an inspect or a render comes first in the service's queue. `missing`: the components the
   model asks for and the library lacks. A missing component is marked in the page with `<div
   data-uigen-missing="Chart" role="note">Composant absent de la lib : Chart</div>`, never replaced by a native element.
 - `playground.input {events}`: relay 1 to 64 events to the page: `{type: move, x, y}`, `{type: down|up, x, y, button:
   left|middle|right}`, `{type: wheel, x, y, dx, dy}` (each at most 4000), `{type: key, key, mods?}` (`key` among Enter,
   Tab, Escape, Backspace, Delete, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Home, End, PageUp, PageDown, Space;
   `mods` among shift, ctrl, alt) and `{type: text, text}` (at most 256 characters, no control character). Coordinates
-  are page pixels inside the window. One invalid event refuses the whole batch.
+  are page pixels inside the window. One invalid event refuses the whole batch. The playground commands other than
+  `playground.saveTheme` change neither the document's revision nor its journal.
 - `playground.set {accent?, base?, font?, radius?, radiusShape?, theme?, mode?, commit?}` → `{settings, effective,
   targets, canUndo, canRedo}`. `accent` is `#rrggbb` (or `null` to clear), `base` is `{hue: 0 to 360, tint: 0 to 1}`,
   `font` a font name of at most 64 characters without `;`, `{`, `}`, `(`, `)`, `\`, `"` or a line break, `radius` one

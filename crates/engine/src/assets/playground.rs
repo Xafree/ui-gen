@@ -30,6 +30,8 @@ pub use overrides::{Effective, Overrides, SettingError, effective, overrides_css
 pub(crate) use overrides::{is_font_name, overrides, rewrites};
 pub use random::random_settings;
 pub(crate) use save::{copy_with, write_into};
+#[cfg(test)]
+pub(crate) use session::MAX_IN_FLIGHT;
 pub use session::{Frame, FrameFormat, Status};
 pub(crate) use session::{PlaygroundState, Target, Window, advance};
 pub use settings::{Mode, Neutral, RadiusPreset, RadiusShape, Settings};

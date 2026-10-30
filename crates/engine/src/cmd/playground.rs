@@ -13,9 +13,11 @@ use serde_json::{Value, json};
 use super::CommandSpec;
 use super::project_sources::absolute_root;
 use crate::capture::unavailable_message;
+use crate::codegen::LitNames;
+use crate::dev::lit_export::{plan_named, with_aliased};
 use crate::file_access::{self, Access};
 use crate::lit::{LitOptions, valid_prefix};
-use crate::lit_export::{ExportOptions, ExportPlan, Status as ComponentStatus, plan, write};
+use crate::lit_export::{ExportOptions, ExportPlan, Status as ComponentStatus, write};
 use crate::params::{f64_of, get};
 use crate::playground::{Composed, NO_COMPONENT, Status, Target, Template, Window, compose};
 use crate::{Result, Session, bad, spec};
@@ -37,6 +39,12 @@ const MAX_WHEEL: f64 = 4000.0;
 const MAX_TEXT_CHARS: usize = 256;
 const MAX_SHOWN: usize = 40;
 const NOT_IN_PROJECT: &str = "the current file is not in a library project";
+/// The playground commands that show the document without changing it: they count neither as a
+/// revision of the file nor in the journal.
+pub(crate) fn leaves_document_alone(id: &str) -> bool {
+    id.starts_with("playground.") && id != super::playground_settings::SAVE
+}
+
 pub(super) const NOT_OPEN: &str = "the playground is not open";
 const KEYS: [&str; 14] = [
     "Enter",
@@ -78,7 +86,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             STATE,
             "Playground state",
-            "{} → {status: closed|opening|ready|failed, error, template, stale (the document changed since the export), busy (the capture service has an install, inspect or render to do first), themes: [collection names], applied (the applied theme), settings, effective, targets, canUndo, canRedo, missing: [component names the library lacks]}",
+            "{} → {status: closed|opening|ready|failed, error, template, stale (the document changed since the export), busy (the capture service has an install, inspect or render to do first), inputWaiting (input events the page has not taken yet), applyWaiting (settings the page has not taken yet), notes (what the export could not do: code, component, message), themes: [collection names], applied (the applied theme), settings, effective, targets, canUndo, canRedo, missing: [component names the library lacks]}",
             false,
             state
         ),
@@ -158,25 +166,27 @@ struct Exported {
     plan: ExportPlan,
     theme: String,
     token_prefix: String,
+    names: LitNames,
 }
 
 fn export_plan(cmd: &str, tab: &Tab) -> Result<Exported> {
     let variables = &tab.doc.variables;
     let theme = tab.applied_theme.as_deref().and_then(|name| variables.collection(name)).or(variables.collections.first());
     let theme = theme.ok_or_else(|| bad(cmd, "the project has no variable collection to take a theme from"))?;
-    let mut options = ExportOptions { collections: Some(vec![theme.id.clone()]), ..ExportOptions::default() };
+    let reached = with_aliased(&tab.doc, theme).into_iter().map(|c| c.id.clone()).collect();
+    let mut options = ExportOptions { collections: Some(reached), ..ExportOptions::default() };
     if valid_prefix(&tab.tag_prefix) {
         options.lit = LitOptions::new(&tab.tag_prefix);
     }
     let token_prefix = options.lit.token_prefix.clone();
-    let exported = plan(&tab.doc, &options);
+    let (exported, names) = plan_named(&tab.doc, &options);
     if exported.components.is_empty() {
         return Err(bad(cmd, NO_COMPONENT));
     }
     if !exported.ready() {
         return Err(bad(cmd, format!("fix these components first: {}", exported.blockers().join(", "))));
     }
-    Ok(Exported { plan: exported, theme: theme.name.clone(), token_prefix })
+    Ok(Exported { plan: exported, theme: theme.name.clone(), token_prefix, names })
 }
 
 fn staging(root: &str) -> PathBuf {
@@ -191,11 +201,12 @@ fn start(s: &mut Session, command: &'static str, tab: Tab, template: Template, w
     if !s.capture.available() {
         return Err(bad(command, unavailable_message()));
     }
-    let Exported { plan: mut exported, theme, token_prefix } = export_plan(command, &tab)?;
+    let Exported { plan: mut exported, theme, token_prefix, names } = export_plan(command, &tab)?;
     let composed = compose(template, &exported);
     let root = absolute_root(command, &tab.root)?;
     let dir = staging(&root);
     file_access::allow(&dir, Access::Write).map_err(|e| bad(command, e.to_string()))?;
+    let kept = (command == REFRESH).then(|| s.capture.playground.history().clone());
     s.playground_close();
     write(&exported, &dir.join("lib").to_string_lossy(), true)?;
     write_template(&dir, &composed)?;
@@ -203,8 +214,11 @@ fn start(s: &mut Session, command: &'static str, tab: Tab, template: Template, w
         exported.components.iter().filter(|c| c.status == ComponentStatus::Ok).filter_map(|c| c.tag.as_deref()).take(MAX_TAGS).collect();
     let params = json!({"tags": tags, "theme": "light", "width": window.width, "height": window.height, "scale": window.scale});
     exported.files.clear();
-    let target = Target { uid: tab.uid, root, doc: tab.doc, template, plan: exported, window, composed, base_theme: theme, token_prefix };
+    let target = Target { uid: tab.uid, root, doc: tab.doc, template, plan: exported, window, composed, base_theme: theme, token_prefix, names };
     let job = s.playground_opening(command, target, params).map_err(|e| bad(command, e.message))?;
+    if let Some(history) = kept {
+        s.playground_restore(history);
+    }
     Ok(json!({"job": job}))
 }
 
@@ -262,7 +276,8 @@ fn state(s: &mut Session, _: &Value) -> Result<Value> {
         Status::Failed(message) => ("failed", Some(message.as_str())),
     };
     let template = state.target().map(|target| target.template.name());
-    let mut answer = json!({"status": status, "error": error, "template": template, "stale": s.playground_stale(), "busy": s.playground_busy()});
+    let waiting = (state.input_waiting(), state.apply_waiting());
+    let mut answer = json!({"status": status, "error": error, "template": template, "stale": s.playground_stale(), "busy": s.playground_busy(), "inputWaiting": waiting.0, "applyWaiting": waiting.1});
     if let (Some(fields), Value::Object(more)) = (answer.as_object_mut(), super::playground_settings::summary(s)) {
         fields.extend(more);
     }
@@ -336,6 +351,6 @@ fn input(s: &mut Session, p: &Value) -> Result<Value> {
     for (index, event) in events.iter().enumerate() {
         valid_event(event).map_err(|why| bad(INPUT, format!("event {index}: {why}")))?;
     }
-    s.playground_input(Value::Array(events.clone())).map_err(|e| bad(INPUT, e.message))?;
+    s.playground_input(events.clone()).map_err(|e| bad(INPUT, e.message))?;
     super::ok()
 }

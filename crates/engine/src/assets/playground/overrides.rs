@@ -12,6 +12,8 @@ use crate::token_roles::Roles;
 const MAX_FONT_CHARS: usize = 64;
 const MAX_TINT_CHROMA: f64 = 0.04;
 const FORBIDDEN_IN_FONT: [char; 7] = [';', '{', '}', '(', ')', '\\', '"'];
+const GENERIC_FAMILIES: [&str; 10] =
+    ["system-ui", "serif", "sans-serif", "monospace", "cursive", "fantasy", "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded"];
 const LIGHT_SELECTOR: &str = ":root[data-theme=\"light\"]";
 const DARK_SELECTOR: &str = ":root[data-theme=\"dark\"]";
 
@@ -139,11 +141,16 @@ impl Rewriter<'_> {
     fn css(&self, v: &Variable, value: &VariableValue) -> Option<String> {
         match value {
             VariableValue::Color(c) => Some(c.to_css()),
-            VariableValue::String(font) => Some(format!("\"{font}\"")),
+            VariableValue::String(font) => Some(font_family(font)),
             VariableValue::Number(x) => Some(self.roles.number_css(v, *x)),
             VariableValue::Boolean(_) | VariableValue::Alias(_) => None,
         }
     }
+}
+
+fn font_family(font: &str) -> String {
+    let name = font.trim();
+    if GENERIC_FAMILIES.iter().any(|generic| generic.eq_ignore_ascii_case(name)) { name.to_string() } else { format!("\"{font}\"") }
 }
 
 fn rewriter<'a>(doc: &'a Document, collection: &'a Collection, settings: &'a Settings) -> Result<Rewriter<'a>, SettingError> {

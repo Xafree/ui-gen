@@ -421,6 +421,8 @@ mod playground_overrides_tests;
 #[cfg(test)]
 mod playground_resize_tests;
 #[cfg(test)]
+mod playground_review_tests;
+#[cfg(test)]
 mod playground_session_tests;
 #[cfg(test)]
 mod playground_support;

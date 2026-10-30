@@ -20,8 +20,9 @@ const UNDO: &str = "playground.undo";
 const REDO: &str = "playground.redo";
 const REVERT: &str = "playground.revert";
 const RANDOM: &str = "playground.random";
-const SAVE: &str = "playground.saveTheme";
+pub(super) const SAVE: &str = "playground.saveTheme";
 const CODE: &str = "playground.code";
+const MAX_NAME_CHARS: usize = 64;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -219,6 +220,7 @@ pub(super) fn summary(s: &Session) -> Value {
     out.insert("themes".into(), json!(themes));
     out.insert("applied".into(), json!(target.and_then(|t| applied_of(s, t.uid))));
     out.insert("missing".into(), json!(target.map(|t| t.composed.missing.clone()).unwrap_or_default()));
+    out.insert("notes".into(), json!(target.map(|t| t.plan.notes.clone()).unwrap_or_default()));
     for key in ["settings", "effective", "targets"] {
         out.entry(key).or_insert(Value::Null);
     }
@@ -265,10 +267,7 @@ fn redo(s: &mut Session, _: &Value) -> Result<Value> {
 }
 
 fn revert(s: &mut Session, _: &Value) -> Result<Value> {
-    walk(s, REVERT, |history| {
-        history.revert();
-        true
-    })
+    walk(s, REVERT, History::revert)
 }
 
 fn seed_of(p: &Value) -> Result<u64> {
@@ -310,7 +309,13 @@ fn random(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn name_of(p: &Value) -> Result<String> {
     match get(p, "name") {
-        Some(Value::String(name)) if !name.trim().is_empty() => Ok(name.trim().to_string()),
+        Some(Value::String(name)) if !name.trim().is_empty() => {
+            let name = name.trim();
+            if name.chars().count() > MAX_NAME_CHARS || name.chars().any(char::is_control) {
+                return Err(bad(SAVE, format!("`name` must be at most {MAX_NAME_CHARS} characters without control characters")));
+            }
+            Ok(name.to_string())
+        }
         _ => Err(bad(SAVE, "`name` must be a non-empty string")),
     }
 }
@@ -331,6 +336,7 @@ fn save_theme(s: &mut Session, p: &Value) -> Result<Value> {
     if s.docs.get(s.active).is_none_or(|ds| ds.uid != target.uid) {
         return Err(bad(SAVE, "switch to the document the playground shows first"));
     }
+    let was_stale = s.playground_stale();
     let doc = s.doc()?;
     let source =
         collection_named(doc, &chosen).ok_or_else(|| bad(SAVE, format!("the theme \"{}\" is no longer in the document", shown(&chosen))))?.clone();
@@ -353,7 +359,17 @@ fn save_theme(s: &mut Session, p: &Value) -> Result<Value> {
     if apply {
         super::project::update(s, &json!({"appliedTheme": name}))?;
     }
+    show_saved_theme(s, was_stale);
     Ok(json!({"collection": saved, "name": name}))
+}
+
+/// The playground's document takes the saved theme, so the menu lists it without a refresh; a document
+/// that had already changed otherwise stays stale.
+fn show_saved_theme(s: &mut Session, was_stale: bool) {
+    let Some(doc) = s.docs.get(s.active).map(|ds| std::sync::Arc::clone(&ds.doc)) else { return };
+    if let Some(target) = s.capture.playground.target_mut().filter(|_| !was_stale) {
+        target.doc = doc;
+    }
 }
 
 fn code(s: &mut Session, _: &Value) -> Result<Value> {
