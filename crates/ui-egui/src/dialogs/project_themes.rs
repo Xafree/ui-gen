@@ -99,6 +99,11 @@ impl Themes {
         best
     }
 
+    fn out_of_sync(&self) -> Option<&ThemeInfo> {
+        let applied = self.applied.as_deref()?;
+        self.followed().filter(|followed| followed.name != applied)
+    }
+
     fn followers_of(&self, theme: &str) -> usize {
         self.rows.iter().find(|row| row.name == theme).map_or(0, |row| row.bound_layers)
     }
@@ -204,9 +209,7 @@ fn messages(ui: &mut Ui, t: &Tokens, state: &Themes, acts: &mut Vec<ThemeAct>) {
         Some(outcome @ Outcome::Failed { .. }) => note(ui, &outcome.text(), t.danger),
         None => {}
     }
-    if let Some(followed) = state.followed()
-        && state.applied.as_deref() != Some(followed.name.as_str())
-    {
+    if let Some(followed) = state.out_of_sync() {
         note(ui, &trf("The layers follow {theme}, not the applied theme. Apply it again to sync.", &[("theme", &followed.name)]), t.warning);
     }
     ui.add_space(6.0);
@@ -269,4 +272,40 @@ fn swatch_chip(ui: &mut Ui, t: &Tokens, swatch: &Swatch) {
     ui.painter().rect_filled(right, CornerRadius { nw: 0, sw: 0, ne: radius, se: radius }, dark);
     ui.painter().rect_stroke(rect, CornerRadius::same(radius), Stroke::new(1.0, t.border_strong), StrokeKind::Inside);
     resp.on_hover_text(format!("{}  {value}", swatch.name));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(name: &str, bound_layers: usize) -> ThemeInfo {
+        ThemeInfo {
+            collection: name.to_owned(),
+            name: name.to_owned(),
+            origin: None,
+            modes: Vec::new(),
+            variables: 0,
+            bound_layers,
+            swatches: Vec::new(),
+        }
+    }
+
+    fn themes(applied: Option<&str>) -> Themes {
+        Themes { rows: vec![row("mui 7", 4), row("Brand", 0)], applied: applied.map(str::to_owned), ..Themes::default() }
+    }
+
+    #[test]
+    fn no_applied_theme_means_nothing_to_resync() {
+        assert!(themes(None).out_of_sync().is_none());
+    }
+
+    #[test]
+    fn layers_following_another_theme_than_the_applied_one_are_out_of_sync() {
+        assert_eq!(themes(Some("Brand")).out_of_sync().map(|row| row.name.as_str()), Some("mui 7"));
+    }
+
+    #[test]
+    fn layers_following_the_applied_theme_are_in_sync() {
+        assert!(themes(Some("mui 7")).out_of_sync().is_none());
+    }
 }
