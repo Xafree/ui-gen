@@ -54,8 +54,17 @@ journal libre, jamais lu comme protocole.
 | `install` | `dir`, `package`, `version` (exacte ou `latest`) | `{package, version, license, framework}` |
 | `uninstall` | `dir`, `package` | `{package}` |
 | `inspect` | `dir`, `package` | `{package, version, framework, components: [{name, props: [{name, type, values}]}], notes}` (propriétés typées depuis le lot 3, voir « Instantané et `inspect` enrichis ») |
-| `render` | `dir`, `package`, `component`, `props`, `state`, `theme` | `{snapshot (instantané v1 de `figcraft-dom`), png (chemin relatif à `dir`)}` |
+| `render` | `dir`, `package`, `component`, `props`, `state`, `theme`, `sampleText` (facultatif) | `{snapshot (instantané v1 de `figcraft-dom`), png (chemin relatif à `dir`), note (facultatif)}` |
 | `shutdown` | `{}` | `{}` |
+
+`sampleText` est le libellé d'exemple du composant (≤ 256 caractères, `invalidRequest` sinon) ; le moteur y met le
+nom du composant (`Button`), pour tous les états, `Loading` compris. Le service l'injecte sans jamais l'écrire dans
+du code : en contenu enfant du composant React (`createElement(Composant, props, texte)`), en nœud texte enfant de
+l'élément pour un web component (le `<slot>` le reprend). Un composant qui refuse ses enfants (élément vide : React
+lève « void element ») fait échouer ce rendu ; le service réessaie **une fois** sans texte et, si cela réussit,
+ajoute `note` = `sampleText ignored: the component takes no content`. Un composant qui n'affiche simplement pas ses
+enfants ne donne aucune note. Les deux essais tiennent dans les 25 s du service. Le moteur remonte la `note` dans
+les `warnings` de l'import, une seule fois.
 
 `state` ∈ `default`, `hover`, `focus`, `pressed`, `disabled` ; `theme` ∈ `light`, `dark`. `framework` ∈ `react`,
 `vue`, `svelte`, `web-components`, `unknown` ; `render` n'accepte que `react` et `web-components`

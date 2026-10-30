@@ -17,7 +17,7 @@ pub enum CaptureJob {
     Install { root: String, package: String, version: String },
     Uninstall { root: String, package: String },
     Inspect { root: String, package: String },
-    Render { root: String, package: String, component: String, props: Value, state: String, theme: String },
+    Render { root: String, package: String, component: String, props: Value, sample_text: Option<String>, state: String, theme: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

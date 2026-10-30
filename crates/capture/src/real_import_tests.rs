@@ -100,6 +100,30 @@ fn assert_readable(error: &CaptureError) {
     assert!(error.message.trim().len() > 10, "the message is not readable: {:?}", error.message);
 }
 
+fn height_of(doc: &Document, set: NodeId, variant: &str) -> f64 {
+    let found = doc.node(set).unwrap().children.iter().find(|id| doc.node(**id).unwrap().name == variant);
+    doc.node(*found.unwrap_or_else(|| panic!("no variant {variant:?}"))).unwrap().height
+}
+
+fn assert_variants_are_labelled_and_sized(doc: &Document, set: NodeId) {
+    let mut layers = Vec::new();
+    for variant in &doc.node(set).unwrap().children {
+        subtree(doc, *variant, &mut layers);
+    }
+    let labels: Vec<&str> = layers
+        .iter()
+        .filter_map(|id| match &doc.node(*id).unwrap().kind {
+            NodeKind::Text(text) => Some(text.characters.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(labels.iter().any(|label| label.eq_ignore_ascii_case("Button")), "no TEXT layer reads Button (MUI upper-cases it): {labels:?}");
+    let small = height_of(doc, set, "Style=contained, Size=small, State=Default");
+    let medium = height_of(doc, set, "Style=contained, Size=medium, State=Default");
+    eprintln!("MUI Button: TEXT layers {labels:?}, height small = {small}, medium = {medium}");
+    assert!(small < medium, "small ({small}) is not shorter than medium ({medium})");
+}
+
 // covers: E3-8.1
 #[test]
 #[ignore = "downloads @mui/material from npm and drives Chromium; run by hand"]
@@ -123,6 +147,7 @@ fn real_import_of_the_mui_button_gives_sixteen_variants_a_light_dark_theme_a_rip
     let node = doc.node(set).unwrap();
     assert!(matches!(node.kind, NodeKind::ComponentSet { .. }), "{:?}", node.kind);
     assert_eq!(node.children.len(), 16);
+    assert_variants_are_labelled_and_sized(doc, set);
 
     let collection_id = result["collection"].as_str().unwrap_or_else(|| panic!("no collection in {result}"));
     let collection = doc.variables.collections.iter().find(|collection| collection.id == collection_id).expect("the collection exists");
@@ -236,7 +261,8 @@ fn real_staged_import_lands_in_the_import_page_and_placing_it_makes_the_page_a_b
     let staged = staged_import(&mut session, "Button", &["contained", "outlined"], &["small", "medium"], &all_states);
     assert_eq!(staged["variants"], json!(16), "{staged}");
     let import_page = figcraft_engine::params::id_of(&staged["page"]).unwrap_or_else(|| panic!("no page in {staged}"));
-    assert_one_set_of(&session, import_page, &format!("- Imported · {PACKAGE} {VERSION}"), "Button", 16);
+    let staged_set = assert_one_set_of(&session, import_page, &format!("- Imported · {PACKAGE} {VERSION}"), "Button", 16);
+    assert_variants_are_labelled_and_sized(document(&session), staged_set);
     assert!(page_children(&session).is_empty(), "the staged import wrote on the current page");
 
     let chip = staged_import(&mut session, "Chip", &["filled"], &["medium"], &["Default"]);

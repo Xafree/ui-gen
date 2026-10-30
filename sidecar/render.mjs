@@ -14,6 +14,8 @@ const STATES = ['default', 'hover', 'focus', 'pressed', 'disabled'];
 const THEMES = ['light', 'dark'];
 const VIEWPORT = { width: 800, height: 600 };
 const RENDER_BUDGET_MS = 25_000;
+const MAX_SAMPLE_TEXT_CHARS = 256;
+const SAMPLE_TEXT_IGNORED = 'sampleText ignored: the component takes no content';
 const SETTLE_CAP_MS = 3_000;
 const BACKGROUNDS = { light: '#ffffff', dark: '#1e1e1e' };
 
@@ -26,7 +28,9 @@ body { margin: 20px; font-family: system-ui, -apple-system, "Segoe UI", Roboto, 
 [data-uigen-root] { display: inline-block; }
 </style></head><body><div data-uigen-root></div></body></html>`;
 
-const reactEntry = (name, component, props) => `import * as lib from ${JSON.stringify(name)};
+const reactChildren = (sampleText) => (sampleText === undefined ? '' : `, ${JSON.stringify(sampleText)}`);
+
+const reactEntry = (name, component, props, sampleText) => `import * as lib from ${JSON.stringify(name)};
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
@@ -36,19 +40,25 @@ if (!Object.hasOwn(lib, ${JSON.stringify(component)}) || !isComponent(lib[${JSON
   window.__uigenMissing = true;
 } else {
   const root = createRoot(document.querySelector(${JSON.stringify(ROOT_SELECTOR)}), { onUncaughtError: fail, onCaughtError: fail });
-  flushSync(() => root.render(createElement(lib[${JSON.stringify(component)}], ${JSON.stringify(props)})));
+  flushSync(() => root.render(createElement(lib[${JSON.stringify(component)}], ${JSON.stringify(props)}${reactChildren(sampleText)})));
 }`;
 
-const elementEntry = (modulePath, tag, props) => `import ${JSON.stringify(modulePath)};
+const elementContent = (sampleText) =>
+  sampleText === undefined ? '' : `element.append(document.createTextNode(${JSON.stringify(sampleText)}));\n`;
+
+const elementEntry = (modulePath, tag, props, sampleText) => `import ${JSON.stringify(modulePath)};
 const element = document.createElement(${JSON.stringify(tag)});
 for (const [key, value] of Object.entries(${JSON.stringify(props)})) {
   if (key in element) { element[key] = value; } else { element.setAttribute(key, String(value)); }
 }
-document.querySelector(${JSON.stringify(ROOT_SELECTOR)}).append(element);`;
+${elementContent(sampleText)}document.querySelector(${JSON.stringify(ROOT_SELECTOR)}).append(element);`;
 
 const safeSegment = (text) => text.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^\.+/, '_');
 
-function checkParams({ component, props, state, theme }) {
+function checkParams({ component, props, state, theme, sampleText }) {
+  if (sampleText !== undefined && (typeof sampleText !== 'string' || sampleText.length > MAX_SAMPLE_TEXT_CHARS)) {
+    throw invalid(`"sampleText" must be a string of at most ${MAX_SAMPLE_TEXT_CHARS} characters`);
+  }
   if (typeof component !== 'string' || component === '') {
     throw invalid('"component" must be a non-empty string');
   }
@@ -63,19 +73,19 @@ function checkParams({ component, props, state, theme }) {
   }
 }
 
-function buildEntry(installed, component, props) {
+function buildEntry(installed, component, props, sampleText) {
   const modulePath = installed.tags.get(component);
   if (modulePath !== undefined) {
     const file = insideRoot(installed.root, modulePath);
     if (file === null) {
       throw new ServiceError('componentNotFound', `component "${component}" is declared outside ${installed.name}`);
     }
-    return elementEntry(file, component, props);
+    return elementEntry(file, component, props, sampleText);
   }
   if (installed.framework !== 'react') {
     throw new ServiceError('componentNotFound', `component "${component}" is not declared by ${installed.name}`);
   }
-  return reactEntry(installed.name, component, props);
+  return reactEntry(installed.name, component, props, sampleText);
 }
 
 const settle = (page, budget) =>
@@ -137,17 +147,30 @@ export async function render(params) {
     throw new ServiceError('frameworkUnsupported', `${installed.framework} packages cannot be rendered yet (supported: ${RENDERABLE.join(', ')})`);
   }
   const props = params.state === 'disabled' ? { ...params.props, disabled: true } : params.props;
-  const code = await budget.bound(bundleEntry({ contents: buildEntry(installed, params.component, props), resolveDir: installed.sources }));
+  const bundle = (sampleText) =>
+    budget.bound(bundleEntry({ contents: buildEntry(installed, params.component, props, sampleText), resolveDir: installed.sources }));
+  const inPage = async (code) => {
+    try {
+      return await budget.bound(
+        withPage({ viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: params.theme }, (page) =>
+          budget.bound(renderInPage(page, installed, params, code, budget)),
+        ),
+      );
+    } catch (error) {
+      if (error instanceof ServiceError) {
+        throw error;
+      }
+      throw new ServiceError('render', error instanceof Error ? error.message : 'the page could not be rendered');
+    }
+  };
+  const withText = await bundle(params.sampleText);
   try {
-    return await budget.bound(
-      withPage({ viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: params.theme }, (page) =>
-        budget.bound(renderInPage(page, installed, params, code, budget)),
-      ),
-    );
+    return await inPage(withText);
   } catch (error) {
-    if (error instanceof ServiceError) {
+    const refusedText = params.sampleText !== undefined && error instanceof ServiceError && error.kind === 'render' && budget.remaining() > 0;
+    if (!refusedText) {
       throw error;
     }
-    throw new ServiceError('render', error instanceof Error ? error.message : 'the page could not be rendered');
   }
+  return { ...(await inPage(await bundle(undefined))), note: SAMPLE_TEXT_IGNORED };
 }

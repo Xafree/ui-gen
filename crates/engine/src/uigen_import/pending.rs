@@ -150,6 +150,11 @@ impl PendingImport {
                 let rendered = outcome.map_err(|cause| failure(&step, cause))?;
                 let snapshot =
                     snapshot_of(&rendered).map_err(|cause| CaptureError { kind: CaptureErrorKind::Protocol, message: format!("{step}: {cause}") })?;
+                if let Some(note) = rendered.get("note").and_then(Value::as_str)
+                    && !rendering.warnings.iter().any(|warning| warning == note)
+                {
+                    rendering.warnings.push(note.to_string());
+                }
                 if let Some(slot) = rendering.snapshots.get_mut(index).and_then(|themed| themed.get_mut(theme_index)) {
                     *slot = Some(snapshot);
                 }
@@ -167,6 +172,7 @@ impl PendingImport {
                     package: self.request.package.clone(),
                     component: self.request.component.clone(),
                     props: cell.props.clone(),
+                    sample_text: Some(self.request.component.clone()),
                     state: cell.state.render().to_string(),
                     theme: theme.render().to_string(),
                 };

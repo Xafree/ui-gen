@@ -25,6 +25,8 @@ fn error(kind: CaptureErrorKind, message: impl Into<String>) -> CaptureError {
 
 #[cfg(test)]
 mod locate_tests;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod protocol_sample_tests;
 #[cfg(test)]
 mod real_import_tests;
 #[cfg(test)]
