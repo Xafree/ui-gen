@@ -55,14 +55,14 @@ fn named(c: &Collection, matches: impl Fn(&str) -> bool) -> Option<&Mode> {
     c.modes.iter().find(|m| matches(m.name.trim()))
 }
 
-fn light_of<'a>(c: &'a Collection, wanted: Option<&str>) -> Option<&'a Mode> {
+pub(crate) fn light_of<'a>(c: &'a Collection, wanted: Option<&str>) -> Option<&'a Mode> {
     wanted
         .and_then(|w| named(c, |n| n.eq_ignore_ascii_case(w.trim())))
         .or_else(|| named(c, |n| LIGHT_MODES.iter().any(|l| n.eq_ignore_ascii_case(l))))
         .or_else(|| c.modes.first())
 }
 
-fn dark_of<'a>(c: &'a Collection, wanted: Option<&str>, light: &Mode) -> Option<&'a Mode> {
+pub(crate) fn dark_of<'a>(c: &'a Collection, wanted: Option<&str>, light: &Mode) -> Option<&'a Mode> {
     let found = match wanted {
         Some(w) => named(c, |n| n.eq_ignore_ascii_case(w.trim())),
         None => named(c, |n| DARK_MODES.iter().any(|d| n.eq_ignore_ascii_case(d))),

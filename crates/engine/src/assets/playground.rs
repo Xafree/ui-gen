@@ -8,8 +8,22 @@ use serde_json::{Map, Value, json};
 
 use crate::cmd::CommandSpec;
 use crate::codegen::CodeLang;
-use crate::params::{get, id_of, num, string, targets};
+use crate::params::{get, id_of, num, string, targets as param_targets};
 use crate::{EngineError, Result, Session, bad, spec};
+
+mod history;
+mod overrides;
+mod random;
+mod settings;
+mod targets;
+
+pub use history::History;
+#[cfg_attr(not(test), expect(unused_imports, reason = "the playground session of the next task is the first caller"))]
+pub(crate) use overrides::overrides;
+pub use overrides::{Effective, Overrides, SettingError, effective, overrides_css};
+pub use random::random_settings;
+pub use settings::{Mode, Neutral, RadiusPreset, RadiusShape, Settings};
+pub use targets::{Targets, targets};
 
 /// The component a playground for `target` shows: an instance's component, a component or a
 /// component set itself. None for other layers.
@@ -56,7 +70,7 @@ pub fn specs() -> Vec<CommandSpec> {
         false,
         |s, p| {
             let cmd = "component.playground";
-            let target = targets(s, p).first().copied().ok_or_else(|| bad(cmd, "select an instance, a component or a component set"))?;
+            let target = param_targets(s, p).first().copied().ok_or_else(|| bad(cmd, "select an instance, a component or a component set"))?;
             let values = match get(p, "properties") {
                 None | Some(Value::Null) => Map::new(),
                 Some(Value::Object(m)) => m.clone(),
