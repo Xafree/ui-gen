@@ -114,7 +114,9 @@ impl Scenario {
                 let snapshot = synthetic_button(variant.unwrap_or("solid"), size.unwrap_or("md"), state, theme);
                 Ok(json!({"snapshot": snapshot, "png": ".uigen/captures/synthetic.png"}))
             }
-            CaptureJob::Install { .. } | CaptureJob::Uninstall { .. } => Err(service_failure(CaptureErrorKind::Internal, "unexpected job")),
+            CaptureJob::Install { .. } | CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => {
+                Err(service_failure(CaptureErrorKind::Internal, "unexpected job"))
+            }
         }
     }
 }
