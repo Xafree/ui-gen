@@ -83,5 +83,5 @@ export async function startService({ launchLog } = {}) {
   };
 
   const greeting = JSON.parse(await nextLine());
-  return { greeting, request, exited, stop };
+  return { greeting, request, exited, stop, pid: child.pid };
 }

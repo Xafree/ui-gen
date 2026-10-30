@@ -21,6 +21,15 @@ MIT OR Apache-2.0. No third-party icon sets are used.
 |---|---|---|---|---|
 | `sidecar/fixtures-src/shadcn.jsx`, `TAILWIND_SHADCN_THEME` in `sidecar/capture.mjs` | shadcn | [shadcn/ui](https://github.com/shadcn-ui/ui) | MIT, Copyright (c) 2023 shadcn; full text in [`NOTICE`](NOTICE) | Button and theme variables, test fixture of the capture service; never bundled or shipped with UIGEN |
 
+## npm dependencies of the sidecar (installed, not in this repository)
+
+`sidecar/package.json` pins its dependencies; `npm --prefix sidecar ci` installs them into `sidecar/node_modules`, which is never committed. The playground bundles a project's exported Lit library with `lit`; the licence texts are in [`NOTICE`](NOTICE).
+
+| Package | Author | Source | Licence | Notes |
+|---|---|---|---|---|
+| `lit` 3.3.3, `@lit/reactive-element` 2.1.2, `lit-element` 4.2.2, `lit-html` 3.3.3, `@lit-labs/ssr-dom-shim` 1.6.0 | Google LLC | [lit/lit](https://github.com/lit/lit) | BSD-3-Clause | Bundled into the playground page by the capture service; the last one's package carries no licence file, its `package.json` declares BSD-3-Clause |
+| `@types/trusted-types` 2.0.7 | Microsoft Corporation | [DefinitelyTyped](https://github.com/DefinitelyTyped/DefinitelyTyped) | MIT (not BSD-3-Clause) | Type declarations that `lit-html` depends on |
+
 ## Fonts (build input, not in this repository)
 
 Release builds embed fonts from the optional craft-fonts build input

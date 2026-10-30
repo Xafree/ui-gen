@@ -153,7 +153,9 @@ impl Scenario {
                 }
                 Ok(answer)
             }
-            CaptureJob::Install { .. } | CaptureJob::Uninstall { .. } => Err(service_failure(CaptureErrorKind::Internal, "unexpected job")),
+            CaptureJob::Install { .. } | CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => {
+                Err(service_failure(CaptureErrorKind::Internal, "unexpected job"))
+            }
         }
     }
 }
@@ -367,7 +369,7 @@ impl EvolvingBackend {
                 self.version.clone_from(version);
                 Ok(json!({"package": package, "version": version, "framework": "react", "license": "MIT"}))
             }
-            CaptureJob::Uninstall { .. } => Ok(json!({})),
+            CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
         }
     }
 }

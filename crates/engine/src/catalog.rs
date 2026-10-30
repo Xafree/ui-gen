@@ -46,6 +46,8 @@ pub static MENU: &[MenuItem] = &[
     m!("File", "Export selection as SVG…", "file.exportSvg"),
     // UIGEN's own: the Lit package of the file's components.
     m!("File", "Export library as Lit…", "export.litWindow"),
+    // UIGEN's own: the exported library running live (desktop only).
+    m!("File", "Open playground", "playground.open"),
     // UIGEN's own: the settings of the library project, with its source libraries.
     m!("File", "Project settings…", "project.settings"),
     // UIGEN's own: the window that imports one component of a source library.
@@ -296,12 +298,13 @@ pub fn items() -> impl Iterator<Item = &'static MenuItem> {
 }
 
 /// Items of FigCraft's own that the parity count leaves out (as it does the `collab.` ones).
-const OWN: [&str; 7] = [
+const OWN: [&str; 8] = [
     "file.newFromTemplate",
     "file.newBoard",
     "help.gettingStarted",
     "text.missingFonts",
     "export.litWindow",
+    "playground.open",
     "project.settings",
     "uigen.importWindow",
 ];

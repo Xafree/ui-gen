@@ -6,10 +6,19 @@ use std::time::Duration;
 
 use figcraft_engine::Session;
 use figcraft_engine::capture::JobState;
+use figcraft_engine::playground::Status;
 
 const POLL: Duration = Duration::from_millis(100);
-const CAPTURE_COMMANDS: [&str; 6] =
-    ["project.addSource", "project.setSourceVersion", "project.removeSource", "uigen.importComponent", "uigen.listComponents", "uigen.updateSource"];
+const CAPTURE_COMMANDS: [&str; 8] = [
+    "project.addSource",
+    "project.setSourceVersion",
+    "project.removeSource",
+    "uigen.importComponent",
+    "uigen.listComponents",
+    "uigen.updateSource",
+    "playground.open",
+    "playground.refresh",
+];
 
 pub fn needs_service(commands: &[&str]) -> bool {
     commands.iter().any(|command| CAPTURE_COMMANDS.contains(command))
@@ -26,6 +35,7 @@ pub fn install(session: &mut Session) {
 
 fn working(session: &Session) -> bool {
     session.capture_jobs().iter().any(|job| matches!(job.state, JobState::Queued | JobState::Running))
+        || *session.playground_status() == Status::Opening
 }
 
 /// Wait for every job submitted so far and apply the results; the failures come back as messages.

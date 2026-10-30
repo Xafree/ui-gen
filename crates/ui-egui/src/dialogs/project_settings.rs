@@ -205,7 +205,7 @@ pub(crate) fn pump(app: &mut FigApp) {
     let mut imported = false;
     for event in app.session.pump_capture() {
         imported |= event.command == IMPORT;
-        if super::import_component::pump_event(app, &event) {
+        if crate::playground_bars::note_event(app, &event) || super::import_component::pump_event(app, &event) {
             continue;
         }
         let package = event.package.as_str();

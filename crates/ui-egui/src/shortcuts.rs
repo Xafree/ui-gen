@@ -156,6 +156,10 @@ pub(crate) fn handle_input(
         }
         return;
     }
+    if crate::playground::on_screen(app) {
+        playground_keys(app, ctx, swallowed);
+        return;
+    }
     let events: Vec<Event> = ctx.input(|i| i.events.clone());
     // Every frame while editing, even one without input: a frame without the IME output turns the
     // platform's IME off, which drops the composition (macOS then types plain letters).
@@ -188,6 +192,27 @@ pub(crate) fn handle_input(
                 // handled
             }
             _ => {}
+        }
+    }
+}
+
+/// The Playground tab hides the document: only the shortcuts that don't act on it run.
+fn playground_keys(app: &mut FigApp, ctx: &Context, swallowed: Swallowed) {
+    if let Some(id) = swallowed.run.filter(|id| crate::playground::keeps_shortcut(id)) {
+        run_binding(app, id);
+    }
+    let pressed: Vec<(Key, Option<Key>, Modifiers)> = ctx.input(|i| {
+        i.events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Key { key, physical_key, pressed: true, repeat: false, modifiers } => Some((*key, *physical_key, *modifiers)),
+                _ => None,
+            })
+            .collect()
+    });
+    for (key, physical, modifiers) in pressed {
+        if let Some(binding) = lookup(keymap::Context::Canvas, key, physical, modifiers).filter(|b| crate::playground::keeps_shortcut(b.id)) {
+            run_binding(app, binding.id);
         }
     }
 }

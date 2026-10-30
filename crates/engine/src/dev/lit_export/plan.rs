@@ -1,12 +1,13 @@
 //! The plan of a Lit export: which components become files, under which element names and with
 //! which problems, and the text of every file of the package. Nothing is written here.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use figcraft_doc::{Collection, Document, NodeId, NodeKind};
 use serde::Serialize;
 
-use super::{TokenOptions, package, tokens_css};
+use super::{TokenOptions, package, tokens_css_named};
+use crate::codegen::LitNames;
 use crate::component_codegen::{Component, describe, main_of};
 use crate::components::variant_set;
 use crate::lit::{self, LitOptions, Note, StateRecipe, TagIssue};
@@ -185,6 +186,11 @@ fn candidates(doc: &Document, ids: Option<&[NodeId]>) -> Vec<Candidate> {
 
 /// The plan for `opts`: an entry per component, and every file of the package.
 pub fn plan(doc: &Document, opts: &ExportOptions) -> ExportPlan {
+    plan_named(doc, opts).0
+}
+
+/// [`plan`], and the names its `tokens.css` gives the variables.
+pub(crate) fn plan_named(doc: &Document, opts: &ExportOptions) -> (ExportPlan, LitNames) {
     let found = candidates(doc, opts.ids.as_deref());
     let tags: Vec<Result<String, TagIssue>> = found.iter().map(|c| lit::tag_name(&c.name, &opts.lit.prefix)).collect();
     let mut taken: BTreeMap<&str, usize> = BTreeMap::new();
@@ -246,8 +252,11 @@ pub fn plan(doc: &Document, opts: &ExportOptions) -> ExportPlan {
 
     let selected: Vec<&Collection> =
         doc.variables.collections.iter().filter(|c| opts.collections.as_ref().is_none_or(|ids| ids.contains(&c.id))).collect();
-    let tokens =
-        tokens_css(doc, &selected, &TokenOptions { prefix: opts.lit.token_prefix.clone(), light: opts.light.clone(), dark: opts.dark.clone() });
+    let cited: HashSet<String> = reads.iter().flat_map(|(_, used)| used.iter().cloned()).collect();
+    let mut names = LitNames::new(doc, &opts.lit.token_prefix);
+    names.follow_citations(doc, &selected, &cited);
+    let token_options = TokenOptions { prefix: opts.lit.token_prefix.clone(), light: opts.light.clone(), dark: opts.dark.clone() };
+    let tokens = tokens_css_named(doc, &selected, &token_options, &names);
     for (component, used) in &reads {
         for name in used.iter().filter(|n| !tokens.declared.contains(n)) {
             let note = Note {
@@ -276,5 +285,5 @@ pub fn plan(doc: &Document, opts: &ExportOptions) -> ExportPlan {
     ];
     files.extend(extra.into_iter().map(|(path, kind, text)| PlannedFile { path: path.to_string(), kind, text }));
     files.sort_by(|a, b| a.path.cmp(&b.path));
-    ExportPlan { components, files, notes }
+    (ExportPlan { components, files, notes }, names)
 }

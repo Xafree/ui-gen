@@ -84,7 +84,7 @@ impl CaptureBackend for Backend {
                 self.version = version.clone();
                 Ok(json!({"package": package, "version": version, "framework": "react", "license": "MIT"}))
             }
-            CaptureJob::Uninstall { .. } => Err(service_failure(CaptureErrorKind::Internal, "unexpected job")),
+            CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Err(service_failure(CaptureErrorKind::Internal, "unexpected job")),
         };
         self.submitted += 1;
         self.ready.push((self.submitted, outcome));

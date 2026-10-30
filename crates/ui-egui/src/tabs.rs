@@ -9,6 +9,7 @@ use serde_json::json;
 use crate::a11y::Tip;
 use crate::i18n::{tr, trf};
 use crate::icons::{self, Icon};
+use crate::playground;
 use crate::present::{PresentTab, Presenter};
 use crate::theme::{Tokens, regular};
 use crate::{FigApp, TitleBar};
@@ -16,6 +17,7 @@ use crate::{FigApp, TitleBar};
 pub const HEIGHT: f32 = 40.0;
 const MIN_TAB_WIDTH: f32 = 96.0;
 const OVERFLOW_WIDTH: f32 = 32.0;
+const PLAYGROUND_TAB_WIDTH: f32 = 160.0;
 const OPEN_TIME: f64 = 0.18;
 
 /// Which tabs were open last frame and when the newly opened ones appeared. It is updated in place
@@ -121,7 +123,8 @@ pub fn tab_bar(app: &mut FigApp, ui: &mut Ui) {
         });
         let preferred: Vec<f32> = document_tabs.iter().map(|&i| preferred_width(app, i)).collect();
         // Leave the new-tab button, theme toggle, window controls and a draggable gap free.
-        let room = (rect.max.x - buttons_w - 70.0 - x - 34.0).max(0.0);
+        let playground_w = if app.ui.playground.open { PLAYGROUND_TAB_WIDTH } else { 0.0 };
+        let room = (rect.max.x - buttons_w - 70.0 - x - 34.0 - playground_w).max(0.0);
         let present_pref: Vec<f32> = app.ui.presents.iter().map(present_tab_width).collect();
         let present_on = app.ui.present.as_ref().and(app.ui.present_active);
         let active_present = present_on.and_then(|id| app.ui.presents.iter().position(|p| p.id == id));
@@ -136,6 +139,7 @@ pub fn tab_bar(app: &mut FigApp, ui: &mut Ui) {
             tab_rects.push(Rect::from_min_size(pos2(tab_x, rect.min.y), vec2(width, HEIGHT)));
             tab_x += width;
         }
+        let playground_front = playground::on_screen(app);
         let mut switch = None;
         let mut close = None;
         // A tab dragged off the strip, or "Open in new window", moves to a window of its own.
@@ -146,7 +150,7 @@ pub fn tab_bar(app: &mut FigApp, ui: &mut Ui) {
         for (slot, &w) in layout.widths.iter().enumerate() {
             let i = document_tabs[layout.first + slot];
             let d = &app.session.docs[i];
-            let active = i == app.session.active && !app.ui.home && app.ui.present.is_none();
+            let active = i == app.session.active && !app.ui.home && app.ui.present.is_none() && !playground_front;
             let name = &d.doc.name;
             // In a live session: a mark after the name says whether others get in.
             let live = live_mark(app, d.uid);
@@ -231,6 +235,7 @@ pub fn tab_bar(app: &mut FigApp, ui: &mut Ui) {
             to_present = present_overflow_menu(app, &resp, present_on).or(to_present);
             x += OVERFLOW_WIDTH;
         }
+        x = playground_slot(app, ui, &t, x, rect, playground_front);
         // New tab.
         let nr = Rect::from_center_size(pos2(x + 20.0, rect.center().y), vec2(28.0, 28.0));
         let nresp = ui.interact(nr, ui.scope_id().with("newtab"), Sense::click()).tip(crate::shortcuts::tip(tr("New design file"), "file.new"));
@@ -239,7 +244,7 @@ pub fn tab_bar(app: &mut FigApp, ui: &mut Ui) {
         }
         icons::paint(ui.painter(), nr.shrink(7.0), Icon::Plus, t.icon);
         if nresp.clicked() {
-            pause_present(app);
+            leave_front(app);
             app.run("file.new", json!({}));
             app.ui.home = false;
         }
@@ -248,7 +253,7 @@ pub fn tab_bar(app: &mut FigApp, ui: &mut Ui) {
             drag_free_space(ui, rect, x + 34.0, theme_r.min.x);
         }
         if let Some(i) = switch {
-            pause_present(app);
+            leave_front(app);
             app.run("doc.switch", json!({"index": i}));
             app.ui.home = false;
         }
@@ -331,7 +336,7 @@ fn home_tab(app: &mut FigApp, ui: &mut Ui, t: &Tokens, x: f32, rect: Rect) {
     }
     icons::paint(ui.painter(), Rect::from_center_size(hr.center(), vec2(16.0, 16.0)), Icon::Home, t.icon);
     if hresp.clicked() {
-        pause_present(app);
+        leave_front(app);
         app.ui.home = true;
     }
 }
@@ -386,7 +391,7 @@ fn doc_overflow_menu(app: &FigApp, resp: &egui::Response, document_tabs: &[usize
         egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
             for &i in document_tabs {
                 let Some(d) = app.session.docs.get(i) else { continue };
-                let on = i == app.session.active && !app.ui.home && app.ui.present.is_none();
+                let on = i == app.session.active && !app.ui.home && app.ui.present.is_none() && !playground::on_screen(app);
                 let label = if d.is_dirty() { format!("{} •", d.doc.name) } else { d.doc.name.clone() };
                 if crate::right::menu_check(ui, on, &label, "") {
                     switch = Some(i);
@@ -529,6 +534,51 @@ fn present_tab(ui: &mut Ui, t: &Tokens, tab: &PresentTab, r: Rect, active: bool)
     (resp.clicked(), closed)
 }
 
+/// The Playground tab at `x` in the strip `rect`, when it is open: clicking it brings it to the
+/// front, its X closes it. Returns where the next tab starts.
+fn playground_slot(app: &mut FigApp, ui: &mut Ui, t: &Tokens, x: f32, rect: Rect, front: bool) -> f32 {
+    if !app.ui.playground.open {
+        return x;
+    }
+    let tab = Rect::from_min_size(pos2(x, rect.min.y), vec2(PLAYGROUND_TAB_WIDTH, HEIGHT));
+    let (clicked, closed) = playground_tab(ui, t, tab, front);
+    if closed {
+        playground::close(app);
+    } else if clicked && !front {
+        leave_front(app);
+        playground::show_tab(app);
+    }
+    let end = x + PLAYGROUND_TAB_WIDTH;
+    ui.painter().line_segment([pos2(end, rect.min.y + 10.0), pos2(end, rect.max.y - 10.0)], Stroke::new(1.0, t.border));
+    end
+}
+
+/// The Playground tab in `r`: whether it was clicked and whether it was closed (its X or a middle
+/// click).
+fn playground_tab(ui: &mut Ui, t: &Tokens, r: Rect, active: bool) -> (bool, bool) {
+    let label = tr("Playground");
+    let close_r = Rect::from_min_max(pos2(r.max.x - 32.0, r.min.y), r.max);
+    let resp = ui.interact(r, ui.scope_id().with("playground_tab"), Sense::click()).tip(label);
+    let cresp = ui.interact(close_r, ui.scope_id().with("playground_close"), Sense::click()).tip(tr("Close tab"));
+    crate::a11y::tab(&resp, label, active);
+    let hovered = resp.hovered() || cresp.hovered();
+    if active {
+        ui.painter().rect_filled(r, CornerRadius::ZERO, t.tab_active);
+    } else if hovered {
+        ui.painter().rect_filled(r, CornerRadius::ZERO, t.hover);
+    }
+    icons::paint(ui.painter(), Rect::from_center_size(pos2(r.min.x + 19.0, r.center().y), vec2(14.0, 14.0)), Icon::Component, t.icon);
+    crate::bidi::paint_name(ui.painter(), pos2(r.min.x + 34.0, r.center().y), label, regular(12.0), t.text, r.width() - 62.0);
+    if hovered || active {
+        let cr = Rect::from_center_size(close_r.center(), vec2(18.0, 18.0));
+        if cresp.hovered() {
+            ui.painter().rect_filled(cr, CornerRadius::same(4), t.pressed);
+        }
+        icons::paint(ui.painter(), cr.shrink(4.0), Icon::Close, t.icon_secondary);
+    }
+    (resp.clicked(), cresp.clicked() || resp.middle_clicked() || cresp.middle_clicked())
+}
+
 /// The part of the strip's free `room` the presentation tabs may use: all they want, but at most
 /// half of it while file tabs share the strip, so they shrink or overflow before covering controls.
 fn present_room(room: f32, preferred: &[f32], files: bool) -> f32 {
@@ -570,6 +620,13 @@ pub fn present_owner_active(app: &FigApp) -> bool {
     owner(app, tab.doc_uid).is_some_and(|i| i == app.session.active)
 }
 
+/// Whatever fills the canvas area gives it back: the playground steps behind and the presenter
+/// goes back into its tab.
+fn leave_front(app: &mut FigApp) {
+    app.ui.playground.front = false;
+    pause_present(app);
+}
+
 /// Puts the presenter on screen back into its tab, where it keeps its state.
 fn pause_present(app: &mut FigApp) {
     let Some(p) = app.ui.present.take() else { return };
@@ -597,7 +654,7 @@ pub fn open_present(app: &mut FigApp, start: NodeId) {
         }
         return;
     }
-    pause_present(app);
+    leave_front(app);
     let id = app.ui.present_next;
     app.ui.present_next += 1;
     app.ui.presents.push(PresentTab { id, pres: None, doc_uid: uid, path, page, file, page_name });
@@ -612,7 +669,7 @@ fn show_present(app: &mut FigApp, id: u64) {
     if app.ui.present.is_some() && app.ui.present_active == Some(id) {
         return;
     }
-    pause_present(app);
+    leave_front(app);
     let Some(tab) = app.ui.presents.iter_mut().find(|t| t.id == id) else { return };
     let Some(p) = tab.pres.take() else { return };
     let uid = tab.doc_uid;

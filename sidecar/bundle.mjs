@@ -3,7 +3,7 @@ import path from 'node:path';
 import { build } from 'esbuild';
 import { ServiceError } from './protocol.mjs';
 
-const NODE_MODULES = path.join(import.meta.dirname, 'node_modules');
+export const NODE_MODULES = path.join(import.meta.dirname, 'node_modules');
 const FOLLOW_UP = Symbol('follow-up');
 
 export const IS_COMPONENT = `(value) => typeof value === 'function' || (typeof value === 'object' && value !== null && '$$typeof' in value)`;
@@ -23,7 +23,7 @@ const isInside = (root, target) => {
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 };
 
-function confineToSources(roots) {
+export function confineToSources(roots) {
   return {
     name: 'uigen-confine',
     setup(esbuild) {

@@ -1,0 +1,62 @@
+<style>
+.pg-crm{display:grid;gap:24px;padding:24px;max-width:1200px;margin:0 auto}
+.pg-crm header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.pg-crm h1{margin:0;font-size:1.5em}
+.pg-crm h2{margin:0;font-size:1em}
+.pg-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pg-deals{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.pg-deal{display:grid;gap:8px;justify-items:start}
+.pg-contact{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.pg-panel{display:grid;gap:12px}
+.pg-panel table{border-collapse:collapse;width:100%;text-align:left}
+.pg-panel th,.pg-panel td{padding:8px 12px}
+</style>
+<main class="pg-crm">
+  <header>
+    <h1>CRM</h1>
+    <div class="pg-actions">
+      <uigen-use name="Text field" label="Rechercher" placeholder="Rechercher un contact"></uigen-use>
+      <uigen-use name="Select" alt="Dropdown|Combobox" label="Étape" value="Toutes"></uigen-use>
+      <uigen-use name="Button" variant="primary" size="medium">Ajouter un contact</uigen-use>
+    </div>
+  </header>
+  <section class="pg-deals" aria-label="Opportunités">
+    <uigen-use name="Card" variant="outlined">
+      <div class="pg-deal"><strong>Refonte du site</strong><span>Atelier Lune</span><uigen-use name="Badge" variant="primary">Proposition</uigen-use><uigen-use name="Progress" label="Avancement" value="60"></uigen-use></div>
+    </uigen-use>
+    <uigen-use name="Card" variant="outlined">
+      <div class="pg-deal"><strong>Application mobile</strong><span>Maison Aurore</span><uigen-use name="Badge" variant="warning">Négociation</uigen-use><uigen-use name="Progress" label="Avancement" value="85"></uigen-use></div>
+    </uigen-use>
+    <uigen-use name="Card" variant="outlined">
+      <div class="pg-deal"><strong>Identité visuelle</strong><span>Studio Brume</span><uigen-use name="Badge" variant="success">Gagnée</uigen-use><uigen-use name="Progress" label="Avancement" value="100"></uigen-use></div>
+    </uigen-use>
+  </section>
+  <uigen-use name="Card" variant="outlined">
+    <div class="pg-panel">
+      <h2>Contacts récents</h2>
+      <table>
+        <thead><tr><th scope="col">Contact</th><th scope="col">Société</th><th scope="col">Dernier échange</th><th scope="col">Statut</th><th scope="col">Action</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><div class="pg-contact"><uigen-use name="Avatar" size="small" label="Camille Durand"></uigen-use><span>Camille Durand</span></div></td>
+            <td>Atelier Lune</td><td>Hier</td>
+            <td><uigen-use name="Badge" variant="primary">Client</uigen-use></td>
+            <td><uigen-use name="Button" variant="secondary" size="small">Ouvrir</uigen-use></td>
+          </tr>
+          <tr>
+            <td><div class="pg-contact"><uigen-use name="Avatar" size="small" label="Louis Martin"></uigen-use><span>Louis Martin</span></div></td>
+            <td>Maison Aurore</td><td>Il y a 3 jours</td>
+            <td><uigen-use name="Badge" variant="warning">Prospect</uigen-use></td>
+            <td><uigen-use name="Button" variant="secondary" size="small">Ouvrir</uigen-use></td>
+          </tr>
+          <tr>
+            <td><div class="pg-contact"><uigen-use name="Avatar" size="small" label="Inès Garnier"></uigen-use><span>Inès Garnier</span></div></td>
+            <td>Studio Brume</td><td>La semaine dernière</td>
+            <td><uigen-use name="Badge" variant="neutral">Inactif</uigen-use></td>
+            <td><uigen-use name="Button" variant="ghost" size="small" disabled>Ouvrir</uigen-use></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </uigen-use>
+</main>

@@ -422,6 +422,26 @@ mod pen_overlay_tests;
 #[cfg(test)]
 mod pixel_preview_tests;
 #[cfg(test)]
+mod playground_commands_tests;
+#[cfg(test)]
+mod playground_history_tests;
+#[cfg(test)]
+mod playground_overrides_tests;
+#[cfg(test)]
+mod playground_resize_tests;
+#[cfg(test)]
+mod playground_review_tests;
+#[cfg(test)]
+mod playground_session_tests;
+#[cfg(test)]
+mod playground_support;
+#[cfg(test)]
+mod playground_targets_tests;
+#[cfg(test)]
+mod playground_templates_layout_tests;
+#[cfg(test)]
+mod playground_templates_tests;
+#[cfg(test)]
 mod playground_tests;
 #[cfg(test)]
 mod plugin_data_tests;

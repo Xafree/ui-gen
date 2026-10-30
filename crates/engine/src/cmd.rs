@@ -12,6 +12,8 @@ pub mod layout;
 pub mod library;
 pub mod lists;
 pub mod page;
+pub(crate) mod playground;
+mod playground_settings;
 pub mod project;
 pub(crate) mod project_sources;
 pub mod props;
@@ -89,6 +91,8 @@ fn registry() -> &'static Registry {
         list.extend(file::specs());
         list.extend(page::specs());
         list.extend(project::specs());
+        list.extend(playground::specs());
+        list.extend(playground_settings::specs());
         list.extend(project_sources::specs());
         list.extend(view::specs());
         list.extend(text::specs());

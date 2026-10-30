@@ -8,8 +8,35 @@ use serde_json::{Map, Value, json};
 
 use crate::cmd::CommandSpec;
 use crate::codegen::CodeLang;
-use crate::params::{get, id_of, num, string, targets};
+use crate::params::{get, id_of, num, string, targets as param_targets};
 use crate::{EngineError, Result, Session, bad, spec};
+
+/// What `playground.open` says when the library has nothing to show.
+pub const NO_COMPONENT: &str = "the project has no component to show";
+
+mod history;
+mod overrides;
+mod random;
+mod save;
+mod session;
+mod settings;
+mod targets;
+mod templates;
+#[cfg(test)]
+mod templates_alt_tests;
+
+pub use history::History;
+pub use overrides::{Effective, Overrides, SettingError, effective, overrides_css};
+pub(crate) use overrides::{is_font_name, overrides, rewrites};
+pub use random::random_settings;
+pub(crate) use save::{copy_with, write_into};
+#[cfg(test)]
+pub(crate) use session::MAX_IN_FLIGHT;
+pub use session::{Frame, FrameFormat, Status};
+pub(crate) use session::{PlaygroundState, Target, Window, advance};
+pub use settings::{Mode, Neutral, RadiusPreset, RadiusShape, Settings};
+pub use targets::{Targets, targets};
+pub use templates::{Composed, Template, compose};
 
 /// The component a playground for `target` shows: an instance's component, a component or a
 /// component set itself. None for other layers.
@@ -56,7 +83,7 @@ pub fn specs() -> Vec<CommandSpec> {
         false,
         |s, p| {
             let cmd = "component.playground";
-            let target = targets(s, p).first().copied().ok_or_else(|| bad(cmd, "select an instance, a component or a component set"))?;
+            let target = param_targets(s, p).first().copied().ok_or_else(|| bad(cmd, "select an instance, a component or a component set"))?;
             let values = match get(p, "properties") {
                 None | Some(Value::Null) => Map::new(),
                 Some(Value::Object(m)) => m.clone(),

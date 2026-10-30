@@ -78,7 +78,7 @@ Each may be given more than once, as `--flag DIR` or `--flag=DIR`:
   every command that names a file: `file.open`, `file.openRecent` (recent files outside the roots
   are never listed, opened, removed or named: `index` counts the files listed), `file.import`,
   `file.placeImage`, `image.place`, `file.save`, `file.saveAs`, `file.revert`, `file.recover`,
-  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, `project.open`, `project.update`, `uigen.applyTheme` (the project's `uigen.json`) and the source commands (`project.addSource`, `project.setSourceVersion`, `project.removeSource`: the project folder and its `uigen.json`; `uigen.importComponent`: the project's `.uigen/captures` folder), the images and variables JSON read next to an imported REST API
+  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, `project.open`, `project.update`, `uigen.applyTheme` (the project's `uigen.json`) and the source commands (`project.addSource`, `project.setSourceVersion`, `project.removeSource`: the project folder and its `uigen.json`; `uigen.importComponent`: the project's `.uigen/captures` folder), the playground (`playground.open`, `playground.refresh`: the project's `.uigen/playground` folder), the images and variables JSON read next to an imported REST API
   file, `library.add` and the library files open documents link to, `variable.import` /
   `variable.export`, `codeConnect.import` / `codeConnect.export`, `component.playground {path}`,
   `plugin.import {path}`, a development plugin's module read again from disk,
@@ -974,6 +974,68 @@ Two more commands list the token themes of the file (its local variable collecti
   and changes nothing. **Refused** (`bad`, document and `uigen.json` unchanged): outside a library project; a `theme`
   that is empty, not a string, longer than 200 characters or with control characters; an unknown collection or a
   library copy; a theme where no bound variable has an equivalent.
+
+### Playground
+
+The Playground tab shows a live web page built from the library project's Lit export, in the Chromium of the
+capture service (the page lives in the service; the app shows its images and relays the pointer and keyboard).
+These commands drive it; none opens a dialog, and none is available in the browser build (`capture service
+unavailable in the browser`). The service protocol is in
+[UIGEN: Playground (lot 7)](uigen/plan-import.md#playground-lot-7).
+
+- `playground.open {template?, width?, height?, scale?}`: export the applied theme of the project (`appliedTheme` of
+  `uigen.json`, else the first variable collection) of the **current tab** into `<project>/.uigen/playground/` (`lib/`
+  and `template.html`; the project's Lit output folder is not touched) and ask the service to show the page. `template`
+  is `components` (default: one instance per variant of every component), `dashboard`, `mail`, `chat`, `finance` or
+  `crm`; `width` 320 to 3840 (default 1280), `height` 240 to 2160 (default 800), `scale` 1 to 2 (default 1). Returns
+  `{job}` at once and replaces a playground already open; the final event (`CaptureEvent`, command `playground.open`)
+  carries `{defined, missing, errors}` or the failure. Playground calls are never listed by `capture.status`: poll
+  `playground.state` until `status` is `ready` or `failed`. Refused at once (`bad`, nothing submitted): outside a
+  library project; no variable collection; no exportable component; a component with an issue (`fix these components
+  first: …`); an unknown template; a size out of range; a `.uigen/playground` folder outside the write roots; no
+  capture service.
+- `playground.refresh {}`: export the document again (it has changed when `stale` is true) and open the page again.
+  Returns `{job}`; refused when no playground is open.
+- `playground.close {}`: close the page. Idempotent. The Chromium of the service stays until the service stops.
+- `playground.template {name}`: change the model without opening the page again. Returns `{missing}`, the names of the
+  components the library lacks for that model.
+- `playground.resize {width?, height?, scale?}`: set the window of the page (each value kept as it is when absent).
+- `playground.state {}`: `{status: closed|opening|ready|failed, error, template, stale, busy, themes: [collection
+  names], applied, settings, effective, targets, canUndo, canRedo, missing, notes, inputWaiting, applyWaiting}`.
+  `notes`: what the export could not do (`{code, component, message}`, e.g. `token-missing`). `inputWaiting` and
+  `applyWaiting`: the input events and the settings the page has not taken yet (a few calls at most are in flight, the
+  later ones wait and only the latest settings are kept). `stale`: the document changed since the export. `busy`: an install, an inspect or a render comes first in the service's queue. `missing`: the components the
+  model asks for and the library lacks. A missing component is marked in the page with `<div
+  data-uigen-missing="Chart" role="note">Composant absent de la lib : Chart</div>`, never replaced by a native element.
+- `playground.input {events}`: relay 1 to 64 events to the page: `{type: move, x, y}`, `{type: down|up, x, y, button:
+  left|middle|right}`, `{type: wheel, x, y, dx, dy}` (each at most 4000), `{type: key, key, mods?}` (`key` among Enter,
+  Tab, Escape, Backspace, Delete, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Home, End, PageUp, PageDown, Space;
+  `mods` among shift, ctrl, alt) and `{type: text, text}` (at most 256 characters, no control character). Coordinates
+  are page pixels inside the window. One invalid event refuses the whole batch. The playground commands other than
+  `playground.saveTheme` change neither the document's revision nor its journal.
+- `playground.set {accent?, base?, font?, radius?, radiusShape?, theme?, mode?, commit?}` → `{settings, effective,
+  targets, canUndo, canRedo}`. `accent` is `#rrggbb` (or `null` to clear), `base` is `{hue: 0 to 360, tint: 0 to 1}`,
+  `font` a font name of at most 64 characters without `;`, `{`, `}`, `(`, `)`, `\`, `"` or a line break, `radius` one
+  of `zero`, `small`, `medium`, `large`, `full`, `radiusShape` one of `round`, `squircle`, `bevel`, `theme` the name of
+  a variable collection (it clears the other settings), `mode` `light` or `dark`. `commit: false` shows the change
+  without a history step (a slider being dragged). The settings never change the document: they become a token
+  override sheet pushed to the page without reloading it, and an undo history of their own (100 steps, apart from
+  `edit.undo`). A setting no token of the theme answers to is refused, naming the setting (`targets` counts them).
+  Refused when the playground is not ready.
+- `playground.undo {}`, `playground.redo {}`, `playground.revert {}` (clear every setting, one step) and
+  `playground.random {seed?}` (an accent, a base, a font and a radius; the same whole-number `seed` gives the same
+  settings; the mode, the theme and the radius shape stay): same result as `playground.set`.
+- `playground.saveTheme {name, update?, apply?}` → `{collection, name}`: undoable, one step. By default a new
+  collection `name` (a copy of the chosen theme with the settings written in every mode; a name already taken is
+  refused); with `update: true` the chosen theme is rewritten and `name` must be its name. `apply: true` also makes it
+  the project's `appliedTheme`. The radius shape is not saved. The interface asks for a confirmation first; the command
+  does not.
+- `playground.code {}` → `{overrides, template, notes}`: the override style sheet pushed to the page and the HTML of the
+  model, read only; nothing is written.
+
+No command returns the page's image: the app polls it about thirty times a second while the tab is in front. Through the control
+channel, `ui.screenshot` captures the window. Writes go to `<project>/.uigen/playground/`, which must be inside the
+automation write roots like the other project folders.
 
 ### Local libraries
 
