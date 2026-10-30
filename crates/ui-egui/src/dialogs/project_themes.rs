@@ -133,7 +133,11 @@ fn apply(app: &mut FigApp, theme: &str) {
     let outcome = match app.run(APPLY, json!({"theme": theme})) {
         Some(result) => {
             let outcome = applied(app, theme, &result);
-            app.toast_with_undo(outcome.text());
+            if result["rebound"].as_u64().unwrap_or_default() > 0 {
+                app.toast_with_undo(outcome.text());
+            } else {
+                app.toast(outcome.text());
+            }
             outcome
         }
         None => Outcome::Failed { theme: theme.to_owned(), cause: app.ui.last_error.clone().unwrap_or_default() },

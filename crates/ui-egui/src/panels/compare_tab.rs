@@ -27,6 +27,7 @@ const MAX_IMAGE_H: f32 = 110.0;
 const MAX_SCALE: f32 = 2.0;
 const TOP: f32 = 10.0;
 const LINE_GAP: f32 = 6.0;
+const SETTLE_SECS: f64 = 0.3;
 
 pub fn available(app: &FigApp) -> bool {
     app.session.in_lib_project() && !cfg!(target_arch = "wasm32")
@@ -120,24 +121,57 @@ enum Phase {
 #[derive(Clone, PartialEq, Eq)]
 struct Key {
     uid: u64,
-    revision: u64,
     page: NodeId,
     set: Option<NodeId>,
     dark: bool,
-    finished_job: u64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Stamp {
+    pub revision: u64,
+    pub finished_job: u64,
+}
+
+#[derive(Default)]
+pub(crate) struct Settle {
+    heard: Option<Stamp>,
+    last_edit: Option<f64>,
+}
+
+impl Settle {
+    pub(crate) fn due(&mut self, stamp: Stamp, now: f64, pointer_down: bool) -> Result<(), f64> {
+        if self.heard != Some(stamp) {
+            let quiet = self.last_edit.is_none_or(|at| now - at >= SETTLE_SECS);
+            self.last_edit = Some(now);
+            self.heard = Some(stamp);
+            if quiet && !pointer_down {
+                return Ok(());
+            }
+        }
+        let left = self.last_edit.map_or(0.0, |at| at + SETTLE_SECS - now);
+        if left > 0.0 {
+            Err(left)
+        } else if pointer_down {
+            Err(SETTLE_SECS)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 pub(crate) struct Run {
     key: Key,
+    stamp: Stamp,
     phase: Phase,
+    kept: Vec<Row>,
     pub name: String,
     pub source: Option<Source>,
     pub rows: Vec<Row>,
 }
 
 impl Run {
-    fn start(doc: &Document, key: Key) -> Self {
-        let mut run = Self { phase: Phase::Empty, name: String::new(), source: None, rows: Vec::new(), key };
+    fn start(doc: &Document, key: Key, stamp: Stamp, kept: Vec<Row>) -> Self {
+        let mut run = Self { phase: Phase::Empty, name: String::new(), source: None, rows: Vec::new(), kept, key, stamp };
         let Some(set) = run.key.set else { return run };
         run.name = doc.node(set).map(|node| node.name.clone()).unwrap_or_default();
         run.source = source_of(doc, set);
@@ -147,6 +181,23 @@ impl Run {
 
     pub(crate) fn set(&self) -> Option<NodeId> {
         self.key.set
+    }
+
+    pub(crate) fn revision(&self) -> u64 {
+        self.stamp.revision
+    }
+
+    pub(crate) fn visible(&self) -> &[Row] {
+        if self.kept.is_empty() { &self.rows } else { &self.kept }
+    }
+
+    pub(crate) fn pending(&self, variant: NodeId) -> bool {
+        matches!(&self.phase, Phase::Measuring(queue) if queue.iter().any(|(id, _)| *id == variant))
+    }
+
+    fn finish(&mut self, phase: Phase) {
+        self.kept.clear();
+        self.phase = phase;
     }
 
     fn knows(&self, variant: NodeId) -> bool {
@@ -164,6 +215,7 @@ pub struct CompareTab {
     pub(crate) detail: Option<NodeId>,
     pub(crate) view: View,
     updates: Updates,
+    settle: Settle,
 }
 
 impl CompareTab {
@@ -173,6 +225,10 @@ impl CompareTab {
 
     pub(crate) fn dark(&self) -> bool {
         self.dark
+    }
+
+    pub(crate) fn shows(&self, variant: NodeId) -> bool {
+        self.run().is_some_and(|run| run.visible().iter().any(|row| row.variant == variant && row.pictures.is_some()))
     }
 }
 
@@ -222,25 +278,37 @@ fn latest_finished_job(app: &FigApp) -> u64 {
 
 pub fn show(app: &mut FigApp, ui: &mut Ui) {
     let mut tab = std::mem::take(&mut app.ui.compare);
-    follow(app, &mut tab);
+    follow(app, ui.ctx(), &mut tab);
     paint(app, ui, &mut tab);
     advance(app, ui.ctx(), &mut tab);
     app.ui.compare = tab;
 }
 
-fn follow(app: &FigApp, tab: &mut CompareTab) {
+fn follow(app: &FigApp, ctx: &egui::Context, tab: &mut CompareTab) {
     let finished_job = latest_finished_job(app);
     let Ok(ds) = app.session.ds() else {
         tab.run = None;
         return;
     };
     let set = set_of(&ds.doc, &ds.selection);
-    let key = Key { uid: ds.uid, revision: ds.revision, page: ds.page, set, dark: tab.dark, finished_job };
-    if tab.run.as_ref().is_none_or(|run| run.key != key) {
-        let run = Run::start(&ds.doc, key);
-        tab.detail = tab.detail.filter(|variant| run.knows(*variant));
-        tab.run = Some(run);
-    }
+    let key = Key { uid: ds.uid, page: ds.page, set, dark: tab.dark };
+    let stamp = Stamp { revision: ds.revision, finished_job };
+    let kept = match tab.run.as_mut() {
+        Some(run) if run.key == key && run.stamp == stamp => return,
+        Some(run) if run.key == key => {
+            let pointer_down = ctx.input(|i| i.pointer.any_down());
+            if let Err(left) = tab.settle.due(stamp, app.clock.now(), pointer_down) {
+                crate::repaint_in(ctx, left);
+                return;
+            }
+            std::mem::take(if run.kept.is_empty() { &mut run.rows } else { &mut run.kept })
+        }
+        _ => Vec::new(),
+    };
+    tab.settle.heard = Some(stamp);
+    let run = Run::start(&ds.doc, key, stamp, kept);
+    tab.detail = tab.detail.filter(|variant| run.knows(*variant));
+    tab.run = Some(run);
 }
 
 fn advance(app: &mut FigApp, ctx: &egui::Context, tab: &mut CompareTab) {
@@ -249,26 +317,27 @@ fn advance(app: &mut FigApp, ctx: &egui::Context, tab: &mut CompareTab) {
     let Phase::Measuring(queue) = &run.phase else { return };
     let total = queue.len();
     let (Some((variant, name)), Some(set)) = (queue.get(run.rows.len()).cloned(), run.set()) else {
-        run.phase = Phase::Done;
+        run.finish(Phase::Done);
         return;
     };
+    let occurrence = queue.iter().take(run.rows.len()).filter(|(_, earlier)| *earlier == name).count();
     let params = json!({"set": set.0, "theme": if dark { "dark" } else { "light" }, "variants": [name]});
     let outcome = match app.run(COMPARE, params) {
-        Some(result) => measured(app, ctx, &result, variant, &name, dark).ok_or_else(String::new),
+        Some(result) => measured(app, ctx, &result, (variant, &name, occurrence), dark).ok_or_else(String::new),
         None => Err(app.ui.last_error.clone().unwrap_or_default()),
     };
     match outcome {
         Ok(row) => run.rows.push(row),
-        Err(cause) => run.phase = Phase::Failed(cause),
+        Err(cause) => run.finish(Phase::Failed(cause)),
     }
     if matches!(run.phase, Phase::Measuring(_)) && run.rows.len() == total {
-        run.phase = Phase::Done;
+        run.finish(Phase::Done);
     }
     ctx.request_repaint();
 }
 
-fn measured(app: &FigApp, ctx: &egui::Context, result: &Value, variant: NodeId, name: &str, dark: bool) -> Option<Row> {
-    let entry = result.get("rows")?.as_array()?.first()?;
+fn measured(app: &FigApp, ctx: &egui::Context, result: &Value, (variant, name, occurrence): (NodeId, &str, usize), dark: bool) -> Option<Row> {
+    let entry = result.get("rows")?.as_array()?.get(occurrence)?;
     let mut row = row_of(entry, variant, name)?;
     if row.status.has_pictures() {
         row.pictures = pictures(app, ctx, variant, dark);
@@ -322,8 +391,7 @@ pub(crate) fn original_raster(app: &FigApp, variant: NodeId, dark: bool) -> Opti
 fn pictures(app: &FigApp, ctx: &egui::Context, variant: NodeId, dark: bool) -> Option<Pictures> {
     let ds = app.session.ds().ok()?;
     let original = Shot::from_raster(ctx, &original_raster(app, variant, dark)?)?;
-    let themed = uigen_compare::themed(&ds.doc, variant, dark);
-    let library = Shot::new(ctx, &themed, variant, std::iter::empty())?;
+    let library = Shot::from_raster(ctx, &uigen_compare::library_raster(&ds.doc, variant, dark).ok()?)?;
     Some(Pictures { original, library })
 }
 
@@ -331,11 +399,11 @@ fn paint(app: &mut FigApp, ui: &mut Ui, tab: &mut CompareTab) {
     let t = Tokens::get(ui.ctx());
     let mut acts = Vec::new();
     if let Some(run) = tab.run() {
-        body(ui, &t, run, tab.dark(), &mut acts);
+        body(ui, &t, run, (tab.dark(), tab.updates.recapturing()), &mut acts);
     }
-    let target = tab.run.as_ref().and_then(|run| Some((run.set()?, run.source.as_ref()?.package.clone())));
-    if let Some((set, package)) = target {
-        compare_updates::section(app, ui, &mut tab.updates, set, &package);
+    let target = tab.run.as_ref().and_then(|run| Some((run.set()?, run.revision(), run.source.as_ref()?.package.clone())));
+    if let Some((set, revision, package)) = target {
+        compare_updates::section(app, ui, &mut tab.updates, (set, revision), &package);
     }
     ui.add_space(24.0);
     for act in acts {
@@ -351,7 +419,7 @@ fn paint(app: &mut FigApp, ui: &mut Ui, tab: &mut CompareTab) {
     }
 }
 
-fn body(ui: &mut Ui, t: &Tokens, run: &Run, dark: bool, acts: &mut Vec<Act>) {
+fn body(ui: &mut Ui, t: &Tokens, run: &Run, (dark, recapturing): (bool, bool), acts: &mut Vec<Act>) {
     match &run.phase {
         Phase::Empty => widgets::note(ui, tr("Select an imported component to compare it with its original."), t.text_secondary),
         Phase::NotImported => widgets::note(ui, tr("This component was not imported: there is no original to compare."), t.text_secondary),
@@ -373,7 +441,7 @@ fn body(ui: &mut Ui, t: &Tokens, run: &Run, dark: bool, acts: &mut Vec<Act>) {
             if run.rows.iter().any(Row::lacks_original) {
                 widgets::note(ui, tr("The original capture is missing. Recapture the source to compare."), t.text_secondary);
                 crate::right::row(ui, 32.0, |ui| {
-                    if widgets::button(ui, tr("Recapture"), true, true).clicked() {
+                    if widgets::button(ui, tr("Recapture"), true, !recapturing).clicked() {
                         acts.push(Act::Recapture);
                     }
                 });
@@ -392,7 +460,7 @@ fn theme_selector(ui: &mut Ui, dark: bool, acts: &mut Vec<Act>) {
 }
 
 fn rows(ui: &mut Ui, t: &Tokens, run: &Run, acts: &mut Vec<Act>) {
-    for row in &run.rows {
+    for row in run.visible() {
         row_card(ui, t, row, acts);
     }
 }

@@ -1989,6 +1989,9 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Take the new value" = "ახალი მნიშვნელობის აღება"
 "{count} applied" = "გამოყენებულია: {count}"
 "Couldn't apply: {cause}" = "გამოყენება ვერ მოხერხდა: {cause}"
+"Can't be taken automatically: change your copy by hand." = "ავტომატურად ვერ გადმოვა: შეცვალეთ თქვენი ასლი ხელით."
+"Use version {version}" = "გამოიყენეთ ვერსია {version}"
+"Not applied: {reason}" = "არ გამოყენებულა: {reason}"
 "Update source components" = "წყაროს კომპონენტების განახლება"
 "List source differences" = "წყაროს განსხვავებების ჩამოთვლა"
 [commands]

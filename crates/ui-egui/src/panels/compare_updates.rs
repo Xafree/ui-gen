@@ -5,6 +5,7 @@
 use egui::{Color32, Frame, Margin, Response, RichText, Sense, Ui};
 use figcraft_doc::NodeId;
 use figcraft_engine::capture::{JobId, JobState, JobStatus};
+use figcraft_engine::is_import_page;
 use serde_json::{Value, json};
 
 use crate::FigApp;
@@ -68,24 +69,32 @@ impl Origin {
     }
 }
 
-struct Entry {
-    id: String,
-    path: String,
+pub(crate) struct Entry {
+    pub id: String,
+    pub variant: String,
+    pub path: String,
     kind: Kind,
     field: String,
     origin: Origin,
+    pub applicable: bool,
 }
 
 impl Entry {
-    fn of(value: &Value) -> Option<Self> {
+    pub(crate) fn of(value: &Value) -> Option<Self> {
         let text = |key: &str| value.get(key).and_then(Value::as_str).map(str::to_owned);
         Some(Self {
             id: text("id")?,
+            variant: text("variant").unwrap_or_default(),
             path: text("path")?,
             kind: Kind::parse(&text("kind")?)?,
             field: text("field")?,
             origin: Origin::parse(&text("state")?)?,
+            applicable: value.get("applicable").and_then(Value::as_bool).unwrap_or(true),
         })
+    }
+
+    pub(crate) fn place(&self) -> String {
+        [self.variant.as_str(), self.path.as_str()].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" · ")
     }
 
     fn field_label(&self) -> Option<&str> {
@@ -113,6 +122,7 @@ struct Diff {
     from: String,
     to: String,
     captured: bool,
+    note: Option<String>,
     entries: Vec<Entry>,
 }
 
@@ -123,6 +133,7 @@ impl Diff {
             from: text("from")?,
             to: text("to")?,
             captured: result.get("latest").is_some_and(Value::is_object),
+            note: text("note"),
             entries: result.get("differences")?.as_array()?.iter().filter_map(Entry::of).collect(),
         })
     }
@@ -132,7 +143,7 @@ impl Diff {
     }
 
     fn clean(&self) -> usize {
-        self.entries.iter().filter(|entry| entry.origin == Origin::Clean).count()
+        self.entries.iter().filter(|entry| entry.origin == Origin::Clean && entry.applicable).count()
     }
 }
 
@@ -200,11 +211,19 @@ fn ended(statuses: &[JobStatus], jobs: &[JobId]) -> Outcome {
 pub(crate) struct Updates {
     cached: Option<Cached>,
     recapture: Option<Recapture>,
+    left_alone: Option<(NodeId, Vec<String>)>,
+}
+
+impl Updates {
+    pub(crate) fn recapturing(&self) -> bool {
+        self.recapture.as_ref().is_some_and(Recapture::running)
+    }
 }
 
 enum Act {
     Check,
     ApplyClean,
+    Move,
     Take(String),
 }
 
@@ -212,9 +231,10 @@ fn is_active_source(app: &FigApp, package: &str) -> bool {
     app.session.project().is_some_and(|binding| binding.config.sources.iter().any(|source| source.package == package && !source.removed))
 }
 
-pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, state: &mut Updates, set: NodeId, package: &str) {
+pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, state: &mut Updates, (set, revision): (NodeId, u64), package: &str) {
     let Ok(ds) = app.session.ds() else { return };
-    let (uid, revision) = (ds.uid, ds.revision);
+    let uid = ds.uid;
+    let in_import_page = ds.doc.node(set).and_then(|node| node.parent).is_some_and(|parent| is_import_page(&ds.doc, parent));
     if !is_active_source(app, package) {
         return;
     }
@@ -222,7 +242,8 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, state: &mut Updates, set: N
         recapture.follow(app);
     }
     if state.cached.as_ref().is_none_or(|cached| (cached.uid, cached.revision, cached.set) != (uid, revision, set)) {
-        let diff = app.run(DIFF, json!({"copy": set.0})).as_ref().and_then(Diff::of);
+        let read = if in_import_page { None } else { app.session.execute(DIFF, &json!({"copy": set.0})).ok() };
+        let diff = read.as_ref().and_then(Diff::of);
         state.cached = Some(Cached { uid, revision, set, diff });
     }
     let t = Tokens::get(ui.ctx());
@@ -231,13 +252,19 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, state: &mut Updates, set: N
     if recapture.is_some_and(Recapture::running) {
         ui.ctx().request_repaint();
     }
-    let acts = paint(ui, &t, diff, recapture, package);
+    let reasons = state.left_alone.as_ref().filter(|(copy, _)| *copy == set).map_or(&[][..], |(_, reasons)| reasons.as_slice());
+    let acts = paint(ui, &t, (diff, reasons), recapture, package);
     for act in acts {
-        match act {
-            Act::Check => recapture_source(app, state, package),
-            Act::ApplyClean => apply(app, set, None),
+        let skipped = match act {
+            Act::Check => {
+                state.left_alone = None;
+                recapture_source(app, state, package);
+                continue;
+            }
+            Act::ApplyClean | Act::Move => apply(app, set, None),
             Act::Take(id) => apply(app, set, Some(&id)),
-        }
+        };
+        state.left_alone = Some((set, skipped));
     }
 }
 
@@ -253,7 +280,7 @@ pub(crate) fn recapture_source(app: &mut FigApp, state: &mut Updates, package: &
     state.recapture = Some(Recapture { uid, package: package.to_owned(), imports });
 }
 
-fn apply(app: &mut FigApp, copy: NodeId, id: Option<&str>) {
+fn apply(app: &mut FigApp, copy: NodeId, id: Option<&str>) -> Vec<String> {
     let mut params = json!({"copy": copy.0});
     if let Some(id) = id {
         params["ids"] = json!([id]);
@@ -261,7 +288,7 @@ fn apply(app: &mut FigApp, copy: NodeId, id: Option<&str>) {
     let Some(result) = app.run(APPLY, params) else {
         let cause = app.ui.last_error.clone().unwrap_or_default();
         app.toast(trf("Couldn't apply: {cause}", &[("cause", &cause)]));
-        return;
+        return Vec::new();
     };
     let count = result.get("applied").and_then(Value::as_array).map_or(0, Vec::len);
     let message = trf("{count} applied", &[("count", &count)]);
@@ -270,6 +297,13 @@ fn apply(app: &mut FigApp, copy: NodeId, id: Option<&str>) {
     } else {
         app.toast(message);
     }
+    let mut reasons: Vec<String> = Vec::new();
+    for reason in result.get("skipped").and_then(Value::as_array).into_iter().flatten().filter_map(|skipped| skipped.get("reason")?.as_str()) {
+        if !reasons.iter().any(|known| known == reason) {
+            reasons.push(reason.to_owned());
+        }
+    }
+    reasons
 }
 
 fn line(ui: &mut Ui, text: &str, color: Color32, bold: bool) -> Response {
@@ -280,7 +314,7 @@ fn line(ui: &mut Ui, text: &str, color: Color32, bold: bool) -> Response {
         .inner
 }
 
-fn paint(ui: &mut Ui, t: &Tokens, diff: Option<&Diff>, recapture: Option<&Recapture>, package: &str) -> Vec<Act> {
+fn paint(ui: &mut Ui, t: &Tokens, (diff, reasons): (Option<&Diff>, &[String]), recapture: Option<&Recapture>, package: &str) -> Vec<Act> {
     let mut acts = Vec::new();
     let Some(diff) = diff else { return acts };
     widgets::section_header(ui, tr("Updates"), &[], false);
@@ -301,12 +335,25 @@ fn paint(ui: &mut Ui, t: &Tokens, diff: Option<&Diff>, recapture: Option<&Recapt
     for (component, cause) in recapture.into_iter().flat_map(Recapture::failures) {
         line(ui, &trf("Couldn't import {name}: {cause}", &[("name", &component), ("cause", &cause)]), t.danger, false);
     }
+    if let Some(note) = &diff.note {
+        line(ui, note, t.text_secondary, false);
+    }
     if !diff.captured {
         line(ui, &trf("Recapture first: {version} has not been captured yet.", &[("version", &diff.to)]), t.text_secondary, false);
     } else if diff.entries.is_empty() {
         line(ui, &trf("No difference with {version}.", &[("version", &diff.to)]), t.text_secondary, false);
+        if diff.from != diff.to {
+            crate::right::row(ui, 32.0, |ui| {
+                if widgets::button(ui, &trf("Use version {version}", &[("version", &diff.to)]), false, true).clicked() {
+                    acts.push(Act::Move);
+                }
+            });
+        }
     } else {
         differences(ui, t, diff, &mut acts);
+    }
+    for reason in reasons {
+        line(ui, &trf("Not applied: {reason}", &[("reason", reason)]), t.warning, false);
     }
     acts
 }
@@ -320,17 +367,24 @@ fn differences(ui: &mut Ui, t: &Tokens, diff: &Diff, acts: &mut Vec<Act>) {
         }
     });
     for entry in &diff.entries {
-        line(ui, &format!("{} · {}", entry.kind.label(), entry.path), t.text, false);
+        let place = entry.place();
+        let heading = if place.is_empty() { entry.kind.label().to_owned() } else { format!("{} · {place}", entry.kind.label()) };
+        line(ui, &heading, t.text, false);
         if let Some(field) = entry.field_label() {
             line(ui, field, t.text_secondary, false);
         }
+        if !entry.applicable {
+            line(ui, tr("Can't be taken automatically: change your copy by hand."), t.text_secondary, false);
+        }
         if let Some(origin) = entry.origin.label() {
             line(ui, origin, t.warning, false);
-            crate::right::row(ui, 32.0, |ui| {
-                if widgets::button(ui, tr("Take the new value"), false, true).clicked() {
-                    acts.push(Act::Take(entry.id.clone()));
-                }
-            });
+            if entry.applicable {
+                crate::right::row(ui, 32.0, |ui| {
+                    if widgets::button(ui, tr("Take the new value"), false, true).clicked() {
+                        acts.push(Act::Take(entry.id.clone()));
+                    }
+                });
+            }
         }
         ui.add_space(4.0);
     }

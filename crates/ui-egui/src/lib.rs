@@ -214,6 +214,8 @@ mod titlebar_tests;
 mod toast_action_tests;
 
 #[cfg(test)]
+mod compare_review_ui_tests;
+#[cfg(test)]
 mod compare_tab_ui_tests;
 #[cfg(test)]
 mod import_drop_ui_tests;

@@ -4,7 +4,7 @@
 
 use egui::{Align2, Context, CornerRadius, Id, LayerId, Order, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use figcraft_doc::NodeId;
-use figcraft_engine::uigen_compare::{self, Raster};
+use figcraft_engine::uigen_compare;
 
 use crate::FigApp;
 use crate::a11y;
@@ -59,14 +59,18 @@ impl View {
 
 /// Escape closes the window (before the canvas's shortcuts see it).
 pub fn keys(app: &mut FigApp, ctx: &Context) {
-    if app.ui.compare.detail.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+    let shown = app.ui.compare.detail.is_some_and(|variant| app.ui.compare.shows(variant));
+    if shown && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
         app.ui.compare.detail = None;
     }
 }
 
 /// The detail window of the row opened in the Compare tab, while open.
 pub fn show(app: &mut FigApp, ctx: &Context) {
-    let Some(variant) = app.ui.compare.detail else { return };
+    let Some(variant) = app.ui.compare.detail else {
+        app.ui.compare.view = View::default();
+        return;
+    };
     let mut view = std::mem::take(&mut app.ui.compare.view);
     let open = window(app, ctx, variant, &mut view);
     app.ui.compare.view = view;
@@ -77,7 +81,8 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
 
 fn window(app: &FigApp, ctx: &Context, variant: NodeId, view: &mut View) -> bool {
     let tab = &app.ui.compare;
-    let Some(row) = tab.run().and_then(|run| run.rows.iter().find(|row| row.variant == variant)) else { return true };
+    let Some(run) = tab.run() else { return false };
+    let Some(row) = run.visible().iter().find(|row| row.variant == variant) else { return run.pending(variant) };
     let Some(pictures) = row.pictures.as_ref() else { return false };
     if view.opened != Some(variant) {
         *view = View::opening(variant);
@@ -112,9 +117,7 @@ fn window(app: &FigApp, ctx: &Context, variant: NodeId, view: &mut View) -> bool
 
 fn difference_of(app: &FigApp, ctx: &Context, variant: NodeId, dark: bool) -> Option<Shot> {
     let original = original_raster(app, variant, dark)?;
-    let themed = uigen_compare::themed(&app.session.ds().ok()?.doc, variant, dark);
-    let pixels = figcraft_render::render_node(&themed, variant, 1.0)?;
-    let library = Raster::new(pixels.width(), pixels.height(), figcraft_render::to_rgba8(&pixels)).ok()?;
+    let library = uigen_compare::library_raster(&app.session.ds().ok()?.doc, variant, dark).ok()?;
     Shot::from_raster(ctx, &uigen_compare::difference_image(&original, &library))
 }
 
