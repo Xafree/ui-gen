@@ -413,6 +413,8 @@ mod pen_overlay_tests;
 #[cfg(test)]
 mod pixel_preview_tests;
 #[cfg(test)]
+mod playground_commands_tests;
+#[cfg(test)]
 mod playground_history_tests;
 #[cfg(test)]
 mod playground_overrides_tests;
