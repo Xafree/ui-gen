@@ -19,6 +19,23 @@ pub enum Template {
 }
 
 impl Template {
+    pub const ALL: [Self; 6] = [Self::Components, Self::Dashboard, Self::Mail, Self::Chat, Self::Finance, Self::Crm];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Components => "components",
+            Self::Dashboard => "dashboard",
+            Self::Mail => "mail",
+            Self::Chat => "chat",
+            Self::Finance => "finance",
+            Self::Crm => "crm",
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|template| template.name() == name)
+    }
+
     fn source(self) -> &'static str {
         match self {
             Self::Components => "",

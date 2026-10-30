@@ -9,6 +9,9 @@ pub struct Timeouts {
     pub install: Duration,
     pub inspect: Duration,
     pub render: Duration,
+    pub playground_open: Duration,
+    pub playground_frame: Duration,
+    pub playground: Duration,
     pub shutdown: Duration,
 }
 
@@ -19,6 +22,9 @@ impl Default for Timeouts {
             install: Duration::from_secs(600),
             inspect: Duration::from_secs(60),
             render: Duration::from_secs(30),
+            playground_open: Duration::from_secs(45),
+            playground_frame: Duration::from_secs(5),
+            playground: Duration::from_secs(10),
             shutdown: Duration::from_secs(5),
         }
     }

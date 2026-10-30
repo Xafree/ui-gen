@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use figcraft_engine::capture::{CaptureError, CaptureErrorKind, CaptureJob};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use crate::config::Timeouts;
 use crate::error;
@@ -16,8 +16,8 @@ pub(crate) struct Request {
     pub timeout: Duration,
 }
 
-pub(crate) fn request_of(job: CaptureJob, timeouts: &Timeouts) -> Request {
-    match job {
+pub(crate) fn request_of(job: CaptureJob, timeouts: &Timeouts) -> Result<Request, CaptureError> {
+    Ok(match job {
         CaptureJob::Install { root, package, version } => {
             Request { method: "install", params: json!({"dir": root, "package": package, "version": version}), timeout: timeouts.install }
         }
@@ -32,7 +32,28 @@ pub(crate) fn request_of(job: CaptureJob, timeouts: &Timeouts) -> Request {
             params: json!({"dir": root, "package": package, "component": component, "props": props, "state": state, "theme": theme}),
             timeout: timeouts.render,
         },
-    }
+        CaptureJob::Playground { root, method, params } => playground_request(&root, &method, params, timeouts)?,
+    })
+}
+
+fn playground_request(root: &str, method: &str, params: Value, timeouts: &Timeouts) -> Result<Request, CaptureError> {
+    let (method, timeout) = match method {
+        "playground.open" => ("playground.open", timeouts.playground_open),
+        "playground.frame" => ("playground.frame", timeouts.playground_frame),
+        "playground.setTemplate" => ("playground.setTemplate", timeouts.playground),
+        "playground.apply" => ("playground.apply", timeouts.playground),
+        "playground.resize" => ("playground.resize", timeouts.playground),
+        "playground.input" => ("playground.input", timeouts.playground),
+        "playground.close" => ("playground.close", timeouts.playground),
+        other => return Err(error(CaptureErrorKind::InvalidRequest, format!("`{other}` is not a playground method"))),
+    };
+    let mut fields: Map<String, Value> = match params {
+        Value::Object(fields) => fields,
+        Value::Null => Map::new(),
+        _ => return Err(error(CaptureErrorKind::InvalidRequest, format!("`{method}` takes an object of parameters"))),
+    };
+    fields.insert("dir".to_string(), json!(root));
+    Ok(Request { method, params: Value::Object(fields), timeout })
 }
 
 pub(crate) fn encode(id: u64, method: &str, params: &Value) -> Vec<u8> {
