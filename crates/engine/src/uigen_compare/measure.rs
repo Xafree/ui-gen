@@ -216,7 +216,7 @@ impl Row {
     }
 }
 
-fn read_original(root: &str, png: &str) -> Result<Raster, &'static str> {
+pub(crate) fn read_original(root: &str, png: &str) -> Result<Raster, &'static str> {
     let path = Path::new(root).join(png);
     let found = file_access::metadata(&path).map_err(|error| {
         log::debug!("uigen.compare: {png}: {error}");
@@ -240,7 +240,7 @@ fn read_original(root: &str, png: &str) -> Result<Raster, &'static str> {
     Raster::new(pixels.width(), pixels.height(), to_rgba8(&pixels)).map_err(|_| UNREADABLE)
 }
 
-fn follow(scratch: &mut Document, variant: NodeId, theme: Theme) {
+pub(crate) fn follow(scratch: &mut Document, variant: NodeId, theme: Theme) {
     let wanted = theme.mode();
     let modes: Vec<(CollectionId, ModeId)> = scratch
         .variables

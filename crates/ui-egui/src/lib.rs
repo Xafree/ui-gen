@@ -281,6 +281,7 @@ pub use dialogs::variables_panel;
 pub use home::home_recents;
 pub use home::online;
 pub use panels::assets_panel;
+pub use panels::compare_tab;
 pub use panels::component_panel;
 pub use panels::dev_compare;
 pub use panels::dev_mode;
@@ -526,6 +527,8 @@ pub struct UiState {
     pub branch_review: Option<branch_ui::ReviewView>,
     /// Dev Mode: annotations on the canvas and the ready-for-dev list.
     pub dev: dev_mode::DevUi,
+    /// The Compare tab of the right panel: the set measured against its original.
+    pub compare: compare_tab::CompareTab,
 
     /// What FigCraft last put on the system clipboard: when the clipboard still holds it, a paste
     /// uses our copied layers; anything else there (an image, SVG, text) came from another app.
@@ -676,6 +679,7 @@ impl Default for UiState {
             versions: versions::VersionUi::default(),
             branch_review: None,
             dev: dev_mode::DevUi::default(),
+            compare: compare_tab::CompareTab::default(),
 
             last_copy: None,
             last_copy_generation: 0,

@@ -31,6 +31,13 @@ impl Session {
         if cmd::playground::leaves_document_alone(id) {
             return guard::run(id, || (spec.run)(self, params));
         }
+        if cmd::uigen_compare::reads_document_only(id) {
+            let result = guard::run(id, || (spec.run)(self, params));
+            if result.is_ok() {
+                self.journal_command(id, params);
+            }
+            return result;
+        }
         if textpreview::COMMANDS.contains(&id) {
             // A live preview is no edit: no undo step, normalisation or rollback here.
             let r = guard::run(id, || (spec.run)(self, params));
@@ -62,14 +69,7 @@ impl Session {
                 if spec.history && id != "edit.repeat" {
                     self.last_command = Some((id.to_string(), params.clone()));
                 }
-                // Imported bytes already live in the document: a Base64 copy in the log would stay
-                // for the whole session.
-                if !command_carries_import_bytes(id, params) {
-                    self.journal.push((id.to_string(), params.clone()));
-                    if self.journal.len() > 5000 {
-                        self.journal.drain(..1000);
-                    }
-                }
+                self.journal_command(id, params);
             }
             Err(_) => {
                 // Roll back any partial edit — also during an interaction, where `before` is the
@@ -86,6 +86,17 @@ impl Session {
             }
         }
         result
+    }
+
+    // Imported bytes already live in the document: a Base64 copy in the log would stay for the whole session.
+    fn journal_command(&mut self, id: &str, params: &Value) {
+        if command_carries_import_bytes(id, params) {
+            return;
+        }
+        self.journal.push((id.to_string(), params.clone()));
+        if self.journal.len() > 5000 {
+            self.journal.drain(..1000);
+        }
     }
 
     /// A version shown in place of the document is read-only: refuse an edit (it is rolled back).

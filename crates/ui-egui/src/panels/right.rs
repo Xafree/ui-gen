@@ -1,4 +1,4 @@
-//! The right panel: Design, Prototype and Inspect tabs.
+//! The right panel: Design, Prototype, Inspect and Compare tabs.
 
 use egui::{Align2, Color32, CornerRadius, Id, Pos2, Rect, Sense, Stroke, Ui, pos2, vec2};
 use figcraft_color::{BlendMode, Paint, PaintKind};
@@ -147,7 +147,8 @@ pub fn right_panel(app: &mut FigApp, ui: &mut Ui) {
     let (tabs, _) = ui.allocate_exact_size(vec2(w, 40.0), Sense::hover());
     ui.painter().line_segment([tabs.left_top(), tabs.right_top()], Stroke::new(1.0, t.border));
     let mut x = tabs.min.x + 8.0;
-    for (tab, label) in [(RightTab::Design, tr("Design")), (RightTab::Prototype, tr("Prototype"))] {
+    let compare = crate::compare_tab::available(app).then(|| (RightTab::Compare, tr("Compare")));
+    for (tab, label) in [(RightTab::Design, tr("Design")), (RightTab::Prototype, tr("Prototype"))].into_iter().chain(compare) {
         let galley = ui.painter().layout_no_wrap(label.into(), semibold(11.0), t.text);
         let r = Rect::from_min_size(pos2(x, tabs.center().y - 12.0), vec2(galley.size().x + 16.0, 24.0));
         let resp = ui.interact(r, ui.scope_id().with(("rtab", label)), Sense::click());
@@ -229,6 +230,7 @@ pub fn right_panel(app: &mut FigApp, ui: &mut Ui) {
             RightTab::Design => design(app, ui),
             RightTab::Prototype => crate::proto_panel::prototype(app, ui),
             RightTab::Inspect => inspect(app, ui),
+            RightTab::Compare => crate::compare_tab::show(app, ui),
         }
         ui.add_space(80.0);
         a11y::scroll_focus(&mut app.ui.nav, ui);

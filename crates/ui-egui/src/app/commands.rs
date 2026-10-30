@@ -1,6 +1,6 @@
 use super::{
-    Done, FigApp, LeftTab, MobilePanel, NodeId, PANEL_DEFAULT, RightTab, Value, comments, dev_compare, dialogs, home, i18n, import_report, json,
-    layers, live, menus, missing_fonts, playground, plugins_ui, present, tabs, updates_ui, versions,
+    Done, FigApp, LeftTab, MobilePanel, NodeId, PANEL_DEFAULT, RightTab, Value, comments, compare_tab, dev_compare, dialogs, home, i18n,
+    import_report, json, layers, live, menus, missing_fonts, playground, plugins_ui, present, tabs, updates_ui, versions,
 };
 
 #[cfg(test)]
@@ -43,6 +43,11 @@ impl FigApp {
         let params = self.with_component_template(id, params);
         #[cfg(test)]
         RUN_LOG.with_borrow_mut(|log| log.push((id.to_string(), params.clone())));
+        if id.starts_with("panel.") && figcraft_engine::find_command(id).is_none() {
+            self.session.request_ui(id, params);
+            self.handle_ui_requests();
+            return Some(json!({}));
+        }
         let layers_generation = self.session.clipboard.layers_generation;
         let r = self.session.execute(id, &params);
         self.clear_comment_draft_after_tool_set(id, r.is_ok());
@@ -177,6 +182,7 @@ impl FigApp {
                     }
                 }
                 "panel.prototype" => self.ui.right_tab = RightTab::Prototype,
+                "panel.compare" if compare_tab::available(self) => self.ui.right_tab = RightTab::Compare,
                 "panel.designPrototype" => {
                     self.ui.right_tab = if self.ui.right_tab == RightTab::Prototype { RightTab::Design } else { RightTab::Prototype };
                 }

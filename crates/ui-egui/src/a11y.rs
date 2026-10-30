@@ -1048,6 +1048,11 @@ pub fn color(resp: &Response, label: &str, value: &str) {
     });
 }
 
+/// A picture, described by `label`.
+pub fn image(resp: &Response, label: &str) {
+    node(resp, label, |n| n.set_role(Role::Image));
+}
+
 /// Tooltips that also name the control for screen readers.
 pub trait Tip {
     /// The tooltip, and for a clickable control its name (and key: "Align left  ⌥A").

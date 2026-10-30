@@ -10,15 +10,37 @@ use crate::uigen_import::Theme;
 use crate::{EngineError, Result, Session, bad, spec};
 
 const COMPARE: &str = "uigen.compare";
+const PANEL: &str = "panel.compare";
+
+/// The commands that only read the document: they leave its revision and the undo stack alone, so a panel
+/// showing their result is not recomputed by asking for it.
+pub(crate) fn reads_document_only(id: &str) -> bool {
+    matches!(id, COMPARE | "uigen.sourceDiff" | "uigen.themes")
+}
 
 pub fn specs() -> Vec<CommandSpec> {
-    vec![spec!(
-        COMPARE,
-        "Compare with the original",
-        "{set? (a component set with uigen.source, an import or its copy in the library; default the one of the current page), theme? (\"light\" | \"dark\", default \"light\"), variants? (names of variants of the set; default all, 128 at most)}  measures each variant against the image its import kept in .uigen/captures and returns {set, name, source: {package, version, component}, theme, rows: [{variant, style, size, state, status (\"ok\" | \"ko\" | \"missingReference\" | \"notComparable\" | \"sizeMismatch\"), reason? (why the row could not be measured), original: {width, height}, library: {width, height}, shapes: {differing, total, percent, verdict} | null (pixels outside the text boxes; under 1 % is ok), text: {verdict, reason, maxDx, maxDy, maxDwidth, pixelPercent} | null (family, size, weight, position and measured width; the pixels of text are information only)}], summary: {compared, ok, ko, missing, notComparable}}. A missing, unreadable or oversized (8 MiB, 4096 × 4096) image is a `missingReference` row, never an error; a dark render that equals the light one (the library does not follow the system colour scheme) is `notComparable`. Writes nothing: the document is rendered on a copy. Refused (`bad`) outside a library project, for a set that is missing, not a component set, without uigen.source or of more than 128 variants, an unknown theme and unknown variants",
-        false,
-        compare
-    )]
+    vec![
+        spec!(
+            PANEL,
+            "Compare",
+            "{}  asks the interface to open the Compare tab of the right panel (no panel from a programmatic call); refused outside a library project",
+            false,
+            open_panel
+        ),
+        spec!(
+            COMPARE,
+            "Compare with the original",
+            "{set? (a component set with uigen.source, an import or its copy in the library; default the one of the current page), theme? (\"light\" | \"dark\", default \"light\"), variants? (names of variants of the set; default all, 128 at most)}  measures each variant against the image its import kept in .uigen/captures and returns {set, name, source: {package, version, component}, theme, rows: [{variant, style, size, state, status (\"ok\" | \"ko\" | \"missingReference\" | \"notComparable\" | \"sizeMismatch\"), reason? (why the row could not be measured), original: {width, height}, library: {width, height}, shapes: {differing, total, percent, verdict} | null (pixels outside the text boxes; under 1 % is ok), text: {verdict, reason, maxDx, maxDy, maxDwidth, pixelPercent} | null (family, size, weight, position and measured width; the pixels of text are information only)}], summary: {compared, ok, ko, missing, notComparable}}. A missing, unreadable or oversized (8 MiB, 4096 × 4096) image is a `missingReference` row, never an error; a dark render that equals the light one (the library does not follow the system colour scheme) is `notComparable`. Writes nothing: the document is rendered on a copy. Refused (`bad`) outside a library project, for a set that is missing, not a component set, without uigen.source or of more than 128 variants, an unknown theme and unknown variants",
+            false,
+            compare
+        ),
+    ]
+}
+
+fn open_panel(s: &mut Session, _: &Value) -> Result<Value> {
+    binding(s, PANEL)?;
+    s.request_ui(PANEL, json!({}));
+    Ok(json!({}))
 }
 
 fn theme_param(p: &Value) -> Result<Theme> {

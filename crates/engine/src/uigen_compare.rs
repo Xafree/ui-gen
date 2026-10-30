@@ -4,8 +4,21 @@ mod text;
 
 use serde::{Deserialize, Serialize};
 
+use figcraft_doc::{Document, NodeId};
+
 pub use pixels::{difference_image, pixel_diff};
 pub use text::{text_verdict, weight_of_font_style};
+
+pub fn original_raster(root: &str, png: &str) -> Result<Raster, &'static str> {
+    measure::read_original(root, png)
+}
+
+pub fn themed(doc: &Document, variant: NodeId, dark: bool) -> Document {
+    let mut scratch = doc.clone();
+    let theme = if dark { crate::uigen_import::Theme::Dark } else { crate::uigen_import::Theme::Light };
+    measure::follow(&mut scratch, variant, theme);
+    scratch
+}
 
 pub const SHAPES_MAX_PERCENT: f64 = 1.0;
 pub const COLOR_THRESHOLD: f64 = 0.1;
