@@ -11,7 +11,7 @@ use super::CommandSpec;
 use super::project_sources::{absolute_root, binding};
 use crate::file_access::{self, Access};
 use crate::params::{f64_of, get};
-use crate::uigen_import::{self, Destination, MAX_RENDERS, Request, State, Theme};
+use crate::uigen_import::{self, Destination, MAX_RENDERS, Request, State, Theme, render_count};
 use crate::{Result, Session, bad, spec};
 
 const IMPORT: &str = uigen_import::COMMAND;
@@ -167,10 +167,12 @@ fn import_component(s: &mut Session, p: &Value) -> Result<Value> {
         themes: themes(p)?,
         animations,
     };
-    let renders = request.styles.as_ref().map_or(1, Vec::len)
-        * request.sizes.as_ref().map_or(1, Vec::len)
-        * request.states.as_ref().map_or(DEFAULT_STATES, Vec::len)
-        * request.themes.len();
+    let renders = render_count(
+        request.styles.as_ref().map_or(0, Vec::len),
+        request.sizes.as_ref().map_or(0, Vec::len),
+        request.states.as_ref().map_or(DEFAULT_STATES, Vec::len),
+        request.themes.len(),
+    );
     if renders > MAX_RENDERS {
         return Err(bad(
             IMPORT,

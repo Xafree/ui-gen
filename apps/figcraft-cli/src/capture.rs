@@ -8,7 +8,8 @@ use figcraft_engine::Session;
 use figcraft_engine::capture::JobState;
 
 const POLL: Duration = Duration::from_millis(100);
-const CAPTURE_COMMANDS: [&str; 4] = ["project.addSource", "project.setSourceVersion", "project.removeSource", "uigen.importComponent"];
+const CAPTURE_COMMANDS: [&str; 5] =
+    ["project.addSource", "project.setSourceVersion", "project.removeSource", "uigen.importComponent", "uigen.listComponents"];
 
 pub fn needs_service(commands: &[&str]) -> bool {
     commands.iter().any(|command| CAPTURE_COMMANDS.contains(command))

@@ -174,6 +174,12 @@ failed, e.g. `inspect: component "Nope" not found in @mui/material`), then find 
 `document.inspect` (it is selected). `uigen.importDom {snapshot, parent?, x?, y?, full?}` takes a snapshot you
 hold yourself and answers `{root, warnings}` directly; `full: true` asks for the complete translation.
 
+`uigen.listComponents {package, refresh?}` ([MCP: Component import](mcp.md#component-import)) is a capture job too: it
+returns `{job}` (an `inspect` job) and the components of the source come back as the event of that job, which
+`capture.status {job}` shows `done` or `failed`; the answer is kept in the session, so a second call returns
+`{cached: true, …}` with no job. `uigen.importWindow {package?}` only asks the interface for the import window,
+which a programmatic call never opens.
+
 ### `engine.commands {}`
 
 Every command: `[{id, label, params, menu, shortcut, undoable}]`.

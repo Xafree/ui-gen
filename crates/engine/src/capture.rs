@@ -7,7 +7,8 @@ use std::fmt;
 use serde_json::Value;
 
 use crate::Session;
-use crate::uigen_import::{self, PendingImport};
+use crate::cmd::project_sources;
+use crate::uigen_import::{self, Cache, PendingImport};
 
 pub type JobId = u64;
 
@@ -107,6 +108,7 @@ pub(crate) struct Capture {
     backend: Option<Box<dyn CaptureBackend>>,
     jobs: Vec<JobRecord>,
     pub(crate) imports: Vec<PendingImport>,
+    pub(crate) catalog: Cache,
 }
 
 impl Capture {
@@ -175,7 +177,13 @@ impl Session {
                 events.extend(uigen_import::advance(self, job, outcome));
                 continue;
             }
-            let outcome = outcome.and_then(|value| crate::cmd::project_sources::apply(self, &command, &package, &root, &value).map(|()| value));
+            let outcome = outcome.and_then(|value| match command.as_str() {
+                uigen_import::LIST_COMMAND => uigen_import::receive(self, &package, &root, &value),
+                _ => project_sources::apply(self, &command, &package, &root, &value).map(|()| value),
+            });
+            if outcome.is_ok() && project_sources::changes_source(&command) {
+                self.capture.catalog.forget(&root, &package);
+            }
             if let Some(record) = self.capture.jobs.get_mut(position) {
                 record.finished = Some(outcome.as_ref().map(|_| ()).map_err(|e| e.message.clone()));
             }

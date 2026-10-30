@@ -910,6 +910,29 @@ Two commands bring the output of the capture service into the document; both are
     every `uigen.effect` mark; the layers of a ripple or a spinner are still translated, the rendered states do not
     change.
 
+Two more commands prepare an import; neither edits the document (no undo step).
+
+- `uigen.listComponents {package, refresh?}`: the components a source exports, with their props, as the capture
+  service reads them from the package's types (`inspect`). `package` must be a source of the project that isn't
+  removed. It returns `{job}` at once; the only event (`CaptureEvent`, command `uigen.listComponents`, that job)
+  carries `{package, version, framework, components: [{name, props: [{name, type, values}]}], notes}`, or the
+  failure `{kind, message}` (the service's own message). `type` is `enum`, `boolean`, `string`, `number` or `other`
+  (any type the service reports that is not one of the first four); `values` lists the values of an enum.
+  The answer is checked and bounded before it is kept: no `components` array is a `Protocol` failure and nothing is
+  kept; at most 1 000 components (the rest is cut and a note says so); a component whose name is empty, over 128
+  characters or holds control characters is left out with a note that names it; at most 64 props per component and
+  64 values per prop; at most 16 notes of 256 characters. It is kept **in the session** (nothing on disk) for the
+  version the source has: a second call returns `{cached: true, package, version, framework, components, notes}` at
+  once, with no job and no event; `refresh: true` asks the service again. `Session::inspected(package)` reads what
+  is kept; a finished `project.addSource`, `project.setSourceVersion` or `project.removeSource` forgets it, and a
+  failed listing keeps nothing (the next call asks the service again). **Refused at once** (`bad`, nothing submitted): outside a library
+  project; a `package` that is missing, invalid or not an active source; a `refresh` that is not a boolean; no
+  capture service (`capture service not available`).
+- `uigen.importWindow {package?}`: asks the interface to open the "Import a component" window
+  (`dialog.importComponent`, with `{package}`, or `null`, as the source it starts on); a programmatic call opens no
+  dialog. Returns `{}`. Refused (`bad`, no request) outside a library project and for a `package` that is not an
+  active source.
+
 ### Local libraries
 
 A `.figcraft` file can be published as a library and used from other files (library files here;
