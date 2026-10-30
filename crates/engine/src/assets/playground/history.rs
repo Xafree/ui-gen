@@ -65,7 +65,7 @@ impl History {
     }
 
     pub fn can_undo(&self) -> bool {
-        self.preview.is_some() || !self.past.is_empty()
+        !self.past.is_empty()
     }
 
     pub fn can_redo(&self) -> bool {

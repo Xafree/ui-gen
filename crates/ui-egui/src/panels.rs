@@ -8,6 +8,7 @@ pub mod layers;
 pub mod layout_panel;
 pub mod list_drag;
 pub mod playground;
+pub mod playground_bars;
 pub mod playground_input;
 pub mod proto_editor;
 pub mod proto_panel;

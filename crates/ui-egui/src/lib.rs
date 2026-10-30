@@ -276,6 +276,7 @@ pub use panels::layers;
 pub use panels::layout_panel;
 pub use panels::list_drag;
 pub use panels::playground;
+pub use panels::playground_bars;
 pub use panels::playground_input;
 pub use panels::proto_editor;
 pub use panels::proto_panel;

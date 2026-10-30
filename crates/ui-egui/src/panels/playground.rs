@@ -11,6 +11,7 @@ use figcraft_engine::EngineError;
 use figcraft_engine::playground::{NO_COMPONENT, Status};
 use serde_json::json;
 
+use super::playground_bars::{self, Bars};
 use super::playground_input::{Frame, Relay};
 use crate::FigApp;
 use crate::a11y;
@@ -53,6 +54,9 @@ pub struct PlaygroundTab {
     pub front: bool,
     pub empty: bool,
     pub doc_uid: u64,
+    pub save_open: bool,
+    pub code_open: bool,
+    pub bars: Bars,
     picture: Option<TextureHandle>,
     resizing: Resizing,
     relay: Relay,
@@ -99,6 +103,9 @@ pub fn after_command(app: &mut FigApp, id: &str, result: &Result<serde_json::Val
     match result {
         Ok(_) => {
             app.ui.playground.start(uid, false);
+            if id == OPEN {
+                app.ui.nav.region = a11y::Region::Toolbar;
+            }
             false
         }
         Err(EngineError::BadParams { msg, .. }) if id == OPEN && msg == NO_COMPONENT && *app.session.playground_status() == Status::Closed => {
@@ -146,9 +153,11 @@ pub fn show_tab(app: &mut FigApp) {
 /// Draws the view in the canvas area `ui` covers, whatever state the playground is in.
 pub fn show(app: &mut FigApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    let zone = ui.max_rect();
     let status = app.session.playground_status().clone();
-    match status {
+    let bars = if status == Status::Closed { 0.0 } else { playground_bars::show(app, ui, &status) };
+    let outer = ui.max_rect();
+    let zone = Rect::from_min_max(pos2(outer.min.x, outer.min.y + bars), outer.max);
+    ui.scope_builder(egui::UiBuilder::new().max_rect(zone), |ui| match status {
         Status::Closed => empty(app, ui, &t),
         Status::Opening => {
             app.ui.playground.forget_page();
@@ -156,7 +165,7 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
         }
         Status::Failed(cause) => failure(app, ui, &t, &cause),
         Status::Ready => page(app, ui, &t, zone),
-    }
+    });
 }
 
 fn centered(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
