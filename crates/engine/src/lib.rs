@@ -544,6 +544,8 @@ mod uigen_import_support;
 #[cfg(test)]
 mod uigen_import_tokens_tests;
 #[cfg(test)]
+mod uigen_place_tests;
+#[cfg(test)]
 mod variable_tests;
 #[cfg(test)]
 mod variables_behaviour_tests;
