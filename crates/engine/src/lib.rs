@@ -558,6 +558,8 @@ mod uigen_compare_command_tests;
 #[cfg(test)]
 mod uigen_compare_pixels_tests;
 #[cfg(test)]
+mod uigen_compare_raster_tests;
+#[cfg(test)]
 mod uigen_compare_text_tests;
 #[cfg(test)]
 mod uigen_compare_unconfined_tests;

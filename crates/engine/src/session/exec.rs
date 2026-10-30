@@ -33,7 +33,7 @@ impl Session {
         }
         if cmd::uigen_compare::reads_document_only(id) {
             let result = guard::run(id, || (spec.run)(self, params));
-            if result.is_ok() {
+            if result.is_ok() && cmd::uigen_compare::is_journaled(id) {
                 self.journal_command(id, params);
             }
             return result;

@@ -13,6 +13,11 @@ pub fn original_raster(root: &str, png: &str) -> Result<Raster, &'static str> {
     measure::read_original(root, png)
 }
 
+/// The raster of the library `variant` that `uigen.compare` measures against the original, in the light or dark theme.
+pub fn library_raster(doc: &Document, variant: NodeId, dark: bool) -> Result<Raster, &'static str> {
+    measure::render_library(&themed(doc, variant, dark), variant)
+}
+
 pub fn themed(doc: &Document, variant: NodeId, dark: bool) -> Document {
     let mut scratch = doc.clone();
     let theme = if dark { crate::uigen_import::Theme::Dark } else { crate::uigen_import::Theme::Light };

@@ -272,7 +272,7 @@ pub(crate) fn follow(scratch: &mut Document, variant: NodeId, theme: Theme) {
     crate::normalize(scratch, &before);
 }
 
-fn render_library(scratch: &Document, variant: NodeId) -> Result<Raster, &'static str> {
+pub(crate) fn render_library(scratch: &Document, variant: NodeId) -> Result<Raster, &'static str> {
     let bounds = scratch.world_bounds(variant).ok_or(NOT_RENDERED)?;
     if !(bounds.width() <= f64::from(MAX_SIDE) && bounds.height() <= f64::from(MAX_SIDE)) {
         return Err(LIBRARY_TOO_LARGE);
@@ -307,9 +307,20 @@ fn library_text(doc: &Document, id: NodeId, origin: &Rect) -> Option<LibText> {
     })
 }
 
-fn library_texts(doc: &Document, variant: NodeId) -> Vec<LibText> {
+fn visible_subtree(doc: &Document, root: NodeId) -> Vec<NodeId> {
+    let mut found = Vec::new();
+    let mut pending = vec![root];
+    while let Some(id) = pending.pop() {
+        let Some(node) = doc.node(id).filter(|node| node.visible) else { continue };
+        found.push(id);
+        pending.extend(node.children.iter().rev());
+    }
+    found
+}
+
+pub(crate) fn library_texts(doc: &Document, variant: NodeId) -> Vec<LibText> {
     let Some(origin) = doc.world_bounds(variant) else { return Vec::new() };
-    doc.subtree(variant).into_iter().filter_map(|id| library_text(doc, id, &origin)).take(MAX_LIBRARY_TEXTS).collect()
+    visible_subtree(doc, variant).into_iter().filter_map(|id| library_text(doc, id, &origin)).take(MAX_LIBRARY_TEXTS).collect()
 }
 
 fn boxes_of(texts: &[RefText]) -> Vec<TextBox> {

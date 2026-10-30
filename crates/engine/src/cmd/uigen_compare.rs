@@ -18,6 +18,10 @@ pub(crate) fn reads_document_only(id: &str) -> bool {
     matches!(id, COMPARE | "uigen.sourceDiff" | "uigen.themes")
 }
 
+pub(crate) fn is_journaled(id: &str) -> bool {
+    id == COMPARE
+}
+
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         spec!(
