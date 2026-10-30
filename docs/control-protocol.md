@@ -191,7 +191,16 @@ returns `{job}` (an `inspect` job) and the components of the source come back as
 `{cached: true, …}` with no job. `uigen.importWindow {package?}` only asks the interface for the import window,
 which a programmatic call never opens. `uigen.imported {}` and `uigen.placeImported {set, page?}`
 ([MCP: Component import](mcp.md#component-import)) answer directly, with no job: the first lists the component sets of
-the import pages by source, the second copies one onto a page of the library in one undo step.
+the import pages by source, the second copies one onto a page of the library in one undo step. `uigen.themes {}` and
+`uigen.applyTheme {theme}` ([MCP: Component import](mcp.md#component-import)) answer directly too: the first lists the
+token themes of the file, the second makes the library components follow one in one undo step.
+
+`uigen.compare {set?, theme?, variants?}`, `uigen.sourceDiff {copy}`, `uigen.applyDifferences {copy, ids?}` and
+`panel.compare {}` ([MCP: Component import](mcp.md#component-import)) answer directly as well: the first measures an imported
+set against the images its import kept (read only inside `.uigen/captures`), the third changes the copy in one undo step,
+the last only asks the interface to open the Compare tab. `uigen.updateSource {package, components?}` is a capture job
+like `uigen.importComponent`: it returns `{jobs, components}` at once, and each job ends with its own event, which
+`capture.status {job}` shows `done` or `failed`.
 
 ### `engine.commands {}`
 

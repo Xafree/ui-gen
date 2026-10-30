@@ -90,37 +90,45 @@ impl Shot {
         Some(Self { tex, area, boxes })
     }
 
+    pub(crate) fn from_raster(ctx: &egui::Context, raster: &figcraft_engine::uigen_compare::Raster) -> Option<Self> {
+        let size = [usize::try_from(raster.width).ok()?, usize::try_from(raster.height).ok()?];
+        let image = egui::ColorImage::from_rgba_unmultiplied(size, &raster.rgba);
+        let tex = ctx.load_texture("compare-original", image, egui::TextureOptions::LINEAR);
+        let area = figcraft_geom::Rect::new(0.0, 0.0, f64::from(raster.width), f64::from(raster.height));
+        Some(Self { tex, area, boxes: Vec::new() })
+    }
+
     /// The old version outlines what was removed, the new one what was added or changed.
     fn of_changes(ctx: &egui::Context, doc: &Document, id: NodeId, changes: &[LayerChange], old: bool) -> Option<Self> {
         Self::new(ctx, doc, id, changes.iter().filter(|c| c.depth > 0 && (c.change == ChangeKind::Removed) == old).map(|c| (c.id, c.change)))
     }
 
     /// Its size in page units.
-    fn size(&self) -> egui::Vec2 {
+    pub(crate) fn size(&self) -> egui::Vec2 {
         vec2(self.area.width().max(1e-6) as f32, self.area.height().max(1e-6) as f32)
     }
 }
 
 /// Where a version is drawn: its top-left on screen and the screen points per page unit.
 #[derive(Clone, Copy)]
-struct Place {
-    min: egui::Pos2,
-    scale: f32,
+pub(crate) struct Place {
+    pub(crate) min: egui::Pos2,
+    pub(crate) scale: f32,
 }
 
 impl Place {
     /// A `size` (page units) fitted and centred in `r`, at most 200%.
-    fn fit(r: Rect, size: egui::Vec2) -> Self {
+    pub(crate) fn fit(r: Rect, size: egui::Vec2) -> Self {
         let scale = (r.width() / size.x).min(r.height() / size.y).clamp(1e-3, 2.0);
         Self { min: r.center() - size * scale / 2.0, scale }
     }
 
-    fn image(self, shot: &Shot) -> Rect {
+    pub(crate) fn image(self, shot: &Shot) -> Rect {
         Rect::from_min_size(self.min, shot.size() * self.scale)
     }
 
     /// Page point → screen, for `shot`.
-    fn at(self, shot: &Shot, x: f64, y: f64) -> egui::Pos2 {
+    pub(crate) fn at(self, shot: &Shot, x: f64, y: f64) -> egui::Pos2 {
         self.min + vec2((x - shot.area.x0) as f32, (y - shot.area.y0) as f32) * self.scale
     }
 }
@@ -360,7 +368,7 @@ pub(crate) fn images(ui: &mut Ui, t: &Tokens, r: Rect, shots: [(&Shot, &str); 2]
 }
 
 /// One version drawn at `place`, its listed layers outlined (the hovered one filled).
-fn pane(p: &egui::Painter, t: &Tokens, place: Place, shot: &Shot, hovered: Option<NodeId>) {
+pub(crate) fn pane(p: &egui::Painter, t: &Tokens, place: Place, shot: &Shot, hovered: Option<NodeId>) {
     let img = place.image(shot);
     widgets::checker(p, img, 8.0);
     p.image(shot.tex.id(), img, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);

@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 use super::motion;
 use super::pending::{COMMAND, Destination, Request};
 use super::plan::State;
+use super::reference::{self, OPTIONS_KEY, REFERENCE_KEY};
 use super::staging::{self, SOURCE_KEY};
 use super::tokens::{self, Theming, VariantTokens};
 use crate::capture::{CaptureError, CaptureErrorKind};
@@ -29,6 +30,7 @@ pub(super) struct Variant {
     pub column: usize,
     pub snapshot: Snapshot,
     pub others: Vec<Snapshot>,
+    pub pngs: Vec<Option<String>>,
 }
 
 pub(super) struct Finished {
@@ -101,9 +103,7 @@ fn build(s: &mut Session, request: &Request, destination: &Destination, finished
             drop_effects(s.doc_mut()?, &mut translated.layers);
         }
         for warning in translated.warnings {
-            if warnings.len() < MAX_WARNINGS && !warnings.contains(&warning) {
-                warnings.push(warning);
-            }
+            add_warning(&mut warnings, warning);
         }
         let others = variant
             .others
@@ -126,14 +126,14 @@ fn build(s: &mut Session, request: &Request, destination: &Destination, finished
     node.name.clone_from(&request.component);
     let source = json!({"package": request.package, "version": request.version, "component": request.component});
     node.plugin_data.insert(SOURCE_KEY.to_string(), source.to_string());
+    node.plugin_data.insert(OPTIONS_KEY.to_string(), reference::options_of(request, &finished.variants));
+    keep_originals(s.doc_mut()?, request, &finished.variants, &placed, &mut warnings)?;
     for warning in tokens::apply(
         s,
         &Theming { collection: &collection, component: &request.component, added_modes: &added_modes, themes: &request.themes },
         &themed,
     )? {
-        if warnings.len() < MAX_WARNINGS && !warnings.contains(&warning) {
-            warnings.push(warning);
-        }
+        add_warning(&mut warnings, warning);
     }
     let linked: Vec<motion::Variant> = finished
         .variants
@@ -159,6 +159,32 @@ fn build(s: &mut Session, request: &Request, destination: &Destination, finished
         s.set_selection(vec![set]);
     }
     Ok(result)
+}
+
+/// Each variant keeps the original of every theme it was rendered in.
+fn keep_originals(
+    doc: &mut Document,
+    request: &Request,
+    variants: &[Variant],
+    placed: &[(NodeId, usize, usize)],
+    warnings: &mut Vec<String>,
+) -> Result<()> {
+    for (variant, (id, ..)) in variants.iter().zip(placed) {
+        let kept = reference::keep(request, variant);
+        for warning in kept.warnings {
+            add_warning(warnings, warning);
+        }
+        if let Some(raw) = kept.raw {
+            doc.get_mut(*id)?.plugin_data.insert(REFERENCE_KEY.to_string(), raw);
+        }
+    }
+    Ok(())
+}
+
+fn add_warning(warnings: &mut Vec<String>, warning: String) {
+    if warnings.len() < MAX_WARNINGS && !warnings.contains(&warning) {
+        warnings.push(warning);
+    }
 }
 
 fn drop_effects(doc: &mut Document, layers: &mut [LayerFacts]) {

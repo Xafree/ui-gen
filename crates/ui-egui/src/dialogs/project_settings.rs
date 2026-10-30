@@ -9,6 +9,7 @@ use figcraft_engine::file_access;
 use figcraft_project::npm;
 use serde_json::json;
 
+use super::project_themes::{self, ThemeAct, Themes};
 use super::window;
 use crate::FigApp;
 use crate::i18n::{tr, tr_noop, trf};
@@ -25,11 +26,11 @@ const VERSION_W: f32 = 90.0;
 const FRAMEWORK_W: f32 = 100.0;
 const LICENSE_W: f32 = 70.0;
 const ACTIONS_W: f32 = 220.0;
-const GAP: f32 = 8.0;
-const CARD_MARGIN: i8 = 10;
+pub(super) const GAP: f32 = 8.0;
+pub(super) const CARD_MARGIN: i8 = 10;
 const CELL_H: f32 = 28.0;
 const LIST_HEIGHT: f32 = 320.0;
-const INNER_W: f32 = PACKAGE_W + VERSION_W + FRAMEWORK_W + LICENSE_W + ACTIONS_W + 4.0 * GAP;
+pub(super) const INNER_W: f32 = PACKAGE_W + VERSION_W + FRAMEWORK_W + LICENSE_W + ACTIONS_W + 4.0 * GAP;
 const WIDTH: f32 = INNER_W + 2.0 * (CARD_MARGIN as f32 + 1.0);
 const ADD_PACKAGE_W: f32 = 280.0;
 
@@ -74,6 +75,8 @@ pub struct ProjectSettings {
     pending_removal: Option<String>,
     changing: Option<(String, String)>,
     change_error: Option<String>,
+    focus_first: bool,
+    pub(super) themes: Themes,
 }
 
 enum Act {
@@ -88,6 +91,7 @@ enum Act {
     Apply(String),
     CancelChange,
     Close,
+    Themes(ThemeAct),
 }
 
 impl ProjectSettings {
@@ -157,6 +161,7 @@ impl ProjectSettings {
         }
         self.sources = rows;
         self.failures = failures;
+        self.themes.refresh(app, &binding.root, &binding.config);
         true
     }
 
@@ -189,7 +194,7 @@ fn failure_text(command: &str, package: &str, cause: &str) -> String {
 
 /// `dialog.projectSettings`: open the window for the project of the file in front.
 pub(crate) fn request(app: &mut FigApp) {
-    let mut state = ProjectSettings::default();
+    let mut state = ProjectSettings { focus_first: true, ..Default::default() };
     if state.refresh(app) {
         app.ui.project_settings = Some(state);
     }
@@ -197,7 +202,9 @@ pub(crate) fn request(app: &mut FigApp) {
 
 /// Bring back the jobs the capture service finished and say how each ended.
 pub(crate) fn pump(app: &mut FigApp) {
+    let mut imported = false;
     for event in app.session.pump_capture() {
+        imported |= event.command == IMPORT;
         if crate::playground_bars::note_event(app, &event) || super::import_component::pump_event(app, &event) {
             continue;
         }
@@ -223,6 +230,10 @@ pub(crate) fn pump(app: &mut FigApp) {
                 app.show_error(failure_text(&event.command, package, &error.message));
             }
         }
+    }
+    if imported {
+        edit(app, |state| state.themes.invalidate());
+        sync(app);
     }
 }
 
@@ -306,7 +317,15 @@ fn perform(app: &mut FigApp, act: Act) {
             s.change_error = None;
         }),
         Act::Close => app.ui.project_settings = None,
+        Act::Themes(act) => {
+            project_themes::perform(app, act);
+            sync(app);
+        }
     }
+}
+
+fn package_field() -> egui::Id {
+    egui::Id::unique(("project_settings", "package"))
 }
 
 pub fn show(app: &mut FigApp, ctx: &Context) {
@@ -318,31 +337,33 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
     let can_install = !cfg!(target_arch = "wasm32");
     let mut open = true;
     let mut acts = Vec::new();
+    let focus_first = state.focus_first;
     window(tr("Project settings"), ctx).open(&mut open).show(ctx, |ui| {
         ui.set_width(WIDTH);
-        acts = body(ui, &t, &state, can_install);
+        acts = body(ui, &t, &state, can_install, focus_first);
     });
     if !open {
         return;
     }
+    state.focus_first &= !crate::widgets::text_field_focused(ctx, package_field());
     app.ui.project_settings = Some(state);
     for act in acts {
         perform(app, act);
     }
 }
 
-fn note(ui: &mut Ui, text: &str, color: egui::Color32) {
+pub(super) fn note(ui: &mut Ui, text: &str, color: egui::Color32) {
     ui.add(Label::new(RichText::new(text).color(color).font(regular(11.0))).wrap());
 }
 
-fn body(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, can_install: bool) -> Vec<Act> {
+fn body(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, can_install: bool, focus_first: bool) -> Vec<Act> {
     let mut acts = Vec::new();
     ui.label(RichText::new(tr("Source libraries")).font(semibold(15.0)).color(t.text));
     if !can_install {
         note(ui, tr("Installing packages is only available in the desktop app"), t.text_secondary);
     }
     ui.add_space(8.0);
-    add_row(ui, state, can_install, &mut acts);
+    add_row(ui, state, can_install, focus_first, &mut acts);
     if let Some(error) = state.add_error() {
         note(ui, error, t.danger);
     }
@@ -350,6 +371,12 @@ fn body(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, can_install: bool) -> 
     ui.add_space(12.0);
     table(ui, t, state, can_install, &mut acts);
     ui.add_space(12.0);
+    if can_install {
+        let mut themes = Vec::new();
+        project_themes::section(ui, t, &state.themes, &mut themes);
+        acts.extend(themes.into_iter().map(Act::Themes));
+        ui.add_space(12.0);
+    }
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
         if crate::widgets::button(ui, tr("Close"), false, true).clicked() {
             acts.push(Act::Close);
@@ -358,10 +385,13 @@ fn body(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, can_install: bool) -> 
     acts
 }
 
-fn add_row(ui: &mut Ui, state: &ProjectSettings, can_install: bool, acts: &mut Vec<Act>) {
+fn add_row(ui: &mut Ui, state: &ProjectSettings, can_install: bool, focus_first: bool, acts: &mut Vec<Act>) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = GAP;
-        let package = egui::Id::unique(("project_settings", "package"));
+        let package = package_field();
+        if focus_first {
+            crate::widgets::focus_text_field(ui, package);
+        }
         if let Some(text) = crate::widgets::text_field(ui, package, &state.package_input, ADD_PACKAGE_W, tr("Package")) {
             acts.push(Act::Package(text));
         }

@@ -1054,6 +1054,8 @@ fn ui_set_view(app: &mut FigApp, ctx: &Context, p: &Value) -> Result<(), String>
         app.ui.right_tab = match t {
             "prototype" => crate::RightTab::Prototype,
             "inspect" => crate::RightTab::Inspect,
+            "compare" if crate::compare_tab::available(app) => crate::RightTab::Compare,
+            "compare" => app.ui.right_tab,
             _ => crate::RightTab::Design,
         };
     }

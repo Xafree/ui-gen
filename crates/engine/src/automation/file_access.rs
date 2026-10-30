@@ -29,7 +29,7 @@ pub enum Access {
 }
 
 /// The folders automation may read (read and write roots) and write (write roots), resolved.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Roots {
     read: Vec<PathBuf>,
     write: Vec<PathBuf>,

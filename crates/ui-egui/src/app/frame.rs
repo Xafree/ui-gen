@@ -204,7 +204,7 @@ impl FigApp {
     /// board, which has no prototypes or Dev Mode (its tab stays Design), only when asked for.
     pub(super) fn right_panel_shown(&mut self, hidden: bool) -> bool {
         let board = self.session.doc().is_ok_and(figcraft_engine::board::is_board);
-        if board {
+        if board || (self.ui.right_tab == RightTab::Compare && !crate::compare_tab::available(self)) {
             self.ui.right_tab = RightTab::Design;
         }
         !hidden && (!board || self.ui.board_panel)

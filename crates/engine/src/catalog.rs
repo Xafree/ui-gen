@@ -133,6 +133,9 @@ pub static MENU: &[MenuItem] = &[
     m!("View", SEP, ""),
     m!("View", "Previous page", "view.prevPage"),
     m!("View", "Next page", "view.nextPage"),
+    m!("View", SEP, ""),
+    // UIGEN's own: the Compare tab of the right panel (library projects, desktop only).
+    m!("View", "Compare", "panel.compare"),
     m!("View/Theme", "Light", "view.themeLight"),
     m!("View/Theme", "Dark", "view.themeDark"),
     m!("View/Theme", "Follow system", "view.themeSystem"),
@@ -298,7 +301,7 @@ pub fn items() -> impl Iterator<Item = &'static MenuItem> {
 }
 
 /// Items of FigCraft's own that the parity count leaves out (as it does the `collab.` ones).
-const OWN: [&str; 8] = [
+const OWN: [&str; 9] = [
     "file.newFromTemplate",
     "file.newBoard",
     "help.gettingStarted",
@@ -307,6 +310,7 @@ const OWN: [&str; 8] = [
     "playground.open",
     "project.settings",
     "uigen.importWindow",
+    "panel.compare",
 ];
 
 /// Coverage: (implemented, total, missing ids). `extra` lists ids implemented by the UI layer.

@@ -37,13 +37,18 @@ pub(crate) struct Destination {
     pub at: Option<(f64, f64)>,
 }
 
+struct Render {
+    snapshot: Snapshot,
+    png: Option<String>,
+}
+
 struct Rendering {
     cells: Vec<Cell>,
     warnings: Vec<String>,
     rows: usize,
     columns: usize,
     waiting: BTreeMap<JobId, (usize, usize)>,
-    snapshots: Vec<Vec<Option<Snapshot>>>,
+    renders: Vec<Vec<Option<Render>>>,
 }
 
 enum Stage {
@@ -155,8 +160,9 @@ impl PendingImport {
                 {
                     rendering.warnings.push(note.to_string());
                 }
-                if let Some(slot) = rendering.snapshots.get_mut(index).and_then(|themed| themed.get_mut(theme_index)) {
-                    *slot = Some(snapshot);
+                let png = rendered.get("png").and_then(Value::as_str).map(str::to_string);
+                if let Some(slot) = rendering.renders.get_mut(index).and_then(|themed| themed.get_mut(theme_index)) {
+                    *slot = Some(Render { snapshot, png });
                 }
                 if rendering.waiting.is_empty() { rendering.finish(&self.request.themes).map(Some) } else { Ok(None) }
             }
@@ -181,25 +187,26 @@ impl PendingImport {
                 waiting.insert(id, (index, theme_index));
             }
         }
-        let snapshots = plan.cells.iter().map(|_| self.request.themes.iter().map(|_| None).collect()).collect();
-        Ok(Rendering { cells: plan.cells, warnings: plan.warnings, rows: plan.rows, columns: plan.columns, waiting, snapshots })
+        let renders = plan.cells.iter().map(|_| self.request.themes.iter().map(|_| None).collect()).collect();
+        Ok(Rendering { cells: plan.cells, warnings: plan.warnings, rows: plan.rows, columns: plan.columns, waiting, renders })
     }
 }
 
 impl Rendering {
     fn finish(&mut self, themes: &[Theme]) -> Result<Finished, CaptureError> {
         let cells = std::mem::take(&mut self.cells);
-        let snapshots = std::mem::take(&mut self.snapshots);
+        let renders = std::mem::take(&mut self.renders);
         let mut variants = Vec::with_capacity(cells.len());
-        for (cell, themed) in cells.into_iter().zip(snapshots) {
+        for (cell, themed) in cells.into_iter().zip(renders) {
             let missing = |theme: Option<&Theme>| CaptureError {
                 kind: CaptureErrorKind::Internal,
                 message: format!("{}: no {} render came back", cell.label, theme.map_or("", |theme| theme.render())),
             };
-            let mut renders = themed.into_iter();
-            let snapshot = renders.next().flatten().ok_or_else(|| missing(themes.first()))?;
-            let others =
-                renders.zip(themes.iter().skip(1)).map(|(render, theme)| render.ok_or_else(|| missing(Some(theme)))).collect::<Result<_, _>>()?;
+            let mut themed = themed.into_iter();
+            let first = themed.next().flatten().ok_or_else(|| missing(themes.first()))?;
+            let rest: Vec<Render> =
+                themed.zip(themes.iter().skip(1)).map(|(render, theme)| render.ok_or_else(|| missing(Some(theme)))).collect::<Result<_, _>>()?;
+            let pngs = std::iter::once(&first).chain(&rest).map(|render| render.png.clone()).collect();
             variants.push(Variant {
                 label: cell.label,
                 style: cell.style,
@@ -207,8 +214,9 @@ impl Rendering {
                 state: cell.state,
                 row: cell.row,
                 column: cell.column,
-                snapshot,
-                others,
+                snapshot: first.snapshot,
+                others: rest.into_iter().map(|render| render.snapshot).collect(),
+                pngs,
             });
         }
         Ok(Finished { variants, rows: self.rows, columns: self.columns, warnings: std::mem::take(&mut self.warnings) })

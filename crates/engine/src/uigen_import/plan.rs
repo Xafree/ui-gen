@@ -64,14 +64,14 @@ impl Theme {
         Self::ALL.into_iter().find(|theme| theme.render() == name)
     }
 
-    pub(super) fn mode(self) -> &'static str {
+    pub(crate) fn mode(self) -> &'static str {
         match self {
             Self::Light => "Light",
             Self::Dark => "Dark",
         }
     }
 
-    pub(super) fn render(self) -> &'static str {
+    pub(crate) fn render(self) -> &'static str {
         match self {
             Self::Light => "light",
             Self::Dark => "dark",

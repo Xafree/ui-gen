@@ -39,6 +39,7 @@ pub mod lit_export;
 pub mod missing_fonts;
 pub mod plugins_ui;
 pub mod project_settings;
+mod project_themes;
 pub mod updates_ui;
 pub mod variables_panel;
 
@@ -413,6 +414,7 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
     menu_input_dialog(app, ctx);
     crate::variables_panel::show(app, ctx);
     crate::dev_compare::show(app, ctx);
+    crate::compare_view::show(app, ctx);
     crate::branch_ui::show(app, ctx);
     if app.ui.export_preview {
         export_dialog(app, ctx);

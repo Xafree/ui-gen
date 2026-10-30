@@ -26,6 +26,7 @@ pub mod measure;
 pub mod proto_run;
 mod selection;
 mod sharing;
+pub mod uigen_compare;
 pub use assets::components;
 pub use assets::library;
 pub use assets::library_server;
@@ -108,6 +109,8 @@ mod prefs;
 pub mod project;
 mod session;
 mod uigen_import;
+mod uigen_theme;
+mod uigen_update;
 mod view_state;
 
 pub use derived::{changed_nodes, normalize};
@@ -115,9 +118,11 @@ pub use doc_state::{DocState, History, HistoryEntry, Interaction, PREVIEW_READ_O
 pub use error::{EngineError, Result, bad};
 pub use prefs::{Clipboard, MAX_RECENT_ACTIONS, Prefs, UI_SCALE_MAX, UI_SCALE_MIN, UiRequest, clamp_ui_scale};
 pub use uigen_import::{
-    ImportSection, ImportedSet, Inspected, InspectedComponent, InspectedProp, MAX_RENDERS, PropKind, is_import_page, render_count,
-    sections as imported_sections,
+    ImportSection, ImportedSet, Inspected, InspectedComponent, InspectedProp, MAX_RENDERS, OPTIONS_KEY, PropKind, REFERENCE_KEY, RefText, Reference,
+    ThemeReference, is_import_page, reference_of, render_count, sections as imported_sections,
 };
+pub use uigen_theme::{Swatch, ThemeInfo, themes as token_themes};
+pub use uigen_update::{Difference, DifferenceKind, DifferenceState, Located, MAX_DIFFERENCES, SourceDiff, Summary, source_diff};
 pub use view_state::ViewState;
 
 /// The editing session: open documents, the current tool, clipboard and prefs.
@@ -549,6 +554,22 @@ mod transform_behaviour_tests;
 #[cfg(test)]
 mod uigen_catalog_tests;
 #[cfg(test)]
+mod uigen_compare_background_tests;
+#[cfg(test)]
+mod uigen_compare_command_tests;
+#[cfg(test)]
+mod uigen_compare_pixels_tests;
+#[cfg(test)]
+mod uigen_compare_raster_tests;
+#[cfg(test)]
+mod uigen_compare_text_tests;
+#[cfg(test)]
+mod uigen_compare_tolerance_tests;
+#[cfg(test)]
+mod uigen_compare_unconfined_tests;
+#[cfg(test)]
+mod uigen_compare_weight_tests;
+#[cfg(test)]
 mod uigen_import_component_tests;
 #[cfg(test)]
 mod uigen_import_dom_full_tests;
@@ -572,6 +593,16 @@ mod uigen_import_tokens_tests;
 mod uigen_lot4_review_tests;
 #[cfg(test)]
 mod uigen_place_tests;
+#[cfg(test)]
+mod uigen_reference_tests;
+#[cfg(test)]
+mod uigen_theme_review_tests;
+#[cfg(test)]
+mod uigen_theme_tests;
+#[cfg(test)]
+mod uigen_update_review_tests;
+#[cfg(test)]
+mod uigen_update_tests;
 #[cfg(test)]
 mod variable_tests;
 #[cfg(test)]

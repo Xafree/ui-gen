@@ -553,6 +553,7 @@ fn blocked(app: &FigApp) -> bool {
         || u.about
         || u.preferences
         || u.variables.is_some()
+        || u.project_settings.is_some()
         || u.export_preview
         || u.color_profile.is_some()
         || u.present.is_some()
@@ -561,6 +562,7 @@ fn blocked(app: &FigApp) -> bool {
         || u.playground.save_open
         || u.playground.code_open
         || u.import_window.is_some()
+        || u.compare.detail.is_some()
         || !app.has_files()
 }
 
@@ -1045,6 +1047,11 @@ pub fn color(resp: &Response, label: &str, value: &str) {
         n.set_role(Role::ColorWell);
         n.set_value(value);
     });
+}
+
+/// A picture, described by `label`.
+pub fn image(resp: &Response, label: &str) {
+    node(resp, label, |n| n.set_role(Role::Image));
 }
 
 /// Tooltips that also name the control for screen readers.

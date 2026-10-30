@@ -281,24 +281,25 @@ fn side_buttons(app: &mut FigApp, ui: &mut Ui, mut x: f32, cy: f32, t: &Tokens) 
 fn mode_switcher(app: &mut FigApp, ui: &mut Ui, x: f32, cy: f32, t: &Tokens) {
     let modes = [(Icon::Pencil, tr("Draw")), (Icon::Frame, tr("Design")), (Icon::Prototype, tr("Prototype")), (Icon::Code, tr("Inspect"))];
     let active = match app.ui.right_tab {
-        crate::RightTab::Design if app.session.tool.tool == ToolId::Pencil => 0,
-        crate::RightTab::Design => 1,
-        crate::RightTab::Prototype => 2,
-        crate::RightTab::Inspect => 3,
+        crate::RightTab::Design if app.session.tool.tool == ToolId::Pencil => Some(0),
+        crate::RightTab::Design => Some(1),
+        crate::RightTab::Prototype => Some(2),
+        crate::RightTab::Inspect => Some(3),
+        crate::RightTab::Compare => None,
     };
     let seg = Rect::from_min_size(pos2(x, cy - 18.0), vec2(4.0 * 34.0 + 4.0, 36.0));
     ui.painter().rect_filled(seg, CornerRadius::same(8), t.field);
     for (i, (icon, tip)) in modes.iter().enumerate() {
         let r = Rect::from_min_size(pos2(seg.min.x + 2.0 + i as f32 * 34.0, seg.min.y + 2.0), vec2(34.0, 32.0));
         let resp = ui.interact(r, ui.scope_id().with(("mode", i)), Sense::click()).on_hover_text(*tip);
-        a11y::toggle(&resp, tip, i == active);
-        if i == active {
+        a11y::toggle(&resp, tip, Some(i) == active);
+        if Some(i) == active {
             ui.painter().rect_filled(r, CornerRadius::same(6), t.panel);
             ui.painter().rect_stroke(r, CornerRadius::same(6), Stroke::new(1.0, t.border), StrokeKind::Inside);
         } else if resp.hovered() {
             ui.painter().rect_filled(r, CornerRadius::same(6), t.hover);
         }
-        icons::paint(ui.painter(), glyph_rect(r), *icon, if i == active { t.accent_text } else { t.icon_secondary });
+        icons::paint(ui.painter(), glyph_rect(r), *icon, if Some(i) == active { t.accent_text } else { t.icon_secondary });
         if resp.clicked() {
             pick_mode(app, i);
         }

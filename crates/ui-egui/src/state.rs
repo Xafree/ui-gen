@@ -3,6 +3,7 @@ pub enum RightTab {
     Design,
     Prototype,
     Inspect,
+    Compare,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]

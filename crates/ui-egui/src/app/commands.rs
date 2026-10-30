@@ -1,6 +1,6 @@
 use super::{
-    Done, FigApp, LeftTab, MobilePanel, NodeId, PANEL_DEFAULT, RightTab, Value, comments, dev_compare, dialogs, home, i18n, import_report, json,
-    layers, live, menus, missing_fonts, playground, plugins_ui, present, tabs, updates_ui, versions,
+    Done, FigApp, LeftTab, MobilePanel, NodeId, PANEL_DEFAULT, RightTab, Value, comments, compare_tab, dev_compare, dialogs, home, i18n,
+    import_report, json, layers, live, menus, missing_fonts, playground, plugins_ui, present, tabs, updates_ui, versions,
 };
 
 #[cfg(test)]
@@ -177,6 +177,7 @@ impl FigApp {
                     }
                 }
                 "panel.prototype" => self.ui.right_tab = RightTab::Prototype,
+                "panel.compare" if compare_tab::available(self) => self.ui.right_tab = RightTab::Compare,
                 "panel.designPrototype" => {
                     self.ui.right_tab = if self.ui.right_tab == RightTab::Prototype { RightTab::Design } else { RightTab::Prototype };
                 }

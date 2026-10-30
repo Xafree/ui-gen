@@ -87,11 +87,11 @@ fn family_of(style: &Style, report: &mut Report) -> Option<Face> {
     first.map(|family| Face { family, installed: false, style: None })
 }
 
-fn first_family(stack: &str) -> Option<String> {
+pub(super) fn first_family(stack: &str) -> Option<String> {
     fonts::stack_families(stack).first().map(|family| capped(family))
 }
 
-fn font_weight(value: &str) -> Option<u16> {
+pub(super) fn font_weight(value: &str) -> Option<u16> {
     match value.to_ascii_lowercase().as_str() {
         "normal" => Some(REGULAR),
         "bold" => Some(700),

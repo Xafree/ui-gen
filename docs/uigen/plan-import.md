@@ -355,6 +355,90 @@ Le moteur (L5) garde toute la logique ; l'interface (L6) affiche et relaie, chaq
 - **Essai réel** (`#[ignore]`, `crates/capture/src/real_import_tests.rs`, E4-7.1) : voir « Service de
   capture ».
 
+## Thèmes, Comparer et mise à jour (lot 5)
+
+**Références des originaux.** Chaque variante importée porte `plugin_data["uigen.reference"]`
+(`ThemeReference` par thème : chemin du PNG sous `.uigen/captures/`, largeur et hauteur de la boîte racine
+arrondies, `distinct`, textes avec `box`, `line`, `family`, `size`, `weight`) ; l'ensemble porte
+`uigen.importOptions` (styles, tailles, états, thèmes, animations de l'import, rejoués par la mise à jour). Le PNG
+reste sur le disque ; le fichier ne garde qu'une référence légère (16 Kio au plus). **Il n'y a pas de couche de capture
+verrouillée** : le PNG n'est pas dans le document. `distinct` dit si le rendu sombre diffère du rendu clair **là où
+il peint** : les couleurs qui ne peignent rien (bordure sans trait, `caret-color`, `color` d'un élément sans texte)
+ne comptent pas.
+
+**Règle d'écart** (`uigen.compare`, `crates/engine/src/uigen_compare/`). Le rendu de la variante est mesuré **sur
+sa seule boîte** (`world_bounds`, sans l'ombre qui déborde) contre le PNG, au pixel : seuil de couleur 0,1 (YIQ,
+anti-crénelage écarté comme `pixelmatch`). Deux verdicts :
+
+| Verdict | Règle |
+|---|---|
+| Formes | pixels hors des boîtes de texte : **moins de 1 %** d'écart pour `ok` (le seuil ne s'assouplit jamais) ; les pixels du texte sont une information |
+| Texte | par ordre, même famille (casse, ponctuation et suffixes de style ignorés), même taille, même graisse, position et largeur mesurée à 1 px près, police installée, calque à taille automatique |
+
+**Le rendu de la bibliothèque se mesure sur le fond de page de la capture.** Le service de capture photographie
+l'élément sur une page opaque (`#ffffff` en clair, `#1e1e1e` en sombre, `BACKGROUNDS` de `sidecar/render.mjs`) : les PNG
+sont en RGB sans alpha. Le rendu du moteur est transparent là où la variante ne peint rien (bouton `outlined`) ; avant la
+mesure, `uigen_compare::library_raster` le compose sur le même fond (`page_background`, un test lit `render.mjs` pour
+garder les deux valeurs égales). Les images des lignes, Superposition et Différence montrent ce même rendu opaque.
+`pixel_diff`, `difference_image`, le seuil de 1 % et la tolérance de 1 px ne changent pas.
+
+**La taille d'une variante se compare à 1 px près** (`GEOMETRY_TOLERANCE_PX`, décision de l'utilisateur) : largeur
+et hauteur diffèrent chacune d'au plus 1 px, la ligne n'est pas `sizeMismatch`, les deux images sont rognées à leur
+intersection avant `pixel_diff` (la colonne en trop n'est pas comptée) et la ligne rend quand même les deux tailles
+réelles dans `original` et `library`. Au-delà de 1 px sur l'un des côtés, rien ne change : `sizeMismatch`, mesure sur
+l'intersection, pixels hors intersection comptés comme différents. `pixel_diff` et le seuil de 1 % ne changent pas. Le
+détail et les images de l'onglet Comparer suivent la même règle : « Size differs » seulement au-delà de la tolérance,
+mode Différence rogné à l'intersection.
+
+Statuts d'une ligne : `ok`, `ko`, `sizeMismatch` (taille des deux images différente de plus de 1 px en largeur ou en
+hauteur), `missingReference`
+(PNG absent, illisible, hors de `.uigen/captures`, de plus de 8 Mio ou de 4096 × 4096), `notComparable` (rendu sombre égal au
+clair). **Les lectures sont confinées à `<projet>/.uigen/captures`** même sans racines d'automatisation : un lien ou un
+`..` qui en sort donne `missingReference`.
+
+**Le thème s'applique par son nom** : `uigen.applyTheme {theme}` déplace chaque liaison de variable des composants de la
+lib vers la variable de même nom et de même type du thème choisi, puis écrit `appliedTheme` dans `uigen.json`.
+Références et thème appliqué ont été **validés par l'utilisateur**.
+
+| Commande | Rôle |
+|---|---|
+| `uigen.themes` | thèmes du fichier (collections locales), origine, calques liés, pastilles |
+| `uigen.applyTheme` | applique un thème (un pas d'annulation) |
+| `uigen.compare` | une ligne par variante : statut, tailles, écart des formes, verdict du texte |
+| `uigen.updateSource` | recapture les composants importés d'une source (travaux de capture, la lib ne change pas) |
+| `uigen.sourceDiff` | différences entre la copie et la dernière capture (`clean`, `modified`, `unknown`) |
+| `uigen.applyDifferences` | prend des différences dans la copie, sur demande seulement |
+| `panel.compare` | demande à l'interface d'ouvrir l'onglet Comparer |
+
+**Essai réel** (`real_import_tests.rs`, E5-8.1, `@mui/material` 7.3.11, Button `contained` `medium`, états Default et
+Hover), lancé à la main le 30 octobre 2026. Avant correction, `render_node` rendait l'ombre : bibliothèque 96 × 52 et
+111 × 67 pour un original de 82 × 37 (`sizeMismatch`, 67,8 % et 88,0 % d'écart). Après : 81 × 37. Le rendu sombre est
+`notComparable` ; effacer les PNG donne `missingReference`, `uigen.updateSource` les restaure ; `uigen.themes` liste
+`@mui/material 7.3.11` ; un thème « Brand » d'une variable (`variant-containedBg/default`) ne déplace que cette liaison.
+
+### Limites connues (lot 5)
+
+- **MUI à 1 px de largeur près** : original 82 × 37 (Chromium arrondit la boîte de 81,39 px vers le haut), bibliothèque
+  81 × 37 (le texte mesuré par le moteur fait 49 px, Chromium 49,39 px, pour la même face). Avant la tolérance, cette
+  seule colonne donnait `sizeMismatch` et des formes à 2,30 %. Avec la tolérance de 1 px (essai réel du 30 octobre 2026),
+  les lignes Default et Hover sont `ok` : formes à 0,229 % sur l'aire commune, texte `ok` (`maxDx` 0, `maxDy` 0,75,
+  `maxDwidth` −0,39). L'essai réel n'affirme le verdict du texte et le statut que si la police n'est pas en cause
+  (« police absente »).
+- Une différence de taille de plus de 1 px reste un `sizeMismatch`.
+- **Essai réel `outlined`** (`real_compare_of_every_style_size_and_state_of_the_mui_button_matches_its_original`, 8 variantes
+  `contained`/`outlined` × `small`/`medium` × Default/Hover, lancé à la main le 30 octobre 2026). Avant la composition sur
+  le fond, les quatre lignes `outlined` étaient `ko` (97,57 %, 81,17 %, 98,63 % et 86,95 % d'écart) : le rendu
+  transparent s'opposait à un PNG opaque. Après : `contained` 0,0 % (quatre lignes `ok`), `outlined` Default `small` et
+  `medium` 0,0 % (`ok`), `outlined` Hover `medium` 0,572 % (`ok`) et `outlined` Hover `small` **1,012 %**
+  (10 pixels sur 988) : `ko`. Ces 10 pixels sont les anti-crénelages des quatre coins arrondis (rayon 4) de la bordure,
+  pleine `rgb(25, 118, 210)` au survol : le moteur y couvre plus que Chromium (par exemple (2, 0) : 96 contre 140 sur le
+  canal rouge ; Default a le même écart, mais la bordure à 50 % le laisse sous le seuil de couleur). Écart de
+  rastérisation des coins, sans rapport avec le fond ; rien n'est assoupli, la ligne reste `ko`. Le texte est `ok` sur
+  les huit lignes.
+- Les états Hover, Pressed ne sont pas forcés sur la bibliothèque : la comparaison mesure le rendu de la variante.
+- `uigen.updateSource` recapture dans la version courante de la source ; une version qui change se règle par
+  `project.setSourceVersion` d'abord.
+
 ## Lots
 
 ### Lot 0 · Essai de faisabilité (risque principal d'abord)
@@ -412,10 +496,14 @@ titre d'information. Si l'essai échoue, on revoit l'approche avant d'aller plus
    d'import, copie sur une page blanche, second dépôt qui archive le premier, deux annulations.
 
 ### Lot 5 · Thèmes de tokens et Comparer
-1. Réglages du projet, section « Thèmes de tokens » : choisir le thème appliqué à la lib.
-2. Onglet « Comparer » (`RightTab::Compare`) : original et version de la lib côte à côte par état,
-   écart en pixels (repart de `dev_compare.rs`).
-3. Mise à jour d'une source : recapture et liste des différences, appliquées seulement sur demande.
+- [x] 1. Références des originaux sur chaque variante (`uigen.reference`, `uigen.importOptions`), PNG sur le disque.
+- [x] 2. Mesure `uigen.compare` (formes sous 1 %, verdict du texte), `pixel_diff` et `difference_image`.
+- [x] 3. Réglages du projet, section « Thèmes de tokens » : `uigen.themes`, `uigen.applyTheme`.
+- [x] 4. Onglet « Comparer » (`RightTab::Compare`) : une ligne par état, fenêtre de détail (curseur, différence),
+   `panel.compare` (repart de `dev_compare.rs`).
+- [x] 5. Mise à jour d'une source : `uigen.updateSource`, `uigen.sourceDiff`, `uigen.applyDifferences`, appliquées
+   seulement sur demande (section « Mises à jour » de Comparer).
+- [x] 6. Essai réel (`crates/capture/src/real_import_tests.rs`, E5-8.1) : voir « Thèmes, Comparer et mise à jour (lot 5) ».
 
 ### Lot 6 · Export de la lib en Lit
 1. `uigen-lit` (L4, nouveau, dépend de `doc`) : composant (jeu de variantes) → modèle intermédiaire
