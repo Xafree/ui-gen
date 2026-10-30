@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use super::{Composed, History, Mode, RadiusShape, Settings, Template, overrides, overrides_css};
 use crate::capture::{CaptureError, CaptureErrorKind, CaptureEvent, CaptureOutcome, JobId};
 use crate::codegen::LitNames;
-use crate::dev::lit_export::tokens_css_named;
+use crate::dev::lit_export::{tokens_css_named, with_aliased};
 use crate::lit_export::ExportPlan;
 use crate::lit_export::TokenOptions;
 use crate::{Session, bad};
@@ -417,7 +417,7 @@ impl PlaygroundState {
         let css = overrides_css(&found);
         let tokens = (theme.name != self.shown_theme).then(|| {
             let options = TokenOptions { prefix: target.token_prefix.clone(), light: None, dark: None };
-            tokens_css_named(&target.doc, &[theme], &options, &names).text
+            tokens_css_named(&target.doc, &with_aliased(&target.doc, theme), &options, &names).text
         });
         if css.len() > MAX_OVERRIDES_BYTES || tokens.as_ref().is_some_and(|text| text.len() > MAX_TOKENS_BYTES) {
             return Err(bad(command, "the theme is too large to show in the playground"));
