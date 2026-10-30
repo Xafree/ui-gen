@@ -204,6 +204,8 @@ mod titlebar_tests;
 mod toast_action_tests;
 
 #[cfg(test)]
+mod import_drop_ui_tests;
+#[cfg(test)]
 mod import_sections_ui_tests;
 #[cfg(test)]
 mod project_divider_ui_tests;
