@@ -149,6 +149,19 @@ fn near_all(found: [f64; 4], expected: [f64; 4]) -> bool {
     found.iter().zip(expected).all(|(a, b)| near(*a, b))
 }
 
+fn assert_the_two_faces(found: &crate::ThemeReference, label: &str) {
+    assert_eq!(found.texts.len(), 2, "{label}");
+    let (first, second) = (&found.texts[0], &found.texts[1]);
+    assert!(near_all(first.box_, [12.0, 8.0, 38.0, 14.0]), "{label}: {:?}", first.box_);
+    assert!(first.line.is_some_and(|line| near_all(line, [10.0, 6.0, 42.0, 18.0])), "{label}: {:?}", first.line);
+    assert_eq!((first.family.as_str(), first.weight), ("Synthetic Sans", 500), "{label}");
+    assert!(near(first.size, 14.0), "{label}: {}", first.size);
+    assert!(near_all(second.box_, [40.0, 8.0, 20.0, 14.0]), "{label}: {:?}", second.box_);
+    assert_eq!(second.line, None, "{label}");
+    assert_eq!((second.family.as_str(), second.weight), ("Synthetic Serif", 700), "{label}");
+    assert!(near(second.size, 20.0), "{label}: {}", second.size);
+}
+
 // covers: E5-1.1
 #[test]
 fn every_variant_carries_the_original_of_each_theme_and_the_set_the_options_of_the_call() {
@@ -175,16 +188,7 @@ fn every_variant_carries_the_original_of_each_theme_and_the_set_the_options_of_t
             assert_eq!(found.png.as_deref(), Some(variant_png(style, size, &state.to_lowercase(), theme).as_str()), "{name} {theme}");
             assert_eq!((found.width, found.height), (width, height), "{name} {theme}");
             assert!(found.distinct, "{name} {theme}: the dark render differs from the light one");
-            assert_eq!(found.texts.len(), 2, "{name} {theme}");
-            let (first, second) = (&found.texts[0], &found.texts[1]);
-            assert!(near_all(first.box_, [12.0, 8.0, 38.0, 14.0]), "{name} {theme}: {:?}", first.box_);
-            assert!(first.line.is_some_and(|line| near_all(line, [10.0, 6.0, 42.0, 18.0])), "{name} {theme}: {:?}", first.line);
-            assert_eq!((first.family.as_str(), first.weight), ("Synthetic Sans", 500), "{name} {theme}");
-            assert!(near(first.size, 14.0), "{name} {theme}: {}", first.size);
-            assert!(near_all(second.box_, [40.0, 8.0, 20.0, 14.0]), "{name} {theme}: {:?}", second.box_);
-            assert_eq!(second.line, None, "{name} {theme}");
-            assert_eq!((second.family.as_str(), second.weight), ("Synthetic Serif", 700), "{name} {theme}");
-            assert!(near(second.size, 20.0), "{name} {theme}: {}", second.size);
+            assert_the_two_faces(found, &format!("{name} {theme}"));
         }
     }
 
@@ -424,7 +428,7 @@ fn an_unreadable_truncated_or_themeless_reference_reads_as_none_and_a_valid_one_
 #[test]
 fn the_copy_placed_in_the_library_keeps_the_reference_of_each_variant_with_the_same_paths() {
     let mut bench = bench("reference-copy", Scenario::new(button_inspect(true, false)).png(Png::PerVariant).snapshots(faces_snapshot));
-    let staged = params(&json!({"states": ["Default", "Hover"], "themes": ["light", "dark"], "stage": true}));
+    let staged = params(&json!({"styles": null, "sizes": null, "states": ["Default", "Hover"], "themes": ["light", "dark"], "stage": true}));
     let imported = import_ok(&mut bench, &staged);
     let source = set_of(&imported);
 
