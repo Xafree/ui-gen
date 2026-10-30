@@ -73,6 +73,45 @@ pub fn reference_of(doc: &Document, variant: NodeId) -> Option<Reference> {
     reference.themes.values().all(ThemeReference::is_sound).then_some(reference)
 }
 
+const NOT_PAINTED: [(&str, &str, &str); 7] = [
+    ("borderTopColor", "borderTopStyle", "borderTopWidth"),
+    ("borderRightColor", "borderRightStyle", "borderRightWidth"),
+    ("borderBottomColor", "borderBottomStyle", "borderBottomWidth"),
+    ("borderLeftColor", "borderLeftStyle", "borderLeftWidth"),
+    ("outlineColor", "outlineStyle", "outlineWidth"),
+    ("columnRuleColor", "columnRuleStyle", "columnRuleWidth"),
+    ("textDecorationColor", "textDecorationLine", ""),
+];
+
+fn is_invisible(style: &BTreeMap<String, String>, line: &str, width: &str) -> bool {
+    let none = style.get(line).is_some_and(|value| matches!(value.as_str(), "none" | "hidden"));
+    none || style.get(width).is_some_and(|value| value == "0px")
+}
+
+fn without_unpainted_colors(node: &mut DomNode) {
+    let DomNode::Element(element) = node else { return };
+    for (color, line, width) in NOT_PAINTED {
+        if is_invisible(&element.style, line, width) {
+            element.style.remove(color);
+        }
+    }
+    element.style.remove("caretColor");
+    if !element.children.iter().any(|child| matches!(child, DomNode::Text(_) | DomNode::Svg(_))) {
+        element.style.remove("color");
+    }
+    element.children.iter_mut().for_each(without_unpainted_colors);
+}
+
+fn differs_where_it_paints(light: &Snapshot, other: &Snapshot) -> bool {
+    if light == other {
+        return false;
+    }
+    let (mut first, mut second) = (light.clone(), other.clone());
+    without_unpainted_colors(&mut first.root);
+    without_unpainted_colors(&mut second.root);
+    first != second
+}
+
 pub(super) struct Kept {
     pub raw: Option<String>,
     pub warnings: Vec<String>,
@@ -101,7 +140,7 @@ pub(super) fn keep(request: &Request, variant: &Variant) -> Kept {
         }
         let root = root_box(&snapshot.root);
         let (width, height) = (pixels(root.width), pixels(root.height));
-        let distinct = index == 0 || *snapshot != variant.snapshot;
+        let distinct = index == 0 || differs_where_it_paints(&variant.snapshot, snapshot);
         themes.insert(name.to_string(), ThemeReference { png: png.map(str::to_string), width, height, distinct, texts });
     }
     let mut reference = Reference {

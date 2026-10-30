@@ -560,6 +560,8 @@ mod uigen_compare_pixels_tests;
 #[cfg(test)]
 mod uigen_compare_text_tests;
 #[cfg(test)]
+mod uigen_compare_unconfined_tests;
+#[cfg(test)]
 mod uigen_compare_weight_tests;
 #[cfg(test)]
 mod uigen_import_component_tests;

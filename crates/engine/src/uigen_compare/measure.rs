@@ -1,21 +1,23 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use figcraft_doc::{CollectionId, Document, ModeId, NodeId, NodeKind, TextAutoResize, TextStyle};
 use figcraft_geom::Rect;
-use figcraft_render::{images, render_node, to_rgba8};
+use figcraft_render::{images, render_area, to_rgba8};
 use serde::Serialize;
 use serde_json::Value;
 
 use super::{
     LibText, PixelReport, Raster, RefText, SHAPES_MAX_PERCENT, TextBox, TextReport, Verdict, pixel_diff, text_verdict, weight_of_font_style,
 };
-use crate::file_access;
+use crate::file_access::{self, Access, Roots};
 use crate::uigen_import::{SOURCE_KEY, Theme, reference_of};
 
 pub(crate) const MAX_VARIANTS: usize = 128;
 const MAX_PNG_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_SIDE: u32 = 4096;
 const MAX_LIBRARY_TEXTS: usize = 1000;
+const CAPTURES: &str = ".uigen/captures";
 
 const TOO_LARGE: &str = "original too large to compare (more than 8 MiB or 4096 × 4096 pixels)";
 const UNREADABLE: &str = "the original image is missing or can't be read";
@@ -216,7 +218,19 @@ impl Row {
     }
 }
 
+fn captures_roots(root: &str) -> Roots {
+    let captures = Path::new(root).join(CAPTURES);
+    let inside = file_access::allowed(&captures, Access::Read) && file_access::within_app_folder(&captures, Path::new(root));
+    let folders = if inside { vec![captures.to_string_lossy().into_owned()] } else { Vec::new() };
+    Roots::new(&folders, &[]).unwrap_or_default()
+}
+
 pub(crate) fn read_original(root: &str, png: &str) -> Result<Raster, &'static str> {
+    let roots = Arc::new(captures_roots(root));
+    file_access::confined(Some(&roots), || read_confined(root, png))
+}
+
+fn read_confined(root: &str, png: &str) -> Result<Raster, &'static str> {
     let path = Path::new(root).join(png);
     let found = file_access::metadata(&path).map_err(|error| {
         log::debug!("uigen.compare: {png}: {error}");
@@ -259,11 +273,11 @@ pub(crate) fn follow(scratch: &mut Document, variant: NodeId, theme: Theme) {
 }
 
 fn render_library(scratch: &Document, variant: NodeId) -> Result<Raster, &'static str> {
-    let bounds = figcraft_render::export_bounds(scratch, variant).ok_or(NOT_RENDERED)?;
+    let bounds = scratch.world_bounds(variant).ok_or(NOT_RENDERED)?;
     if !(bounds.width() <= f64::from(MAX_SIDE) && bounds.height() <= f64::from(MAX_SIDE)) {
         return Err(LIBRARY_TOO_LARGE);
     }
-    let pixels = render_node(scratch, variant, 1.0).ok_or(NOT_RENDERED)?;
+    let pixels = render_area(scratch, &[variant], bounds, 1.0).ok_or(NOT_RENDERED)?;
     Raster::new(pixels.width(), pixels.height(), to_rgba8(&pixels)).map_err(|_| NOT_RENDERED)
 }
 
