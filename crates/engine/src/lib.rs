@@ -26,6 +26,7 @@ pub mod measure;
 pub mod proto_run;
 mod selection;
 mod sharing;
+pub mod uigen_compare;
 pub use assets::components;
 pub use assets::library;
 pub use assets::library_server;
@@ -532,6 +533,8 @@ mod uigen_catalog_tests;
 mod uigen_compare_pixels_tests;
 #[cfg(test)]
 mod uigen_compare_text_tests;
+#[cfg(test)]
+mod uigen_compare_weight_tests;
 #[cfg(test)]
 mod uigen_import_component_tests;
 #[cfg(test)]
