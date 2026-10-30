@@ -282,6 +282,7 @@ pub use home::home_recents;
 pub use home::online;
 pub use panels::assets_panel;
 pub use panels::compare_tab;
+pub use panels::compare_updates;
 pub use panels::compare_view;
 pub use panels::component_panel;
 pub use panels::dev_compare;

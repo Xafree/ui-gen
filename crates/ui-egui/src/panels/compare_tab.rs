@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 
 use crate::FigApp;
 use crate::a11y;
+use crate::compare_updates::{self, Updates};
 use crate::compare_view::View;
 use crate::dev_compare::{Place, Shot, pane};
 use crate::i18n::{tr, trf};
@@ -20,7 +21,6 @@ use crate::theme::{Tokens, regular, semibold};
 use crate::widgets::{self, PAD};
 
 const COMPARE: &str = "uigen.compare";
-const UPDATE: &str = "uigen.updateSource";
 const SOURCE_KEY: &str = "uigen.source";
 const GAP: f32 = 8.0;
 const MAX_IMAGE_H: f32 = 110.0;
@@ -163,6 +163,7 @@ pub struct CompareTab {
     run: Option<Run>,
     pub(crate) detail: Option<NodeId>,
     pub(crate) view: View,
+    updates: Updates,
 }
 
 impl CompareTab {
@@ -332,6 +333,10 @@ fn paint(app: &mut FigApp, ui: &mut Ui, tab: &mut CompareTab) {
     if let Some(run) = tab.run() {
         body(ui, &t, run, tab.dark(), &mut acts);
     }
+    let target = tab.run.as_ref().and_then(|run| Some((run.set()?, run.source.as_ref()?.package.clone())));
+    if let Some((set, package)) = target {
+        compare_updates::section(app, ui, &mut tab.updates, set, &package);
+    }
     ui.add_space(24.0);
     for act in acts {
         match act {
@@ -339,7 +344,7 @@ fn paint(app: &mut FigApp, ui: &mut Ui, tab: &mut CompareTab) {
             Act::Open(variant) => tab.detail = Some(variant),
             Act::Recapture => {
                 if let Some(source) = tab.run.as_ref().and_then(|run| run.source.as_ref()) {
-                    app.run(UPDATE, json!({"package": source.package}));
+                    compare_updates::recapture_source(app, &mut tab.updates, &source.package);
                 }
             }
         }

@@ -1,5 +1,6 @@
 pub mod assets_panel;
 pub mod compare_tab;
+pub mod compare_updates;
 pub mod compare_view;
 pub mod component_panel;
 pub mod dev_compare;
