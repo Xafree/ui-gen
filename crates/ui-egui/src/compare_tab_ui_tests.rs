@@ -530,13 +530,13 @@ fn in_a_project_the_tab_row_ends_with_compare_and_every_way_in_opens_it() {
     assert!(mentions(&lab.shown(), EMPTY));
     assert!(lab.control("Compare").is_some_and(|n| selected(&n)), "the tab is the selected one");
 
-    lab.ui.app.run("panel.design", json!({}));
+    lab.ui.app.run("view.design", json!({}));
     lab.settle();
     assert!(!mentions(&lab.shown(), EMPTY));
     lab.click("Compare");
     assert!(mentions(&lab.shown(), EMPTY), "a click on the tab opens it");
 
-    lab.ui.app.run("panel.design", json!({}));
+    lab.ui.app.run("view.design", json!({}));
     lab.settle();
     let ctx = lab.ui.ctx.clone();
     crate::control::handle(&mut lab.ui.app, &ctx, "ui.set", &json!({"rightTab": "compare"})).unwrap();
