@@ -1,6 +1,6 @@
 use super::{
     Done, FigApp, LeftTab, MobilePanel, NodeId, PANEL_DEFAULT, RightTab, Value, comments, dev_compare, dialogs, home, i18n, import_report, json,
-    layers, live, menus, missing_fonts, plugins_ui, present, tabs, updates_ui, versions,
+    layers, live, menus, missing_fonts, playground, plugins_ui, present, tabs, updates_ui, versions,
 };
 
 impl FigApp {
@@ -28,13 +28,19 @@ impl FigApp {
         let layers_generation = self.session.clipboard.layers_generation;
         let r = self.session.execute(id, &params);
         self.clear_comment_draft_after_tool_set(id, r.is_ok());
+        let told_by_the_tab = playground::after_command(self, id, &r);
         self.handle_ui_requests();
         self.invalidate_synthetic_copy(layers_generation);
         // A command may change the file the window shows (`doc.switch`, `doc.nextTab`,
         // `file.open`/`file.close`). Record that presentation before returning, so an in-flight
         // screenshot admitted on the old file cannot accept pixels from the new one.
         self.observe_presentation();
-        r.map_err(|e| self.failed(id, &e)).ok()
+        r.map_err(|e| {
+            if !told_by_the_tab {
+                self.failed(id, &e);
+            }
+        })
+        .ok()
     }
 
     /// A programmatic command that changed the engine clipboard never wrote the system clipboard:

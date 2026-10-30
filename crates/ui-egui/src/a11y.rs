@@ -208,6 +208,14 @@ pub fn canvas(nav: &mut Nav, resp: &Response, describe: impl FnOnce() -> String)
     });
 }
 
+/// The playground's page view, an image named `label`: F6 and Escape give it the keyboard like the
+/// canvas, but the canvas shortcuts stay off while it has it (the page gets the keys).
+pub fn page_view(nav: &mut Nav, resp: &Response, label: &str) {
+    nav.next.canvas = Some(resp.id);
+    area(nav, Region::Canvas, resp.rect);
+    node(resp, label, |n| n.set_role(Role::Image));
+}
+
 /// An open popup drawn by the app itself (egui `Area` `area`), opened from `opener`: a keyboard
 /// user who opened it moves into it.
 pub fn popup(nav: &mut Nav, opener: Id, area: Id) {

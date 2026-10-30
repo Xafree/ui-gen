@@ -1883,6 +1883,14 @@ status = "draft — needs native review"
 "{month} {day}, {year}" = "{year}년 {month} {day}일"
 "{n} text layers" = { other = "텍스트 레이어 {n}개" }
 "{percent}%" = "{percent}%"
+"Playground preview" = "실험 공간 미리 보기"
+"Loading the playground…" = "실험 공간을 불러오는 중…"
+"Nothing to show in the playground yet" = "실험 공간에 아직 표시할 내용이 없습니다"
+"Add components to the library, then export it as Lit: the playground shows that export." = "라이브러리에 컴포넌트를 추가한 뒤 Lit로 내보내면 실험 공간에 그 결과가 표시됩니다."
+"The playground couldn't open" = "실험 공간을 열 수 없습니다"
+"The capture service is busy: the page updates when it is free." = "캡처 서비스가 사용 중입니다. 서비스가 비면 페이지가 업데이트됩니다."
+"The file changed since the page was exported." = "페이지를 내보낸 뒤 파일이 변경되었습니다."
+"Refresh" = "새로 고침"
 
 [commands]
 "align.bottom" = "아래쪽 정렬"
@@ -2497,6 +2505,7 @@ status = "draft — needs native review"
 "text.refit" = "글꼴에 맞게 텍스트 조정"
 "template.list" = "템플릿 목록"
 "file.newFromTemplate" = "템플릿에서 새로 만들기"
+"playground.open" = "실험 공간 열기"
 
 [menu]
 "bool.exclude" = "제외"

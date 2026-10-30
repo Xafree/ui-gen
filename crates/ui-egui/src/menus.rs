@@ -238,9 +238,14 @@ fn export_frames_pdf(app: &mut FigApp) {
     });
 }
 
+/// The command that opens the Playground tab, which the browser version doesn't have.
+const PLAYGROUND: &str = "playground.open";
+
 /// Whether a menu id is available (registered in the engine or handled by the UI).
 pub fn available(id: &str) -> bool {
-    !id.is_empty() && (figcraft_engine::find_command(id).is_some() || UI_COMMANDS.contains(&id))
+    !id.is_empty()
+        && (figcraft_engine::find_command(id).is_some() || UI_COMMANDS.contains(&id))
+        && (id != PLAYGROUND || !cfg!(target_arch = "wasm32"))
 }
 
 /// Draw one level of the main menu: `prefix` is the menu path ("File", "Edit/Copy as").
@@ -262,6 +267,9 @@ fn menu_level(app: &mut FigApp, ui: &mut Ui, prefix: &str) -> bool {
                 }
                 continue;
             }
+            if !available(m.id) && m.id == PLAYGROUND {
+                continue;
+            }
             last_sep = false;
             if m.id == "file.openRecent" {
                 if recent_menu(app, ui, prefix, m.label, &i18n::menu_item(m.id, m.label), &t) {
@@ -272,7 +280,7 @@ fn menu_level(app: &mut FigApp, ui: &mut Ui, prefix: &str) -> bool {
             // One window in the browser.
             let enabled = available(m.id)
                 && !(m.id == "window.new" && ui.ctx().embed_viewports())
-                && (m.id != "project.settings" || app.session.in_lib_project());
+                && ((m.id != "project.settings" && m.id != PLAYGROUND) || app.session.in_lib_project());
             let checked = figcraft_engine::cmd::view::checked(&app.session, m.id).unwrap_or(false);
             if item(ui, &i18n::menu_item(m.id, m.label), crate::shortcuts::shortcut(m.id).unwrap_or(""), enabled, checked, &t) && enabled {
                 clicked = Some(m.id);

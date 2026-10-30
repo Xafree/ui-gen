@@ -17,7 +17,7 @@ use crate::file_access::{self, Access};
 use crate::lit::{LitOptions, valid_prefix};
 use crate::lit_export::{ExportOptions, ExportPlan, Status as ComponentStatus, plan, write};
 use crate::params::{f64_of, get};
-use crate::playground::{Composed, Status, Target, Template, Window, compose};
+use crate::playground::{Composed, NO_COMPONENT, Status, Target, Template, Window, compose};
 use crate::{Result, Session, bad, spec};
 
 const OPEN: &str = "playground.open";
@@ -26,6 +26,7 @@ const CLOSE: &str = "playground.close";
 const TEMPLATE: &str = "playground.template";
 const STATE: &str = "playground.state";
 const INPUT: &str = "playground.input";
+const RESIZE: &str = "playground.resize";
 const STAGING: &str = "playground";
 const MAX_TAGS: usize = 256;
 const WIDTH: (f64, f64, f64) = (320.0, 3840.0, 1280.0);
@@ -82,6 +83,13 @@ pub fn specs() -> Vec<CommandSpec> {
             state
         ),
         spec!(
+            RESIZE,
+            "Resize playground",
+            "{width? (320 to 3840), height? (240 to 2160), scale? (1 to 2)} (each one kept as it is when absent)  sets the window of the page, which shows at that size",
+            false,
+            resize
+        ),
+        spec!(
             INPUT,
             "Send playground input",
             "{events (1 to 64): [{type: move, x, y} | {type: down|up, x, y, button: left|middle|right} | {type: wheel, x, y, dx, dy} | {type: key, key (Enter Tab Escape Backspace Delete ArrowUp ArrowDown ArrowLeft ArrowRight Home End PageUp PageDown Space), mods?: [shift|ctrl|alt]} | {type: text, text}]}  relays the pointer and keyboard to the page; one invalid event refuses the batch",
@@ -131,15 +139,18 @@ fn template_param(p: &Value) -> Result<Template> {
     }
 }
 
-fn bounded(p: &Value, key: &str, (min, max, default): (f64, f64, f64), whole: bool) -> Result<f64> {
+fn bounded(cmd: &str, p: &Value, key: &str, (min, max, default): (f64, f64, f64), whole: bool) -> Result<f64> {
     let Some(value) = get(p, key) else { return Ok(default) };
     f64_of(value)
         .filter(|n| (min..=max).contains(n) && (!whole || n.fract() == 0.0))
-        .ok_or_else(|| bad(OPEN, format!("`{key}` must be {}a number from {min} to {max}", if whole { "a whole " } else { "" })))
+        .ok_or_else(|| bad(cmd, format!("`{key}` must be {}a number from {min} to {max}", if whole { "a whole " } else { "" })))
 }
 
-fn window_param(p: &Value) -> Result<Window> {
-    let (width, height, scale) = (bounded(p, "width", WIDTH, true)?, bounded(p, "height", HEIGHT, true)?, bounded(p, "scale", SCALE, false)?);
+fn window_param(cmd: &str, p: &Value, current: Option<Window>) -> Result<Window> {
+    let kept = |(min, max, default): (f64, f64, f64), now: Option<f64>| (min, max, now.unwrap_or(default));
+    let width = bounded(cmd, p, "width", kept(WIDTH, current.map(|w| f64::from(w.width))), true)?;
+    let height = bounded(cmd, p, "height", kept(HEIGHT, current.map(|w| f64::from(w.height))), true)?;
+    let scale = bounded(cmd, p, "scale", kept(SCALE, current.map(|w| w.scale)), false)?;
     Ok(Window { width: width as u32, height: height as u32, scale })
 }
 
@@ -160,7 +171,7 @@ fn export_plan(cmd: &str, tab: &Tab) -> Result<Exported> {
     let token_prefix = options.lit.token_prefix.clone();
     let exported = plan(&tab.doc, &options);
     if exported.components.is_empty() {
-        return Err(bad(cmd, "the project has no component to show"));
+        return Err(bad(cmd, NO_COMPONENT));
     }
     if !exported.ready() {
         return Err(bad(cmd, format!("fix these components first: {}", exported.blockers().join(", "))));
@@ -198,7 +209,7 @@ fn start(s: &mut Session, command: &'static str, tab: Tab, template: Template, w
 }
 
 fn open(s: &mut Session, p: &Value) -> Result<Value> {
-    let (template, window) = (template_param(p)?, window_param(p)?);
+    let (template, window) = (template_param(p)?, window_param(OPEN, p, None)?);
     let tab = tab_of(s, OPEN, None)?;
     start(s, OPEN, tab, template, window)
 }
@@ -209,6 +220,14 @@ fn refresh(s: &mut Session, _: &Value) -> Result<Value> {
     let (uid, template, window) = (target.uid, target.template, target.window);
     let tab = tab_of(s, REFRESH, Some(uid))?;
     start(s, REFRESH, tab, template, window)
+}
+
+fn resize(s: &mut Session, p: &Value) -> Result<Value> {
+    ensure_ready(s, RESIZE)?;
+    let current = s.capture.playground.target().map(|target| target.window);
+    let window = window_param(RESIZE, p, current)?;
+    s.playground_resize(window).map_err(|e| bad(RESIZE, e.message))?;
+    super::ok()
 }
 
 fn close(s: &mut Session, _: &Value) -> Result<Value> {
@@ -242,9 +261,8 @@ fn state(s: &mut Session, _: &Value) -> Result<Value> {
         Status::Ready => ("ready", None),
         Status::Failed(message) => ("failed", Some(message.as_str())),
     };
-    let stale = state.target().is_some_and(|target| s.docs.iter().any(|ds| ds.uid == target.uid && !Arc::ptr_eq(&ds.doc, &target.doc)));
     let template = state.target().map(|target| target.template.name());
-    let mut answer = json!({"status": status, "error": error, "template": template, "stale": stale, "busy": s.capture.busy()});
+    let mut answer = json!({"status": status, "error": error, "template": template, "stale": s.playground_stale(), "busy": s.playground_busy()});
     if let (Some(fields), Value::Object(more)) = (answer.as_object_mut(), super::playground_settings::summary(s)) {
         fields.extend(more);
     }

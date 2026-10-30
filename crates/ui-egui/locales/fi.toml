@@ -1862,6 +1862,14 @@ status = "draft — needs native review"
 "⌘ click" = "⌘ click"
 "⌘ scroll" = "⌘ scroll"
 "⌥ drag" = "⌥ drag"
+"Playground preview" = "Kokeilualueen esikatselu"
+"Loading the playground…" = "Ladataan kokeilualuetta…"
+"Nothing to show in the playground yet" = "Kokeilualueella ei ole vielä mitään näytettävää"
+"Add components to the library, then export it as Lit: the playground shows that export." = "Lisää kirjastoon komponentteja ja vie se Lit-muodossa: kokeilualue näyttää tämän viennin."
+"The playground couldn't open" = "Kokeilualuetta ei voitu avata"
+"The capture service is busy: the page updates when it is free." = "Kaappauspalvelu on varattu: sivu päivittyy, kun se vapautuu."
+"The file changed since the page was exported." = "Tiedosto on muuttunut sivun viennin jälkeen."
+"Refresh" = "Päivitä"
 
 [commands]
 "align.bottom" = "Tasaa alas"
@@ -2472,6 +2480,7 @@ status = "draft — needs native review"
 "widget.setText" = "Muokkaa pienoisohjelman kenttää"
 "window.focus" = "Tuo ikkuna etummaiseksi"
 "window.new" = "Uusi ikkuna"
+"playground.open" = "Avaa kokeilualue"
 
 [menu]
 "bool.exclude" = "Jätä pois"

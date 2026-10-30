@@ -1861,6 +1861,14 @@ status = "draft — needs native review"
 "⌘ click" = "⌘ click"
 "⌘ scroll" = "⌘ scroll"
 "⌥ drag" = "⌥ drag"
+"Playground preview" = "Voorbeeld van de playground"
+"Loading the playground…" = "Playground laden…"
+"Nothing to show in the playground yet" = "Er is nog niets om te tonen in de playground"
+"Add components to the library, then export it as Lit: the playground shows that export." = "Voeg componenten toe aan de bibliotheek en exporteer die als Lit: de playground toont die export."
+"The playground couldn't open" = "De playground kon niet worden geopend"
+"The capture service is busy: the page updates when it is free." = "De opnameservice is bezig: de pagina wordt bijgewerkt zodra die vrij is."
+"The file changed since the page was exported." = "Het bestand is veranderd sinds de pagina is geëxporteerd."
+"Refresh" = "Vernieuwen"
 
 [commands]
 "align.bottom" = "Onder uitlijnen"
@@ -2467,6 +2475,7 @@ status = "draft — needs native review"
 "widget.setText" = "Widgetveld bewerken"
 "window.focus" = "Venster naar voren brengen"
 "window.new" = "Nieuw venster"
+"playground.open" = "Playground openen"
 
 [menu]
 "bool.exclude" = "Exclude"

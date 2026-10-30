@@ -1873,6 +1873,14 @@ name = "Polski"
 "⌘ click" = "⌘ kliknięcie"
 "⌘ scroll" = "⌘ przewijanie"
 "⌥ drag" = "⌥ przeciągnięcie"
+"Playground preview" = "Podgląd piaskownicy"
+"Loading the playground…" = "Wczytywanie piaskownicy…"
+"Nothing to show in the playground yet" = "W piaskownicy nie ma jeszcze nic do pokazania"
+"Add components to the library, then export it as Lit: the playground shows that export." = "Dodaj komponenty do biblioteki, a potem wyeksportuj ją jako Lit: piaskownica pokazuje ten eksport."
+"The playground couldn't open" = "Nie udało się otworzyć piaskownicy"
+"The capture service is busy: the page updates when it is free." = "Usługa przechwytywania jest zajęta: strona zaktualizuje się, gdy się zwolni."
+"The file changed since the page was exported." = "Plik zmienił się od czasu wyeksportowania strony."
+"Refresh" = "Odśwież"
 
 [commands]
 "align.bottom" = "Wyrównaj do dołu"
@@ -2485,6 +2493,7 @@ name = "Polski"
 "widget.setText" = "Edytuj pole widżetu"
 "window.focus" = "Przesuń okno na wierzch"
 "window.new" = "Nowe okno"
+"playground.open" = "Otwórz piaskownicę"
 
 [menu]
 "bool.exclude" = "Wyklucz"

@@ -69,6 +69,7 @@ enum Purpose {
     Open { command: &'static str, current: bool },
     SetTemplate,
     Apply,
+    Resize,
     Frame,
     Input,
 }
@@ -178,7 +179,7 @@ pub(crate) fn advance(s: &mut Session, job: JobId, outcome: CaptureOutcome) -> O
             }
             None
         }
-        Purpose::SetTemplate | Purpose::Apply => {
+        Purpose::SetTemplate | Purpose::Apply | Purpose::Resize => {
             if let Err(cause) = outcome {
                 state.fail(cause.message);
             }
@@ -209,6 +210,17 @@ impl Session {
         }
         let after = state.last_seq;
         self.relay_playground("playground.frame", json!({"after": after}), Purpose::Frame).is_ok()
+    }
+
+    /// The document changed since the page was exported.
+    pub fn playground_stale(&self) -> bool {
+        let target = self.capture.playground.target();
+        target.is_some_and(|target| self.docs.iter().any(|ds| ds.uid == target.uid && !Arc::ptr_eq(&ds.doc, &target.doc)))
+    }
+
+    /// The capture service has an install, inspect or render to do before it serves the page.
+    pub fn playground_busy(&self) -> bool {
+        self.capture.busy()
     }
 
     /// The latest image the page sent, once.
@@ -253,6 +265,15 @@ impl Session {
 
     pub(crate) fn playground_set_template(&mut self) -> Result<JobId, CaptureError> {
         self.relay_playground("playground.setTemplate", json!({}), Purpose::SetTemplate)
+    }
+
+    pub(crate) fn playground_resize(&mut self, window: Window) -> Result<JobId, CaptureError> {
+        let params = json!({"width": window.width, "height": window.height, "scale": window.scale});
+        let job = self.relay_playground("playground.resize", params, Purpose::Resize)?;
+        if let Some(target) = self.capture.playground.target_mut() {
+            target.window = window;
+        }
+        Ok(job)
     }
 
     pub(crate) fn playground_input(&mut self, events: Value) -> Result<JobId, CaptureError> {

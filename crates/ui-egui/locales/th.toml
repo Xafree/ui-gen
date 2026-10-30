@@ -1849,6 +1849,14 @@ status = "draft — needs native review"
 "⌘ click" = "⌘ คลิก"
 "⌘ scroll" = "⌘ เลื่อน"
 "⌥ drag" = "⌥ ลาก"
+"Playground preview" = "ตัวอย่างสนามทดลอง"
+"Loading the playground…" = "กำลังโหลดสนามทดลอง…"
+"Nothing to show in the playground yet" = "ยังไม่มีอะไรให้แสดงในสนามทดลอง"
+"Add components to the library, then export it as Lit: the playground shows that export." = "เพิ่มคอมโพเนนต์ลงในไลบรารีแล้วส่งออกเป็น Lit สนามทดลองจะแสดงผลที่ส่งออกนั้น"
+"The playground couldn't open" = "เปิดสนามทดลองไม่ได้"
+"The capture service is busy: the page updates when it is free." = "บริการจับภาพไม่ว่าง หน้าจะอัปเดตเมื่อบริการว่าง"
+"The file changed since the page was exported." = "ไฟล์เปลี่ยนไปตั้งแต่ส่งออกหน้านี้"
+"Refresh" = "รีเฟรช"
 
 [commands]
 "align.bottom" = "จัดแนวชิดล่าง"
@@ -2443,6 +2451,7 @@ status = "draft — needs native review"
 "widget.list" = "แสดงรายการวิดเจ็ต"
 "window.focus" = "นำหน้าต่างมาไว้ด้านหน้า"
 "window.new" = "หน้าต่างใหม่"
+"playground.open" = "เปิดสนามทดลอง"
 
 [menu]
 "bool.exclude" = "ยกเว้น"

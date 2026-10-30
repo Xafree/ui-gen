@@ -11,6 +11,9 @@ use crate::codegen::CodeLang;
 use crate::params::{get, id_of, num, string, targets as param_targets};
 use crate::{EngineError, Result, Session, bad, spec};
 
+/// What `playground.open` says when the library has nothing to show.
+pub const NO_COMPONENT: &str = "the project has no component to show";
+
 mod history;
 mod overrides;
 mod random;

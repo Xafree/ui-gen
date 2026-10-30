@@ -1880,6 +1880,14 @@ status = "draft — needs native review"
 "{month} {day}, {year}" = "{day} de {month} de {year}"
 "{n} text layers" = { one = "{n} camada de texto", other = "{n} camadas de texto" }
 "{percent}%" = "{percent}%"
+"Playground preview" = "Pré-visualização da área de testes"
+"Loading the playground…" = "Carregando a área de testes…"
+"Nothing to show in the playground yet" = "Ainda não há nada para mostrar na área de testes"
+"Add components to the library, then export it as Lit: the playground shows that export." = "Adicione componentes à biblioteca e exporte-a como Lit: a área de testes mostra essa exportação."
+"The playground couldn't open" = "Não foi possível abrir a área de testes"
+"The capture service is busy: the page updates when it is free." = "O serviço de captura está ocupado: a página é atualizada quando ele ficar livre."
+"The file changed since the page was exported." = "O arquivo mudou desde que a página foi exportada."
+"Refresh" = "Atualizar"
 
 [commands]
 "align.bottom" = "Alinhar embaixo"
@@ -2478,6 +2486,7 @@ status = "draft — needs native review"
 "widget.setText" = "Editar campo do widget"
 "window.focus" = "Trazer a janela para a frente"
 "window.new" = "Nova janela"
+"playground.open" = "Abrir a área de testes"
 
 [menu]
 "bool.exclude" = "Excluir sobreposição"

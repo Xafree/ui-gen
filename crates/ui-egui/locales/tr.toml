@@ -1824,6 +1824,14 @@ name = "Türkçe"
 "⌘ click" = "⌘ tıklama"
 "⌘ scroll" = "⌘ kaydırma"
 "⌥ drag" = "⌥ sürükle"
+"Playground preview" = "Deneme alanı önizlemesi"
+"Loading the playground…" = "Deneme alanı yükleniyor…"
+"Nothing to show in the playground yet" = "Deneme alanında henüz gösterilecek bir şey yok"
+"Add components to the library, then export it as Lit: the playground shows that export." = "Kitaplığa bileşen ekleyin, sonra Lit olarak dışa aktarın: deneme alanı bu dışa aktarmayı gösterir."
+"The playground couldn't open" = "Deneme alanı açılamadı"
+"The capture service is busy: the page updates when it is free." = "Yakalama hizmeti meşgul: hizmet boşaldığında sayfa güncellenir."
+"The file changed since the page was exported." = "Sayfa dışa aktarıldığından beri dosya değişti."
+"Refresh" = "Yenile"
 
 [commands]
 "align.bottom" = "Alta hizala"
@@ -2428,6 +2436,7 @@ name = "Türkçe"
 "window.focus" = "Pencereyi öne getir"
 "window.new" = "Yeni pencere"
 "template.list" = "Şablonları listele"
+"playground.open" = "Deneme alanını aç"
 
 [menu]
 "bool.exclude" = "Hariç tut"

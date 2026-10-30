@@ -1873,6 +1873,14 @@ name = "Svenska"
 "⌘ click" = "⌘ klicka"
 "⌘ scroll" = "⌘ rulla"
 "⌥ drag" = "⌥ dra"
+"Playground preview" = "Förhandsvisning av testytan"
+"Loading the playground…" = "Läser in testytan…"
+"Nothing to show in the playground yet" = "Det finns inget att visa på testytan ännu"
+"Add components to the library, then export it as Lit: the playground shows that export." = "Lägg till komponenter i biblioteket och exportera det som Lit: testytan visar den exporten."
+"The playground couldn't open" = "Testytan kunde inte öppnas"
+"The capture service is busy: the page updates when it is free." = "Fångsttjänsten är upptagen: sidan uppdateras när den är ledig."
+"The file changed since the page was exported." = "Filen har ändrats sedan sidan exporterades."
+"Refresh" = "Uppdatera"
 
 [commands]
 
@@ -2488,6 +2496,7 @@ name = "Svenska"
 "widget.setText" = "Redigera widgetfält"
 "window.focus" = "Placera fönstret längst fram"
 "window.new" = "Nytt fönster"
+"playground.open" = "Öppna testytan"
 
 [menu]
 

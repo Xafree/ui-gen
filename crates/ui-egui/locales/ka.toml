@@ -1858,6 +1858,14 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "⌘ click" = "⌘ დაწკაპუნება"
 "⌘ scroll" = "⌘ გადახვევა"
 "⌥ drag" = "⌥ გადათრევა"
+"Playground preview" = "საცდელი სივრცის გადახედვა"
+"Loading the playground…" = "საცდელი სივრცე იტვირთება…"
+"Nothing to show in the playground yet" = "საცდელ სივრცეში ჯერ ჩვენებადი არაფერია"
+"Add components to the library, then export it as Lit: the playground shows that export." = "დაამატეთ ბიბლიოთეკას კომპონენტები და გააექსპორტეთ Lit-ად: საცდელი სივრცე ამ ექსპორტს აჩვენებს."
+"The playground couldn't open" = "საცდელი სივრცის გახსნა ვერ მოხერხდა"
+"The capture service is busy: the page updates when it is free." = "გადაღების სერვისი დაკავებულია: გვერდი განახლდება, როგორც კი გათავისუფლდება."
+"The file changed since the page was exported." = "გვერდის ექსპორტის შემდეგ ფაილი შეიცვალა."
+"Refresh" = "განახლება"
 
 [commands]
 "align.bottom" = "ქვემოთ სწორება"
@@ -2463,6 +2471,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "widget.setText" = "ვიჯეტის ველის რედაქტირება"
 "window.focus" = "ფანჯრის წინა პლანზე გადმოტანა"
 "window.new" = "ახალი ფანჯარა"
+"playground.open" = "საცდელი სივრცის გახსნა"
 
 [menu]
 "bool.exclude" = "გამორიცხვა"

@@ -1864,6 +1864,14 @@ status = "draft — needs native review"
 "⌘ click" = "⌘ clic"
 "⌘ scroll" = "⌘ défilement"
 "⌥ drag" = "⌥ glisser"
+"Playground preview" = "Aperçu du playground"
+"Loading the playground…" = "Chargement du bac à sable…"
+"Nothing to show in the playground yet" = "Rien à afficher dans le bac à sable pour l'instant"
+"Add components to the library, then export it as Lit: the playground shows that export." = "Ajoutez des composants à la bibliothèque, puis exportez-la en Lit : le bac à sable affiche cet export."
+"The playground couldn't open" = "Le bac à sable n'a pas pu s'ouvrir"
+"The capture service is busy: the page updates when it is free." = "Le service de capture est occupé : la page se met à jour dès qu'il est libre."
+"The file changed since the page was exported." = "Le fichier a changé depuis l'export de la page."
+"Refresh" = "Actualiser"
 
 [commands]
 "align.bottom" = "Aligner en bas"
@@ -2473,6 +2481,7 @@ status = "draft — needs native review"
 "widget.setText" = "Modifier le champ du widget"
 "window.focus" = "Mettre la fenêtre au premier plan"
 "window.new" = "Nouvelle fenêtre"
+"playground.open" = "Ouvrir le bac à sable"
 
 [menu]
 "bool.exclude" = "Exclure"

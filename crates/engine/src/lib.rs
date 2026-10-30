@@ -419,6 +419,8 @@ mod playground_history_tests;
 #[cfg(test)]
 mod playground_overrides_tests;
 #[cfg(test)]
+mod playground_resize_tests;
+#[cfg(test)]
 mod playground_session_tests;
 #[cfg(test)]
 mod playground_support;

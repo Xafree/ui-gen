@@ -1798,6 +1798,14 @@ status = "draft — needs native review"
 "⌘ click" = "⌘ clic"
 "⌘ scroll" = "⌘ scorrimento"
 "⌥ drag" = "⌥ trascina"
+"Playground preview" = "Anteprima del playground"
+"Loading the playground…" = "Caricamento del playground…"
+"Nothing to show in the playground yet" = "Non c'è ancora nulla da mostrare nel playground"
+"Add components to the library, then export it as Lit: the playground shows that export." = "Aggiungi componenti alla libreria, poi esportala come Lit: il playground mostra quell'esportazione."
+"The playground couldn't open" = "Impossibile aprire il playground"
+"The capture service is busy: the page updates when it is free." = "Il servizio di acquisizione è occupato: la pagina si aggiorna appena si libera."
+"The file changed since the page was exported." = "Il file è cambiato dopo l'esportazione della pagina."
+"Refresh" = "Aggiorna"
 
 [commands]
 "align.bottom" = "Allinea in basso"
@@ -2377,6 +2385,7 @@ status = "draft — needs native review"
 "window.focus" = "Porta la finestra in primo piano"
 "window.new" = "Nuova finestra"
 "template.list" = "Elenca modelli"
+"playground.open" = "Apri il playground"
 
 [menu]
 "bool.exclude" = "Escludi"

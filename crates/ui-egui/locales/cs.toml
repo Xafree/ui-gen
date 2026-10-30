@@ -1820,6 +1820,14 @@ status = "draft — needs native review"
 "⌘ click" = "⌘ kliknutí"
 "⌘ scroll" = "⌘ posouvání"
 "⌥ drag" = "⌥ tažení"
+"Playground preview" = "Náhled zkušebního prostředí"
+"Loading the playground…" = "Načítání zkušebního prostředí…"
+"Nothing to show in the playground yet" = "Ve zkušebním prostředí zatím není co zobrazit"
+"Add components to the library, then export it as Lit: the playground shows that export." = "Přidejte do knihovny komponenty a exportujte ji jako Lit: zkušební prostředí zobrazí tento export."
+"The playground couldn't open" = "Zkušební prostředí se nepodařilo otevřít"
+"The capture service is busy: the page updates when it is free." = "Služba zachytávání je zaneprázdněná: stránka se aktualizuje, jakmile se uvolní."
+"The file changed since the page was exported." = "Soubor se od exportu stránky změnil."
+"Refresh" = "Obnovit"
 
 [commands]
 "align.bottom" = "Zarovnat dolů"
@@ -2424,6 +2432,7 @@ status = "draft — needs native review"
 "window.focus" = "Přenést okno do popředí"
 "window.new" = "Nové okno"
 "template.list" = "Vypsat šablony"
+"playground.open" = "Otevřít zkušební prostředí"
 
 [menu]
 "bool.exclude" = "Vyloučit"

@@ -1824,6 +1824,14 @@ status = "draft — needs native review"
 "⌘ click" = "⌘ klik"
 "⌘ scroll" = "⌘ gulir"
 "⌥ drag" = "⌥ seret"
+"Playground preview" = "Pratinjau playground"
+"Loading the playground…" = "Memuat playground…"
+"Nothing to show in the playground yet" = "Belum ada yang ditampilkan di playground"
+"Add components to the library, then export it as Lit: the playground shows that export." = "Tambahkan komponen ke pustaka, lalu ekspor sebagai Lit: playground menampilkan hasil ekspor itu."
+"The playground couldn't open" = "Playground tidak dapat dibuka"
+"The capture service is busy: the page updates when it is free." = "Layanan tangkapan sedang sibuk: halaman diperbarui setelah layanan bebas."
+"The file changed since the page was exported." = "Berkas berubah sejak halaman diekspor."
+"Refresh" = "Segarkan"
 
 [commands]
 "align.bottom" = "Ratakan bawah"
@@ -2428,6 +2436,7 @@ status = "draft — needs native review"
 "window.focus" = "Bawa jendela ke depan"
 "window.new" = "Jendela baru"
 "template.list" = "Daftar templat"
+"playground.open" = "Buka playground"
 
 [menu]
 "bool.exclude" = "Kecualikan"

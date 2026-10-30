@@ -1799,6 +1799,14 @@ status = "draft — needs native review"
 "⌘ click" = "⌘ nhấp"
 "⌘ scroll" = "⌘ cuộn"
 "⌥ drag" = "⌥ kéo"
+"Playground preview" = "Xem trước sân thử nghiệm"
+"Loading the playground…" = "Đang tải sân thử nghiệm…"
+"Nothing to show in the playground yet" = "Sân thử nghiệm chưa có gì để hiển thị"
+"Add components to the library, then export it as Lit: the playground shows that export." = "Thêm thành phần vào thư viện rồi xuất sang Lit: sân thử nghiệm hiển thị bản xuất đó."
+"The playground couldn't open" = "Không thể mở sân thử nghiệm"
+"The capture service is busy: the page updates when it is free." = "Dịch vụ chụp đang bận: trang sẽ cập nhật khi dịch vụ rảnh."
+"The file changed since the page was exported." = "Tệp đã thay đổi kể từ khi trang được xuất."
+"Refresh" = "Làm mới"
 
 [commands]
 "align.bottom" = "Căn dưới"
@@ -2378,6 +2386,7 @@ status = "draft — needs native review"
 "widget.list" = "Danh sách tiện ích"
 "window.focus" = "Đưa cửa sổ lên trước"
 "window.new" = "Cửa sổ mới"
+"playground.open" = "Mở sân thử nghiệm"
 
 [menu]
 "bool.exclude" = "Loại trừ"

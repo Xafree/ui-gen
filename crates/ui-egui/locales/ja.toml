@@ -1843,6 +1843,14 @@ status = "draft — needs native review"
 "⌘ click" = "⌘ クリック"
 "⌘ scroll" = "⌘ スクロール"
 "⌥ drag" = "⌥ ドラッグ"
+"Playground preview" = "プレイグラウンドのプレビュー"
+"Loading the playground…" = "プレイグラウンドを読み込み中…"
+"Nothing to show in the playground yet" = "プレイグラウンドにはまだ表示するものがありません"
+"Add components to the library, then export it as Lit: the playground shows that export." = "ライブラリにコンポーネントを追加して Lit として書き出すと、プレイグラウンドにその書き出し結果が表示されます。"
+"The playground couldn't open" = "プレイグラウンドを開けませんでした"
+"The capture service is busy: the page updates when it is free." = "キャプチャサービスがビジー状態です。空き次第ページが更新されます。"
+"The file changed since the page was exported." = "ページを書き出した後にファイルが変更されました。"
+"Refresh" = "更新"
 
 [commands]
 "align.bottom" = "下揃え"
@@ -2450,6 +2458,7 @@ status = "draft — needs native review"
 "widget.setText" = "ウィジェットのフィールドを編集"
 "window.focus" = "ウィンドウを最前面に表示"
 "window.new" = "新しいウィンドウ"
+"playground.open" = "プレイグラウンドを開く"
 
 [menu]
 "bool.exclude" = "除外"
