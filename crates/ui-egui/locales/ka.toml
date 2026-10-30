@@ -1875,6 +1875,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Search components" = "კომპონენტების ძიება"
 "Reading the components of {package}…" = "იკითხება {package}-ის კომპონენტები…"
 "Couldn't read the components of {package}: {cause}" = "{package}-ის კომპონენტების წაკითხვა ვერ მოხერხდა: {cause}"
+"The version read is not the one the project asks for" = "წაკითხული ვერსია არ ემთხვევა პროექტის მოთხოვნილ ვერსიას"
 "This package exports no component." = "ეს პაკეტი არც ერთ კომპონენტს არ ექსპორტირებს."
 "No source library yet. Add one in the project settings." = "წყარო ბიბლიოთეკა ჯერ არ არის. დაამატეთ პროექტის პარამეტრებში."
 "Open project settings" = "პროექტის პარამეტრების გახსნა"

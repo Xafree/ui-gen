@@ -194,6 +194,11 @@ impl Session {
         events
     }
 
+    /// The jobs of the running import whose first job is `head`; none once it ended.
+    pub fn import_jobs(&self, head: JobId) -> Vec<JobId> {
+        uigen_import::jobs_of(self, head)
+    }
+
     /// The jobs submitted to the capture service, oldest first, with the project folder each one works in.
     pub fn capture_jobs(&self) -> Vec<JobStatus> {
         let mut running = true;

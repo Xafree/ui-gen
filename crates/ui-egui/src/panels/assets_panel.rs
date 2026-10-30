@@ -725,9 +725,7 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
             }
         }
         Some(Act::Copy(set)) => {
-            if !crate::menus::dev_mode_refuses(app, PLACE_IMPORTED) {
-                app.run(PLACE_IMPORTED, json!({"set": set.0}));
-            }
+            imported::drop_on_canvas(app, set, None);
         }
         Some(Act::Show(set)) => {
             if let Some(page) = doc.page_of(set) {

@@ -9,8 +9,8 @@ use std::collections::HashSet;
 
 use egui::{CornerRadius, Id, Key, Modifiers, Pos2, Rect, Response, Sense, Ui, pos2, vec2};
 use figcraft_doc::{Document, NodeId};
-use figcraft_engine::imported_sections;
 use figcraft_engine::project::component_roots;
+use figcraft_engine::{imported_sections, is_import_page};
 use serde_json::{Value, json};
 
 use super::{Act, PAD, PLACE_IMPORTED, Source, Thumbs, Tile, hint, matches};
@@ -83,7 +83,7 @@ pub(super) fn section(
     act: &mut Option<Act>,
 ) {
     let open = searching || !collapsed.contains(&fold_key(block));
-    if title_row(ui, w, block, open, importable, act) {
+    if title_row(ui, w, block, open, importable && !block.removed, act) {
         *act = Some(Act::Toggle(fold_key(block)));
     }
     if !open {
@@ -167,14 +167,20 @@ pub(super) fn tile_tip(resp: Response, name: &str) -> Response {
     resp.tip(trf("{name}\nDrag onto the canvas to copy it into your library.", &[("name", &name)]))
 }
 
-/// What releasing an imported tile over the canvas would do to `page`, painted under the ghost at `p`.
-pub(super) fn drop_hint(ui: &Ui, doc: &Document, page: Option<NodeId>, p: Pos2) {
-    let Some(node) = page.and_then(|page| doc.node(page).map(|node| (page, node))) else { return };
-    let text = if component_roots(doc, node.0).is_empty() {
+/// What releasing an imported tile on `page` would do; a page the engine refuses gets no hint.
+fn hint_text(doc: &Document, page: Option<NodeId>) -> Option<String> {
+    let page = page.filter(|page| !doc.is_divider(*page) && !is_import_page(doc, *page))?;
+    let node = doc.node(page)?;
+    Some(if component_roots(doc, page).is_empty() {
         tr("Drop to make it the component of this page").to_string()
     } else {
-        trf("Drop to replace {name} on this page", &[("name", &node.1.name)])
-    };
+        trf("Drop to replace {name} on this page", &[("name", &node.name)])
+    })
+}
+
+/// What releasing an imported tile over the canvas would do to `page`, painted under the ghost at `p`.
+pub(super) fn drop_hint(ui: &Ui, doc: &Document, page: Option<NodeId>, p: Pos2) {
+    let Some(text) = hint_text(doc, page) else { return };
     let t = Tokens::get(ui.ctx());
     let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, Id::unique("asset_drop_hint")));
     let galley = painter.layout_no_wrap(text, regular(11.0), t.text);

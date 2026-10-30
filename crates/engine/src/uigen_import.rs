@@ -11,7 +11,7 @@ mod tokens;
 
 pub(crate) use catalog::{COMMAND as LIST_COMMAND, Cache, receive};
 pub use catalog::{Inspected, InspectedComponent, InspectedProp, PropKind, render_count};
-pub(crate) use pending::{COMMAND, Destination, PendingImport, Request, advance, resume, start};
+pub(crate) use pending::{COMMAND, Destination, PendingImport, Request, advance, jobs_of, resume, start};
 pub use plan::MAX_RENDERS;
 pub(crate) use plan::{State, Theme, usable_value};
 #[cfg(test)]

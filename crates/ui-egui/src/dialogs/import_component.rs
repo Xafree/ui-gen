@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use egui::{Align, Align2, Context, CornerRadius, Layout, RichText, ScrollArea, Sense, Ui, pos2, vec2};
 use figcraft_engine::capture::{CaptureEvent, CaptureOutcome, JobState};
-use figcraft_engine::{Inspected, InspectedComponent, InspectedProp, MAX_RENDERS, PropKind, file_access, render_count};
+use figcraft_engine::{Inspected, InspectedComponent, InspectedProp, MAX_RENDERS, PropKind, render_count};
 use serde_json::{Value, json};
 
 use super::window;
@@ -68,7 +68,8 @@ enum Run {
 #[derive(Clone, Debug, Default)]
 pub struct ImportWindow {
     package: Option<String>,
-    asked: Option<String>,
+    asked: Option<(String, String)>,
+    read_job: Option<u64>,
     failure: Option<String>,
     search: String,
     focus_search: bool,
@@ -188,14 +189,30 @@ impl ImportWindow {
     fn switch(&mut self, package: Option<String>) {
         self.package = package;
         self.asked = None;
+        self.read_job = None;
         self.failure = None;
         self.search.clear();
         self.choice = None;
         self.run = Run::Form;
     }
 
-    fn finish(&mut self, outcome: &CaptureOutcome) -> bool {
-        let Run::Importing { component, .. } = &self.run else { return false };
+    fn read(&mut self, outcome: &CaptureOutcome) {
+        self.failure = match outcome {
+            Ok(result) => {
+                let asked = self.asked.as_ref().map(|(_, version)| version.as_str());
+                let reported = result.get("version").and_then(Value::as_str);
+                (asked.is_some() && reported.is_some() && asked != reported)
+                    .then(|| tr("The version read is not the one the project asks for").to_string())
+            }
+            Err(error) => Some(error.message.clone()),
+        };
+    }
+
+    fn finish(&mut self, job: u64, outcome: &CaptureOutcome) -> bool {
+        let Run::Importing { component, first_job, .. } = &self.run else { return false };
+        if *first_job != job {
+            return false;
+        }
         let component = component.clone();
         self.run = match outcome {
             Ok(result) => Run::Done {
@@ -222,23 +239,14 @@ pub(crate) fn request(app: &mut FigApp, package: Option<&str>) {
 
 /// Take the capture events the window shows; `false` leaves the event to the toast.
 pub(crate) fn pump_event(app: &mut FigApp, event: &CaptureEvent) -> bool {
-    let cached = app.session.inspected(&event.package).is_some();
     let Some(state) = app.ui.import_window.as_mut() else { return false };
-    if state.package.as_deref() != Some(event.package.as_str()) {
-        return false;
-    }
     match (event.command.as_str(), &event.outcome) {
-        (LIST, Ok(_)) => {
-            if !cached {
-                state.failure = Some("the version read is not the one the project asks for".to_string());
-            }
+        (LIST, outcome) if state.read_job == Some(event.job) => {
+            state.read_job = None;
+            state.read(outcome);
             true
         }
-        (LIST, Err(error)) => {
-            state.failure = Some(error.message.clone());
-            true
-        }
-        (IMPORT, outcome) => state.finish(outcome),
+        (IMPORT, outcome) => state.finish(event.job, outcome),
         _ => false,
     }
 }
@@ -256,27 +264,38 @@ fn active_sources(app: &FigApp) -> Option<Vec<(String, String)>> {
 
 fn fetch(app: &mut FigApp, refresh: bool) {
     let Some(package) = app.ui.import_window.as_ref().and_then(|state| state.package.clone()) else { return };
+    let Some(root) = app.session.project().map(|binding| binding.root.clone()) else { return };
     let version = active_sources(app).and_then(|sources| sources.into_iter().find(|(name, _)| *name == package)).map(|(_, version)| version);
     edit(app, |state| {
-        state.asked = version;
+        state.asked = version.map(|version| (root, version));
+        state.read_job = None;
         state.failure = None;
+        state.choice = None;
     });
     let params = if refresh { json!({"package": package, "refresh": true}) } else { json!({"package": package}) };
-    if app.run(LIST, params).is_none() {
-        let cause = app.ui.last_error.clone().unwrap_or_default();
-        edit(app, |state| state.failure = Some(cause));
+    match app.run(LIST, params) {
+        Some(started) => edit(app, |state| state.read_job = started.get("job").and_then(Value::as_u64)),
+        None => {
+            let cause = app.ui.last_error.clone().unwrap_or_default();
+            edit(app, |state| state.failure = Some(cause));
+        }
     }
 }
 
 /// Keep the window on a source the project still has, and read the components of the version it has.
 fn settle(app: &mut FigApp) -> bool {
     let Some(sources) = active_sources(app) else { return false };
+    let Some(root) = app.session.project().map(|binding| binding.root.clone()) else { return false };
     let Some(state) = app.ui.import_window.as_mut() else { return false };
-    if state.package.as_ref().is_none_or(|package| !sources.iter().any(|(name, _)| name == package)) {
-        state.switch(sources.first().map(|(name, _)| name.clone()));
+    let moved = state.asked.as_ref().is_some_and(|(asked_root, _)| *asked_root != root);
+    let kept = state.package.clone().filter(|package| sources.iter().any(|(name, _)| name == package));
+    let package = kept.or_else(|| sources.first().map(|(name, _)| name.clone()));
+    if moved || state.package != package {
+        state.switch(package);
     }
     let version = state.package.as_ref().and_then(|package| sources.iter().find(|(name, _)| name == package)).map(|(_, version)| version.clone());
-    if version.is_some() && state.asked != version {
+    let wanted = version.map(|version| (root, version));
+    if wanted.is_some() && state.asked != wanted {
         fetch(app, false);
     }
     true
@@ -284,15 +303,8 @@ fn settle(app: &mut FigApp) -> bool {
 
 fn progress(app: &FigApp, first_job: u64, renders: usize) -> (usize, usize) {
     let total = 1 + renders;
-    let Some(binding) = app.session.project() else { return (0, total) };
-    let done = app
-        .session
-        .capture_jobs()
-        .iter()
-        .filter(|job| {
-            job.command == IMPORT && job.job >= first_job && job.state == JobState::Done && file_access::same_file(&job.root, &binding.root)
-        })
-        .count();
+    let ours = app.session.import_jobs(first_job);
+    let done = app.session.capture_jobs().iter().filter(|job| job.state == JobState::Done && ours.contains(&job.job)).count();
     (done.min(total), total)
 }
 
@@ -362,6 +374,9 @@ fn import(app: &mut FigApp) {
         Some((choice.params(state.package.as_deref()?), choice.component.clone(), choice.totals().1))
     });
     let Some((params, component, renders)) = request else { return };
+    if crate::menus::dev_mode_refuses(app, IMPORT) {
+        return;
+    }
     let run = match app.run(IMPORT, params) {
         Some(started) => Run::Importing { component, first_job: started.get("job").and_then(Value::as_u64).unwrap_or(0), renders },
         None => Run::Failed { component, cause: app.ui.last_error.clone().unwrap_or_default() },
@@ -493,14 +508,20 @@ fn ready(ui: &mut Ui, t: &Tokens, state: &mut ImportWindow, found: &Inspected) {
         return;
     }
     let mut picked = None;
-    ScrollArea::vertical().id_salt("import_window_components").max_height(LIST_HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
-        for component in listed {
-            let chosen = state.choice.as_ref().is_some_and(|choice| choice.component == component.name);
-            if component_row(ui, t, &component.name, chosen).clicked() {
-                picked = Some(component);
+    let rows = listed.len();
+    ScrollArea::vertical().id_salt("import_window_components").max_height(LIST_HEIGHT).auto_shrink([false, true]).show_rows(
+        ui,
+        ROW_H,
+        rows,
+        |ui, range| {
+            for component in listed.get(range).into_iter().flatten().copied() {
+                let chosen = state.choice.as_ref().is_some_and(|choice| choice.component == component.name);
+                if component_row(ui, t, &component.name, chosen).clicked() {
+                    picked = Some(component);
+                }
             }
-        }
-    });
+        },
+    );
     if let Some(component) = picked {
         state.choice = Some(Choice::of(component));
         if matches!(state.run, Run::Failed { .. }) {

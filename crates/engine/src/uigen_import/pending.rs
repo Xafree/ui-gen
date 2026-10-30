@@ -90,6 +90,11 @@ pub(crate) fn advance(s: &mut Session, job: JobId, outcome: CaptureOutcome) -> O
     Some(conclude(s, &pending, result))
 }
 
+/// The jobs the import started by `head` has submitted so far (its inspect, then its renders).
+pub(crate) fn jobs_of(s: &Session, head: JobId) -> Vec<JobId> {
+    s.capture.imports.iter().find(|pending| pending.head == head).map_or_else(Vec::new, |pending| pending.jobs.clone())
+}
+
 /// Write the imports that were waiting for their tab to be free again.
 pub(crate) fn resume(s: &mut Session) -> Vec<CaptureEvent> {
     let mut events = Vec::new();
