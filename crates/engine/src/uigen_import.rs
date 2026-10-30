@@ -6,6 +6,7 @@ mod catalog;
 mod motion;
 mod pending;
 mod plan;
+mod reference;
 mod staging;
 mod tokens;
 
@@ -14,6 +15,7 @@ pub use catalog::{Inspected, InspectedComponent, InspectedProp, PropKind, render
 pub(crate) use pending::{COMMAND, Destination, PendingImport, Request, advance, jobs_of, resume, start};
 pub use plan::MAX_RENDERS;
 pub(crate) use plan::{State, Theme, usable_value};
+pub use reference::{OPTIONS_KEY, REFERENCE_KEY, RefText, Reference, ThemeReference, reference_of};
 #[cfg(test)]
 pub(crate) use staging::IMPORT_PAGE_KEY;
 pub(crate) use staging::import_page_name;
