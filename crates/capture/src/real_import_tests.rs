@@ -2,6 +2,7 @@
 //! this machine) behind a real engine session. Every test is `#[ignore]`d because it downloads:
 //! run them by hand with `cargo test -p figcraft-capture real_import -- --ignored --test-threads=1`.
 
+use std::path::Path;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -304,4 +305,197 @@ fn real_staged_import_lands_in_the_import_page_and_placing_it_makes_the_page_a_b
     session.execute("edit.undo", &json!({})).unwrap();
     assert!(page_children(&session).is_empty(), "two undos do not give back the blank page");
     assert_eq!(document_text(&session), before);
+}
+
+const COMPARE: &str = "uigen.compare";
+const UPDATE_SOURCE: &str = "uigen.updateSource";
+const BRAND: &str = "Brand";
+const FONT_ABSENT: &str = "police absente";
+
+fn run(session: &mut Session, command: &str, params: &Value) -> Value {
+    session.execute(command, params).unwrap_or_else(|error| panic!("{command} {params}: {error}"))
+}
+
+fn wait_for_jobs(session: &mut Session, jobs: &[u64]) {
+    let deadline = Instant::now() + JOB_LIMIT;
+    let mut pending: Vec<u64> = jobs.to_vec();
+    while !pending.is_empty() {
+        for event in session.pump_capture() {
+            if event.command != IMPORT {
+                continue;
+            }
+            if let Err(error) = event.outcome {
+                panic!("the recapture failed: {}", error.message);
+            }
+            pending.retain(|job| *job != event.job);
+        }
+        assert!(Instant::now() < deadline, "no import event for jobs {pending:?} within {JOB_LIMIT:?}");
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn compared_rows(result: &Value) -> &Vec<Value> {
+    result["rows"].as_array().unwrap_or_else(|| panic!("no rows in {result}"))
+}
+
+fn print_rows(label: &str, result: &Value) {
+    for row in compared_rows(result) {
+        eprintln!(
+            "[{label}] {} status={} original={}x{} library={}x{} shapes%={} text={} reason={:?} (maxDx {}, maxDy {}, maxDwidth {})",
+            row["variant"],
+            row["status"],
+            row["original"]["width"],
+            row["original"]["height"],
+            row["library"]["width"],
+            row["library"]["height"],
+            row["shapes"]["percent"],
+            row["text"]["verdict"],
+            row["text"]["reason"],
+            row["text"]["maxDx"],
+            row["text"]["maxDy"],
+            row["text"]["maxDwidth"]
+        );
+    }
+}
+
+fn assert_all_rows(result: &Value, status: &str) {
+    let rows = compared_rows(result);
+    assert_eq!(rows.len(), 2, "{result}");
+    for row in rows {
+        assert_eq!(row["status"], json!(status), "{row}");
+    }
+}
+
+fn assert_rows_match_the_original(result: &Value) {
+    assert_eq!(compared_rows(result).len(), 2, "{result}");
+    for row in compared_rows(result) {
+        let percent = row["shapes"]["percent"].as_f64().unwrap_or(f64::NAN);
+        assert!(percent < 1.0, "shapes differ by {percent} %: {row}");
+        assert_eq!(row["shapes"]["verdict"], json!("ok"), "{row}");
+        assert_eq!(row["original"], row["library"], "the library raster is not cropped to the original box: {row}");
+        let font_absent = row["text"]["reason"].as_str().is_some_and(|reason| reason.contains(FONT_ABSENT));
+        if font_absent {
+            eprintln!("the font of the original is not installed on this machine: the text geometry is not asserted ({})", row["text"]["reason"]);
+        } else {
+            assert_eq!(row["text"]["verdict"], json!("ok"), "{row}");
+            assert_eq!(row["status"], json!("ok"), "{row}");
+        }
+    }
+}
+
+fn delete_pngs(dir: &Path) -> usize {
+    let mut deleted = 0;
+    for entry in std::fs::read_dir(dir).unwrap().flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            deleted += delete_pngs(&path);
+        } else if path.extension().is_some_and(|extension| extension == "png") {
+            std::fs::remove_file(&path).unwrap();
+            deleted += 1;
+        }
+    }
+    deleted
+}
+
+fn bindings(doc: &Document, layers: &[NodeId]) -> Vec<(NodeId, String, String)> {
+    layers
+        .iter()
+        .flat_map(|id| doc.node(*id).unwrap().bound.iter().map(|(field, variable)| (*id, field.clone(), variable.clone())).collect::<Vec<_>>())
+        .collect()
+}
+
+fn variable_name(doc: &Document, id: &str) -> String {
+    doc.variables.variables.iter().find(|variable| variable.id == id).map(|variable| variable.name.clone()).unwrap_or_default()
+}
+
+fn variable_collection(doc: &Document, id: &str) -> String {
+    doc.variables.variables.iter().find(|variable| variable.id == id).map(|variable| variable.collection.clone()).unwrap_or_default()
+}
+
+// covers: E5-8.1
+#[test]
+#[ignore = "downloads @mui/material from npm and drives Chromium; run by hand"]
+fn real_compare_of_the_mui_button_matches_its_original_follows_the_references_and_a_brand_theme_rebinds_one_token() {
+    let (dir, mut session) = project_with_mui("real-compare");
+    let blank = session.docs[session.active].page;
+    let staged = staged_import(&mut session, "Button", &["contained"], &["medium"], &["Default", "Hover"]);
+    assert_eq!(staged["variants"], json!(2), "{staged}");
+    let listed = run(&mut session, "uigen.imported", &json!({}));
+    let staged_set = listed["sections"][0]["components"][0]["set"].clone();
+    let placed = run(&mut session, "uigen.placeImported", &json!({"set": staged_set}));
+    assert_eq!(figcraft_engine::params::id_of(&placed["page"]), Some(blank), "{placed}");
+    let copy = figcraft_engine::params::id_of(&placed["set"]).unwrap_or_else(|| panic!("no set in {placed}"));
+
+    let light = run(&mut session, COMPARE, &json!({"set": placed["set"], "theme": "light"}));
+    print_rows("light", &light);
+    eprintln!("summary {}", light["summary"]);
+    assert_rows_match_the_original(&light);
+
+    let dark = run(&mut session, COMPARE, &json!({"set": placed["set"], "theme": "dark"}));
+    print_rows("dark", &dark);
+    assert_all_rows(&dark, "notComparable");
+
+    let captures = dir.path().join(".uigen").join("captures");
+    let deleted = delete_pngs(&captures);
+    assert!(deleted >= 2, "only {deleted} PNG deleted in {}", captures.display());
+    let missing = run(&mut session, COMPARE, &json!({"set": placed["set"], "theme": "light"}));
+    print_rows("missing", &missing);
+    assert_all_rows(&missing, "missingReference");
+
+    let update = run(&mut session, UPDATE_SOURCE, &json!({"package": PACKAGE}));
+    let jobs: Vec<u64> = update["jobs"].as_array().unwrap_or_else(|| panic!("no jobs in {update}")).iter().filter_map(Value::as_u64).collect();
+    assert!(!jobs.is_empty(), "{update}");
+    wait_for_jobs(&mut session, &jobs);
+    let restored = run(&mut session, COMPARE, &json!({"set": placed["set"], "theme": "light"}));
+    print_rows("restored", &restored);
+    assert_rows_match_the_original(&restored);
+
+    let themes = run(&mut session, "uigen.themes", &json!({}));
+    let collection = format!("{PACKAGE} {VERSION}");
+    let listed_theme = themes["themes"]
+        .as_array()
+        .and_then(|all| all.iter().find(|theme| theme["name"] == json!(collection)))
+        .unwrap_or_else(|| panic!("no theme {collection} in {themes}"));
+    assert_eq!(listed_theme["origin"], json!({"package": PACKAGE, "version": VERSION}), "{themes}");
+    assert!(listed_theme["boundLayers"].as_u64().unwrap_or(0) > 0, "{themes}");
+
+    let mut layers = Vec::new();
+    subtree(document(&session), copy, &mut layers);
+    let before = bindings(document(&session), &layers);
+    let mui_id = document(&session).variables.collections.iter().find(|candidate| candidate.name == collection).unwrap().id.clone();
+    let bound_names: Vec<String> = before.iter().map(|(_, _, variable)| variable_name(document(&session), variable)).collect();
+    eprintln!("variables bound in the library copy: {bound_names:?}");
+    let token = bound_names
+        .iter()
+        .find(|name| name.to_lowercase().contains("primary"))
+        .or_else(|| bound_names.first())
+        .cloned()
+        .expect("the copy binds a variable");
+    eprintln!("Brand token: {token}");
+    run(&mut session, "variable.createCollection", &json!({"name": BRAND, "modes": ["Light", "Dark"]}));
+    run(
+        &mut session,
+        "variable.create",
+        &json!({"collection": BRAND, "name": token, "type": "color", "values": {"Light": "#7B1FA2", "Dark": "#CE93D8"}}),
+    );
+
+    let applied = run(&mut session, "uigen.applyTheme", &json!({"theme": BRAND}));
+    eprintln!("applyTheme {applied}");
+    assert_eq!(applied["unchanged"], json!(false), "{applied}");
+    let after = bindings(document(&session), &layers);
+    assert_eq!(before.len(), after.len());
+    let brand_id = document(&session).variables.collections.iter().find(|candidate| candidate.name == BRAND).unwrap().id.clone();
+    let mut rebound = 0;
+    for ((layer, field, from), (_, _, to)) in before.iter().zip(&after) {
+        let doc = document(&session);
+        let follows_token = variable_collection(doc, from) == mui_id && variable_name(doc, from).trim().eq_ignore_ascii_case(&token);
+        if follows_token {
+            assert_eq!(variable_collection(doc, to), brand_id, "{layer:?}.{field} did not move to {BRAND}");
+            rebound += 1;
+        } else {
+            assert_eq!(from, to, "{layer:?}.{field} changed though it is not the token {token}");
+        }
+    }
+    assert!(rebound > 0, "no binding of {token} moved");
+    assert_eq!(applied["rebound"], json!(rebound), "{applied}");
 }
