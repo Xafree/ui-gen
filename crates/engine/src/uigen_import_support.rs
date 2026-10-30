@@ -82,19 +82,54 @@ pub(crate) struct FailingRender {
     pub error: CaptureError,
 }
 
+#[derive(Clone)]
+pub(crate) enum Png {
+    Shared,
+    PerVariant,
+    Fixed(String),
+    Missing,
+}
+
+pub(crate) type SnapshotOf = fn(&str, &str, &str, &str) -> Value;
+
+pub(crate) fn variant_png(style: &str, size: &str, state: &str, theme: &str) -> String {
+    format!(".uigen/captures/{PACKAGE}/{VERSION}/button-{style}-{size}-{state}-{theme}.png")
+}
+
 pub(crate) struct Scenario {
     inspect: CaptureOutcome,
     failing_render: Option<FailingRender>,
+    png: Png,
+    snapshot: SnapshotOf,
 }
 
 impl Scenario {
     pub(crate) fn new(inspect: CaptureOutcome) -> Self {
-        Self { inspect, failing_render: None }
+        Self { inspect, failing_render: None, png: Png::Shared, snapshot: synthetic_button }
     }
 
     pub(crate) fn failing(mut self, render: FailingRender) -> Self {
         self.failing_render = Some(render);
         self
+    }
+
+    pub(crate) fn png(mut self, png: Png) -> Self {
+        self.png = png;
+        self
+    }
+
+    pub(crate) fn snapshots(mut self, snapshot: SnapshotOf) -> Self {
+        self.snapshot = snapshot;
+        self
+    }
+
+    fn png_of(&self, style: &str, size: &str, state: &str, theme: &str) -> Option<String> {
+        match &self.png {
+            Png::Shared => Some(".uigen/captures/synthetic.png".to_string()),
+            Png::PerVariant => Some(variant_png(style, size, state, theme)),
+            Png::Fixed(path) => Some(path.clone()),
+            Png::Missing => None,
+        }
     }
 
     fn answer(&self, job: &CaptureJob) -> CaptureOutcome {
@@ -111,8 +146,12 @@ impl Scenario {
                 {
                     return Err(failing.error.clone());
                 }
-                let snapshot = synthetic_button(variant.unwrap_or("solid"), size.unwrap_or("md"), state, theme);
-                Ok(json!({"snapshot": snapshot, "png": ".uigen/captures/synthetic.png"}))
+                let (style, size) = (variant.unwrap_or("solid"), size.unwrap_or("md"));
+                let mut answer = json!({"snapshot": (self.snapshot)(style, size, state, theme)});
+                if let (Some(png), Some(fields)) = (self.png_of(style, size, state, theme), answer.as_object_mut()) {
+                    fields.insert("png".to_string(), json!(png));
+                }
+                Ok(answer)
             }
             CaptureJob::Install { .. } | CaptureJob::Uninstall { .. } => Err(service_failure(CaptureErrorKind::Internal, "unexpected job")),
         }
