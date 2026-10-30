@@ -114,7 +114,9 @@ pub use derived::{changed_nodes, normalize};
 pub use doc_state::{DocState, History, HistoryEntry, Interaction, PREVIEW_READ_ONLY, Preedit, TextEdit, VersionPreview};
 pub use error::{EngineError, Result, bad};
 pub use prefs::{Clipboard, MAX_RECENT_ACTIONS, Prefs, UI_SCALE_MAX, UI_SCALE_MIN, UiRequest, clamp_ui_scale};
-pub use uigen_import::{Inspected, InspectedComponent, InspectedProp, MAX_RENDERS, PropKind, render_count};
+pub use uigen_import::{
+    ImportSection, ImportedSet, Inspected, InspectedComponent, InspectedProp, MAX_RENDERS, PropKind, render_count, sections as imported_sections,
+};
 pub use view_state::ViewState;
 
 /// The editing session: open documents, the current tool, clipboard and prefs.

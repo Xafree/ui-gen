@@ -204,6 +204,8 @@ mod titlebar_tests;
 mod toast_action_tests;
 
 #[cfg(test)]
+mod import_sections_ui_tests;
+#[cfg(test)]
 mod project_divider_ui_tests;
 #[cfg(test)]
 mod project_open_tests;
@@ -213,8 +215,6 @@ mod project_pages_ui_tests;
 mod project_settings_review_tests;
 #[cfg(test)]
 mod project_sources_ui_tests;
-#[cfg(test)]
-mod import_sections_ui_tests;
 #[cfg(test)]
 mod ui_scale_tests;
 #[cfg(test)]
