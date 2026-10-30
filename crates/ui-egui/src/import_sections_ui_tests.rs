@@ -637,6 +637,10 @@ fn dev_mode_refuses_the_copy_with_the_usual_message() {
 fn tab_to_tile(lab: &mut Lab, name: &str) {
     lab.ui.ctx.enable_accesskit();
     let wanted = format!("{name}\n{TILE_HINT}");
+    for _ in 0..3 {
+        lab.press(Key::F6, Modifiers::NONE);
+        lab.settle();
+    }
     for _ in 0..400 {
         lab.press(Key::Tab, Modifiers::NONE);
         if focused_name(&lab.ui.ctx) == wanted {
