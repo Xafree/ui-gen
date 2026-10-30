@@ -3,9 +3,7 @@
 
 use std::time::Duration;
 
-use egui::{
-    Align, Align2, Color32, CornerRadius, Id, Layout, Margin, Order, Rect, RichText, Sense, Stroke, TextureHandle, TextureOptions, Ui, pos2, vec2,
-};
+use egui::{Align, Color32, Layout, Margin, Rect, RichText, Sense, Stroke, TextureHandle, TextureOptions, Ui, pos2, vec2};
 use figcraft_engine::EngineError;
 use figcraft_engine::playground::{NO_COMPONENT, Status};
 use serde_json::json;
@@ -33,8 +31,6 @@ const QUIET: f64 = 1.0;
 const RESUME_AFTER: f64 = 0.5;
 const INPUT_BOUND: usize = 256;
 const MESSAGE_WIDTH: f32 = 420.0;
-const NOTICES_WIDTH: f32 = 480.0;
-const NOTICES_MARGIN: f32 = 12.0;
 const MAX_LISTED: usize = 3;
 const KEPT_SHORTCUTS: [&str; 8] =
     ["app.actions", "help.shortcuts", "view.fullscreen", "app.preferences", "file.new", "file.open", "file.save", "file.saveAs"];
@@ -222,7 +218,9 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
     let snap = if status == Status::Ready { playground_bars::snapshot(app) } else { Snapshot::default() };
     let bars = if status == Status::Closed { 0.0 } else { playground_bars::show(app, ui, &status, &snap) };
     let outer = ui.max_rect();
-    let zone = Rect::from_min_max(pos2(outer.min.x, outer.min.y + bars), outer.max);
+    let below_bars = Rect::from_min_max(pos2(outer.min.x, outer.min.y + bars), outer.max);
+    let band = if status == Status::Ready { notices(app, ui, &t, below_bars, &snap) } else { 0.0 };
+    let zone = Rect::from_min_max(pos2(below_bars.min.x, below_bars.min.y + band), outer.max);
     ui.scope_builder(egui::UiBuilder::new().max_rect(zone), |ui| match status {
         Status::Closed => empty(app, ui, &t),
         Status::Opening => {
@@ -340,7 +338,6 @@ fn page(app: &mut FigApp, ui: &mut Ui, t: &Tokens, zone: Rect, snap: &Snapshot) 
     }
     let Some(texture) = tab.picture.clone() else {
         loading(ui, t);
-        notices(app, &ctx, t, zone, snap);
         return;
     };
     let shown = page_rect(&ctx, zone);
@@ -353,7 +350,6 @@ fn page(app: &mut FigApp, ui: &mut Ui, t: &Tokens, zone: Rect, snap: &Snapshot) 
     }
     relay(app, &ctx, &resp, shown, snap, now);
     resize(app, &ctx, zone);
-    notices(app, &ctx, t, zone, snap);
 }
 
 fn page_rect(ctx: &egui::Context, zone: Rect) -> Rect {
@@ -444,7 +440,7 @@ fn listing(ui: &mut Ui, t: &Tokens, title: &str, lines: &[String]) {
     }
 }
 
-fn notices(app: &mut FigApp, ctx: &egui::Context, t: &Tokens, zone: Rect, snap: &Snapshot) {
+fn notices(app: &mut FigApp, ui: &mut Ui, t: &Tokens, zone: Rect, snap: &Snapshot) -> f32 {
     let (busy, stale) = (app.session.playground_busy(), app.session.playground_stale());
     let errors = app.ui.playground.bars.errors.clone();
     let missing = if snap.missing.is_empty() { Vec::new() } else { vec![snap.missing.join(", ")] };
@@ -454,50 +450,40 @@ fn notices(app: &mut FigApp, ctx: &egui::Context, t: &Tokens, zone: Rect, snap: 
         .map(|note| if note.component.is_empty() { note.message.clone() } else { format!("{}: {}", note.component, note.message) })
         .collect();
     if too_small(zone) || (!busy && !stale && errors.is_empty() && missing.is_empty() && notes.is_empty()) {
-        return;
+        return 0.0;
     }
-    let width = NOTICES_WIDTH.min(zone.width() - 2.0 * NOTICES_MARGIN).max(0.0);
     let mut refresh = false;
-    egui::Area::new(Id::unique("playground_notices"))
-        .order(Order::Foreground)
-        .pivot(Align2::CENTER_TOP)
-        .fixed_pos(pos2(zone.center().x, zone.min.y + NOTICES_MARGIN))
-        .constrain_to(zone)
-        .show(ctx, |ui| {
-            egui::Frame::NONE
-                .fill(t.panel)
-                .stroke(Stroke::new(1.0, t.border))
-                .corner_radius(CornerRadius::same(6))
-                .inner_margin(Margin::symmetric(12, 8))
-                .show(ui, |ui| {
-                    ui.set_max_width(width);
-                    ui.spacing_mut().item_spacing.y = 6.0;
-                    if busy {
-                        ui.add(
-                            egui::Label::new(
-                                RichText::new(tr("The capture service is busy: the page updates when it is free.")).font(regular(12.0)).color(t.text),
-                            )
-                            .wrap(),
-                        );
-                    }
-                    if stale {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(RichText::new(tr("The file changed since the page was exported.")).font(regular(12.0)).color(t.text));
-                            refresh = widgets::button(ui, tr("Refresh"), false, true).clicked();
-                        });
-                    }
-                    for (title, lines) in [
-                        (tr("Errors reported by the page"), &errors),
-                        (tr("Components missing from the library"), &missing),
-                        (tr("What the export could not do"), &notes),
-                    ] {
-                        if !lines.is_empty() {
-                            listing(ui, t, title, lines);
-                        }
-                    }
-                });
-        });
+    let band = egui::Frame::NONE.fill(t.panel).inner_margin(Margin::symmetric(12, 8)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.spacing_mut().item_spacing.y = 6.0;
+        if busy {
+            ui.add(
+                egui::Label::new(
+                    RichText::new(tr("The capture service is busy: the page updates when it is free.")).font(regular(12.0)).color(t.text),
+                )
+                .wrap(),
+            );
+        }
+        if stale {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(tr("The file changed since the page was exported.")).font(regular(12.0)).color(t.text));
+                refresh = widgets::button(ui, tr("Refresh"), false, true).clicked();
+            });
+        }
+        for (title, lines) in [
+            (tr("Errors reported by the page"), &errors),
+            (tr("Components missing from the library"), &missing),
+            (tr("What the export could not do"), &notes),
+        ] {
+            if !lines.is_empty() {
+                listing(ui, t, title, lines);
+            }
+        }
+    });
+    let rect = band.response.rect;
+    ui.painter().hline(rect.x_range(), rect.max.y - 0.5, Stroke::new(1.0, t.border));
     if refresh {
         app.run(REFRESH, json!({}));
     }
+    rect.height()
 }

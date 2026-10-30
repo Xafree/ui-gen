@@ -1,13 +1,15 @@
 <style>
-.pg-mail{display:grid;grid-template-columns:200px minmax(260px,360px) 1fr;min-height:100vh}
+.pg-mail{display:grid;grid-template-columns:minmax(min-content,200px) minmax(min-content,360px) 1fr;min-height:100vh}
 .pg-mail h1,.pg-mail h2{margin:0;font-size:1.125em}
 .pg-mail nav,.pg-mail .pg-list,.pg-mail article{display:grid;align-content:start;gap:12px;padding:16px}
 .pg-mail ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
-.pg-mail nav li{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.pg-message{display:flex;align-items:flex-start;gap:12px}
-.pg-message div{display:grid;gap:2px;flex:1}
+.pg-mail .pg-list{min-width:260px}
+.pg-mail nav li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.pg-message{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px}
+.pg-message div{display:grid;gap:2px;flex:1 1 8em;min-width:0;overflow-wrap:anywhere}
 .pg-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.pg-meta{display:flex;align-items:center;gap:12px}
+.pg-meta{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.pg-mail article{overflow-wrap:anywhere}
 </style>
 <main class="pg-mail">
   <nav aria-label="Dossiers">

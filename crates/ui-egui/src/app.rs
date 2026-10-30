@@ -264,7 +264,8 @@ impl FigApp {
             self.observe_ime(&ctx, false);
             return;
         }
-        let hidden = self.session.ds().map(|d| d.view.ui_hidden).unwrap_or(false);
+        let playground_front = playground::on_screen(self);
+        let hidden = playground_front || self.session.ds().map(|d| d.view.ui_hidden).unwrap_or(false);
         let narrow = !hidden && ui.available_width() < NARROW_WIDTH;
         let mobile = self.ui.mobile_panel.filter(|_| narrow);
         self.ui.narrow = narrow;
@@ -327,7 +328,7 @@ impl FigApp {
                 });
         }
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {
-            if playground::on_screen(self) {
+            if playground_front {
                 playground::show(self, ui);
                 return;
             }

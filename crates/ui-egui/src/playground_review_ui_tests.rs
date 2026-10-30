@@ -15,7 +15,7 @@ use crate::playground_bars::Snapshot;
 use crate::playground_bars_tests::{Tokens, ready};
 use crate::playground_decode::Decoder;
 use crate::playground_input::{Frame as PageFrame, Relay};
-use crate::playground_view_tests::{Bench, IMAGE, RED, jpeg_frame};
+use crate::playground_view_tests::{Bench, IMAGE, RED, View, jpeg_frame};
 
 fn node_named(b: &Bench, name: &str) -> Value {
     json!(b.v.app.session.doc().unwrap().nodes().find(|n| n.name == name).unwrap().id)
@@ -353,4 +353,80 @@ fn a_view_smaller_than_the_smallest_page_keeps_the_page_size_and_hides_the_notic
     let (shown, _) = b.v.image().expect("the picture is painted");
     assert!(shown.width() >= 319.0 && shown.height() >= 239.0, "the picture keeps the smallest window instead of shrinking to the view: {shown:?}");
     assert!(!b.v.says("The file changed since the page was exported."), "no notice hangs over a cropped page");
+}
+
+fn within_a_point(a: f32, b: f32) -> bool {
+    (a - b).abs() <= 1.0
+}
+
+const PANEL_CONTROLS: [(Role, &str); 8] = [
+    (Role::Navigation, "Sidebar"),
+    (Role::Pane, "Layers"),
+    (Role::Pane, "Design"),
+    (Role::Tab, "File"),
+    (Role::Tab, "Components"),
+    (Role::Tab, "Design"),
+    (Role::Tab, "Prototype"),
+    (Role::Button, "Share: live session, export"),
+];
+
+fn panel_controls_on_screen(b: &Bench) -> Vec<&'static str> {
+    PANEL_CONTROLS.iter().filter(|(role, label)| b.v.has(*role, label)).map(|(_, label)| *label).collect()
+}
+
+// covers: E7-6.1
+#[test]
+fn the_panels_and_the_rail_of_the_hidden_document_are_gone_while_the_playground_is_in_front() {
+    let mut b = Bench::ready("review-panels", "en");
+    assert_eq!(panel_controls_on_screen(&b), Vec::<&str>::new(), "no control of the hidden document is reachable");
+    let outer = b.v.zone();
+    assert!(outer.width() >= b.v.screen.x - 2.0, "the view takes the whole width under the tab bar: {outer:?}");
+
+    b.v.click_node(Role::Tab, "lib");
+    b.v.settle(0.3);
+    assert_eq!(panel_controls_on_screen(&b).len(), PANEL_CONTROLS.len(), "the panels are back with the document: {:?}", panel_controls_on_screen(&b));
+
+    b.v.click_node(Role::Tab, "Playground");
+    b.v.settle(0.3);
+    assert_eq!(panel_controls_on_screen(&b), Vec::<&str>::new(), "and gone again with the playground");
+}
+
+// covers: E7-6.4
+#[test]
+fn the_notices_have_their_own_band_above_the_page_and_the_page_is_asked_for_the_size_left() {
+    let mut b = Bench::ready("review-band", "en");
+    let before = b.v.zone();
+    b.v.app.run("frame.create", json!({"x": 0, "y": 400, "width": 10, "height": 10}));
+    b.v.settle(0.3);
+    crate::playground_bars::note_event(&mut b.v.app, &open_event(json!({"errors": ["ReferenceError: boom is not defined"], "shape": true})));
+    b.v.settle(0.8);
+
+    let refresh = View::bounds(b.v.node(Role::Button, "Refresh").expect("the stale notice shows"));
+    let (picture, _) = b.v.image().expect("the picture is painted");
+    let zone = b.v.zone();
+    assert!(refresh.max.y <= picture.min.y, "the band ends above the picture: {refresh:?} {picture:?}");
+    assert!(zone.min.y > before.min.y && within_a_point(zone.max.y, before.max.y), "the page area shrank from the top: {before:?} {zone:?}");
+    let resized = b.calls.params("playground.resize");
+    let last = resized.last().expect("a resize went to the service");
+    assert_eq!(last["height"].as_f64().map(|h| h.round()), Some(f64::from(zone.height().round())), "the page got the height left: {last}");
+}
+
+// covers: E7-6.4
+#[test]
+fn the_notices_band_is_gone_and_the_page_gets_its_height_back_when_nothing_is_left_to_say() {
+    let mut b = Bench::ready("review-band-gone", "en");
+    let before = b.v.zone();
+    b.v.app.run("frame.create", json!({"x": 0, "y": 400, "width": 10, "height": 10}));
+    b.v.settle(0.5);
+    assert!(b.v.zone().min.y > before.min.y, "the band takes room while the file is stale");
+
+    b.calls.push_frame(jpeg_frame(2, IMAGE[0] as u32, IMAGE[1] as u32, RED));
+    b.v.click_node(Role::Button, "Refresh");
+    b.v.settle(1.0);
+
+    let after = b.v.zone();
+    assert!(
+        within_a_point(after.min.y, before.min.y) && within_a_point(after.max.y, before.max.y),
+        "the page area is whole again: {before:?} {after:?}"
+    );
 }

@@ -1,14 +1,15 @@
 <style>
-.pg-chat{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+.pg-chat{display:grid;grid-template-columns:minmax(min-content,260px) 1fr;min-height:100vh}
 .pg-chat h1,.pg-chat h2{margin:0;font-size:1.125em}
 .pg-chat aside,.pg-chat section{display:grid;align-content:start;gap:12px;padding:16px}
 .pg-chat ul{list-style:none;margin:0;padding:0;display:grid;gap:12px}
-.pg-conversation{display:flex;align-items:center;gap:12px}
-.pg-conversation div{display:grid;gap:2px;flex:1}
+.pg-conversation{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.pg-conversation div{display:grid;gap:2px;flex:1 1 8em;min-width:0;overflow-wrap:anywhere}
 .pg-thread{display:grid;gap:12px;align-content:start}
 .pg-bubble{display:grid;gap:4px;max-width:420px}
 .pg-out{justify-self:end}
-.pg-composer{display:flex;align-items:flex-end;gap:12px}
+.pg-composer{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px}
+.pg-chat section{overflow-wrap:anywhere}
 </style>
 <main class="pg-chat">
   <aside aria-label="Conversations">

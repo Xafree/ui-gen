@@ -433,6 +433,8 @@ mod playground_support;
 #[cfg(test)]
 mod playground_targets_tests;
 #[cfg(test)]
+mod playground_templates_layout_tests;
+#[cfg(test)]
 mod playground_templates_tests;
 #[cfg(test)]
 mod playground_tests;
