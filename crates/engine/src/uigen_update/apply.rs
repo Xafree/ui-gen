@@ -4,6 +4,7 @@
 use figcraft_doc::{Document, Node, NodeId, NodeKind};
 
 use super::diff::{Difference, DifferenceKind, Field, layers, parent_path, variant_ids};
+use crate::REFERENCE_KEY;
 
 const MISSING_VARIANT: &str = "the variant is no longer in your copy";
 const MISSING_IN_LATEST: &str = "the layer is not in the new capture";
@@ -25,6 +26,19 @@ pub(crate) fn apply(doc: &mut Document, copy: NodeId, latest: NodeId, chosen: &[
         }
     }
     outcome
+}
+
+/// The originals of the variants of `copy` become those of the same-name variants of `latest`.
+pub(crate) fn follow_references(doc: &mut Document, copy: NodeId, latest: NodeId) -> crate::Result<()> {
+    for (name, variant) in variant_ids(doc, copy) {
+        let original = variant_named(doc, latest, &name).and_then(|id| doc.node(id)).and_then(|node| node.plugin_data.get(REFERENCE_KEY)).cloned();
+        let data = &mut doc.get_mut(variant)?.plugin_data;
+        match original {
+            Some(raw) => data.insert(REFERENCE_KEY.to_owned(), raw),
+            None => data.remove(REFERENCE_KEY),
+        };
+    }
+    Ok(())
 }
 
 fn variant_named(doc: &Document, set: NodeId, name: &str) -> Option<NodeId> {
@@ -52,7 +66,10 @@ fn apply_one(doc: &mut Document, copy: NodeId, latest: NodeId, difference: &Diff
             doc.remove(target).map_err(|e| e.to_string())
         }
         DifferenceKind::Changed => {
-            let field = Field::from_name(&difference.field).filter(|field| *field != Field::Other).ok_or(NOT_APPLICABLE)?;
+            let on_root = path.is_empty();
+            let field = Field::from_name(&difference.field)
+                .filter(|field| *field != Field::Other && !(on_root && *field == Field::Position))
+                .ok_or(NOT_APPLICABLE)?;
             let target = *in_copy.by_path.get(path).ok_or(MISSING_IN_COPY)?;
             let source = in_latest.by_path.get(path).and_then(|id| doc.node(*id)).cloned().ok_or(MISSING_IN_LATEST)?;
             copy_field(field, doc.get_mut(target).map_err(|e| e.to_string())?, &source);

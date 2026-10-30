@@ -12,7 +12,7 @@ use super::uigen_import::import_component;
 use crate::params::{get, req_id};
 use crate::project::ProjectBinding;
 use crate::uigen_import::{OPTIONS_KEY, imported_sets, move_source_version, page_to_recapture, source_ref};
-use crate::uigen_update::{Difference, DifferenceState, Located, MAX_DIFFERENCES, Outcome, SourceDiff, apply, source_diff};
+use crate::uigen_update::{Difference, DifferenceState, Located, MAX_DIFFERENCES, Outcome, SourceDiff, apply, follow_references, source_diff};
 use crate::{Result, Session, bad, spec};
 
 const UPDATE: &str = "uigen.updateSource";
@@ -35,7 +35,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             DIFF,
             "List source differences",
-            "{copy (the component set of the library that uigen.placeImported made)}  what changed between the capture the copy comes from and the one of the source's current version: {copy, name, from (version of the copy), to (current version), base: {page, set} | null (the old capture), latest: {page, set} | null (the new one), differences: [{id (\"<variant>|<path>|<field>\"), variant, path (names of the layers from the root, joined by \" / \"), kind (added|removed|changed), field (layer, or fill|stroke|effects|corner radius|size|position|opacity|blend|visibility|clip content|text|font|auto layout|other), state (clean: the copy still has the old value; modified: the user changed it; unknown: the old capture is gone)}], summary: {clean, modified, unknown}, note?}. A difference the copy already has the new value of is not listed. Without a latest capture, `latest` is null, there is no difference and `note` says to recapture first. At most 2000 differences, `note` says when more. Pure: no job, no write. Refused (`bad`) outside a library project and for a copy that is not a component set with a readable uigen.source",
+            "{copy (the component set of the library that uigen.placeImported made)}  what changed between the capture the copy comes from and the one of the source's current version: {copy, name, from (version of the copy), to (current version), base: {page, set} | null (the old capture), latest: {page, set} | null (the new one), differences: [{id (\"<variant>|<path>|<field>\"), variant, path (names of the layers from the root, joined by \" / \"; empty for the variant itself), kind (added|removed|changed), field (layer, or fill|stroke|effects|corner radius|size|position|opacity|blend|visibility|clip content|text|font|auto layout|other), state (clean: the copy still has the old value; modified: the user changed it; unknown: the old capture is gone), applicable (false: uigen.applyDifferences can't take it)}], summary: {clean, modified, unknown}, note? (what was left out: a variant in one capture only, layers sharing a name with a sibling)}. A difference the copy already has the new value of is not listed. Without a latest capture, `latest` is null, there is no difference and `note` says to recapture first. At most 2000 differences, `note` says when more. Pure: no job, no write. Refused (`bad`) outside a library project and for a copy that is not a component set with a readable uigen.source",
             false,
             source_differences
         ),
@@ -129,6 +129,7 @@ fn difference_json(difference: &Difference) -> Value {
         "kind": difference.kind.as_str(),
         "field": difference.field,
         "state": difference.state.as_str(),
+        "applicable": difference.applicable,
     })
 }
 
@@ -208,8 +209,9 @@ fn apply_differences(s: &mut Session, p: &Value) -> Result<Value> {
     skipped.extend(outcome.skipped);
     let left = found.differences.len().saturating_sub(outcome.applied.len());
     let moved = left == 0 && !found.truncated && found.latest.is_some() && found.from != found.to;
-    if moved {
+    if let (true, Some(latest)) = (moved, found.latest) {
         move_source_version(s.doc_mut()?, found.copy, &found.to)?;
+        follow_references(s.doc_mut()?, found.copy, latest.set)?;
     }
     let skipped: Vec<Value> = skipped.into_iter().map(|(id, reason)| json!({"id": id, "reason": reason})).collect();
     Ok(json!({"applied": outcome.applied, "skipped": skipped, "version": if moved { &found.to } else { &found.from }}))

@@ -12,6 +12,7 @@ use crate::{Result, bad};
 const COMMAND: &str = "uigen.sourceDiff";
 const SEPARATOR: &str = " / ";
 const LAYER: &str = "layer";
+const ROOT: &str = "";
 
 pub const MAX_DIFFERENCES: usize = 2000;
 
@@ -57,6 +58,7 @@ pub struct Difference {
     pub kind: DifferenceKind,
     pub field: String,
     pub state: DifferenceState,
+    pub applicable: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -168,6 +170,7 @@ impl Field {
 pub(super) struct Layers {
     pub order: Vec<String>,
     pub by_path: BTreeMap<String, NodeId>,
+    pub shadowed: usize,
 }
 
 fn escaped(name: &str) -> String {
@@ -190,16 +193,19 @@ pub(super) fn variant_ids(doc: &Document, set: NodeId) -> Vec<(String, NodeId)> 
     found
 }
 
-/// The layers under a variant in tree order, by path. The first of two siblings with one name keeps the path.
+/// The variant itself (the empty path) and the layers under it in tree order, by path. The first of two siblings with one name keeps the path.
 pub(super) fn layers(doc: &Document, variant: NodeId) -> Layers {
-    let mut found = Layers { order: Vec::new(), by_path: BTreeMap::new() };
+    let mut found = Layers { order: Vec::new(), by_path: BTreeMap::new(), shadowed: 0 };
     let Some(root) = doc.node(variant) else { return found };
+    found.by_path.insert(ROOT.to_owned(), variant);
+    found.order.push(ROOT.to_owned());
     let mut stack: Vec<(NodeId, Option<String>)> = root.children.iter().rev().map(|child| (*child, None)).collect();
     while let Some((id, parent)) = stack.pop() {
         let Some(node) = doc.node(id) else { continue };
         let name = escaped(&node.name);
         let path = parent.map_or_else(|| name.clone(), |parent| format!("{parent}{SEPARATOR}{name}"));
         if found.by_path.contains_key(&path) {
+            found.shadowed += 1;
             continue;
         }
         found.by_path.insert(path.clone(), id);
@@ -248,16 +254,27 @@ struct Raw {
 }
 
 /// What must change in `from` to become `to`, a layer being listed once, at the top of what was added or removed.
-fn raw_diff(doc: &Document, from: &Tree, to: &Tree) -> Vec<Raw> {
+/// What it leaves out (a variant in one capture only, a layer sharing its name with a sibling) goes to `notes`.
+fn raw_diff(doc: &Document, from: &Tree, to: &Tree, notes: &mut Vec<String>) -> Vec<Raw> {
     let mut found = Vec::new();
+    let mut shadowed = 0;
+    for variant in from.variants.iter().filter(|variant| !to.layers.contains_key(*variant)) {
+        notes.push(format!("variant \"{variant}\" is gone from the new capture: it is not removed"));
+    }
     for variant in &to.variants {
-        let (Some(before), Some(after)) = (from.layers.get(variant), to.layers.get(variant)) else { continue };
+        let (Some(before), Some(after)) = (from.layers.get(variant), to.layers.get(variant)) else {
+            notes.push(format!("variant \"{variant}\" is new in the new capture: it is not added"));
+            continue;
+        };
+        shadowed += before.shadowed + after.shadowed;
         let raw = |path: &String, kind, field| Raw { variant: variant.clone(), path: path.clone(), kind, field };
         for path in &after.order {
             match (before.by_path.get(path), after.by_path.get(path)) {
                 (None, _) if holds_parent(before, path) => found.push(raw(path, DifferenceKind::Added, LAYER)),
                 (Some(was), Some(now)) => {
-                    found.extend(fields_between(doc, *was, *now).into_iter().map(|field| raw(path, DifferenceKind::Changed, field.name())));
+                    let keeps_position = path != ROOT;
+                    let fields = fields_between(doc, *was, *now).into_iter().filter(|field| keeps_position || *field != Field::Position);
+                    found.extend(fields.map(|field| raw(path, DifferenceKind::Changed, field.name())));
                 }
                 _ => {}
             }
@@ -265,6 +282,9 @@ fn raw_diff(doc: &Document, from: &Tree, to: &Tree) -> Vec<Raw> {
         for path in before.order.iter().filter(|path| !after.by_path.contains_key(*path) && holds_parent(after, path)) {
             found.push(raw(path, DifferenceKind::Removed, LAYER));
         }
+    }
+    if shadowed > 0 {
+        notes.push(format!("{shadowed} layers share their name with a sibling: they are not compared"));
     }
     found
 }
@@ -301,6 +321,7 @@ fn state_of(doc: &Document, raw: &Raw, captures: &Captures) -> Option<Difference
 }
 
 fn difference_of(raw: Raw, state: DifferenceState) -> Difference {
+    let applicable = raw.field == LAYER || Field::from_name(raw.field).is_some_and(|field| field != Field::Other);
     Difference {
         id: format!("{}|{}|{}", raw.variant, raw.path, raw.field),
         variant: raw.variant,
@@ -308,6 +329,7 @@ fn difference_of(raw: Raw, state: DifferenceState) -> Difference {
         kind: raw.kind,
         field: raw.field.to_owned(),
         state,
+        applicable,
     }
 }
 
@@ -316,16 +338,17 @@ fn located(doc: &Document, package: &str, version: &str, component: &str) -> Opt
     Some(Located { page, set: set_of(doc, page, component)? })
 }
 
-fn listed(doc: &Document, copy: NodeId, base: Option<Located>, latest: Located) -> Vec<Difference> {
+fn listed(doc: &Document, copy: NodeId, base: Option<Located>, latest: Located, notes: &mut Vec<String>) -> Vec<Difference> {
     let (copy_tree, latest_tree) = (Tree::of(doc, copy), Tree::of(doc, latest.set));
     match base {
         Some(base) if base.set == latest.set => Vec::new(),
         Some(base) => {
             let base_tree = Tree::of(doc, base.set);
             let captures = Captures { base: &base_tree, copy: &copy_tree, latest: &latest_tree };
-            raw_diff(doc, &base_tree, &latest_tree).into_iter().filter_map(|raw| difference_with_state(doc, raw, &captures)).collect()
+            let raws = raw_diff(doc, &base_tree, &latest_tree, notes);
+            raws.into_iter().filter_map(|raw| difference_with_state(doc, raw, &captures)).collect()
         }
-        None => raw_diff(doc, &copy_tree, &latest_tree).into_iter().map(|raw| difference_of(raw, DifferenceState::Unknown)).collect(),
+        None => raw_diff(doc, &copy_tree, &latest_tree, notes).into_iter().map(|raw| difference_of(raw, DifferenceState::Unknown)).collect(),
     }
 }
 
@@ -357,19 +380,20 @@ pub fn source_diff(doc: &Document, copy: NodeId, current_version: &str) -> Resul
         .ok_or_else(|| bad(COMMAND, format!("`copy` {copy} has no readable uigen.source: it is not the copy of an imported component")))?;
     let base = located(doc, &origin.package, &origin.version, &origin.component);
     let latest = located(doc, &origin.package, current_version, &origin.component);
-    let mut note = None;
+    let mut notes = Vec::new();
     let mut differences = match latest {
-        Some(latest) => listed(doc, copy, base, latest),
+        Some(latest) => listed(doc, copy, base, latest, &mut notes),
         None => {
-            note = Some(format!("recapture first: {current_version} has not been captured yet"));
+            notes.push(format!("recapture first: {current_version} has not been captured yet"));
             Vec::new()
         }
     };
     let truncated = differences.len() > MAX_DIFFERENCES;
     if truncated {
         differences.truncate(MAX_DIFFERENCES);
-        note = Some(format!("more than {MAX_DIFFERENCES} differences: the first {MAX_DIFFERENCES} are listed"));
+        notes.push(format!("more than {MAX_DIFFERENCES} differences: the first {MAX_DIFFERENCES} are listed"));
     }
+    let note = (!notes.is_empty()).then(|| notes.join(" ; "));
     let summary = summary_of(&differences);
     Ok(SourceDiff {
         copy,

@@ -5,5 +5,5 @@
 mod apply;
 mod diff;
 
-pub(crate) use apply::{Outcome, apply};
+pub(crate) use apply::{Outcome, apply, follow_references};
 pub use diff::{Difference, DifferenceKind, DifferenceState, Located, MAX_DIFFERENCES, SourceDiff, Summary, source_diff};
