@@ -1,6 +1,9 @@
 import { chromium } from 'playwright';
 
-const LAUNCH_OPTIONS = { args: ['--disable-lcd-text'], chromiumSandbox: true };
+const LAUNCH_OPTIONS = {
+  args: ['--disable-lcd-text', '--host-resolver-rules=MAP * ~NOTFOUND', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'],
+  chromiumSandbox: true,
+};
 const LOCAL_SCHEMES = new Set(['data:', 'about:', 'blob:']);
 const CLOSE_TIMEOUT_MS = 5_000;
 
@@ -40,6 +43,7 @@ export async function openPage(options) {
   const context = await browser.newContext({ ...options, offline: true });
   try {
     await context.route('**/*', blockRemote);
+    await context.routeWebSocket(/.*/, (socket) => socket.close());
     return { page: await context.newPage(), close: () => closeWithin(context) };
   } catch (error) {
     await closeWithin(context);

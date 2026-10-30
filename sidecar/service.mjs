@@ -24,6 +24,8 @@ methods.set('playground.frame', (params) => playground.frame(params));
 methods.set('playground.input', (params) => playground.input(params));
 methods.set('playground.close', () => playground.close());
 
+const STOP_WAIT_MS = 5_000;
+
 const inFlight = new Set();
 let stopping = false;
 
@@ -31,13 +33,15 @@ const send = (message, done) => process.stdout.write(encodeLine(message), done);
 
 process.on('exit', killRunningNpm);
 
+const within = (promise) => Promise.race([promise, new Promise((resolve) => setTimeout(resolve, STOP_WAIT_MS).unref())]);
+
 const stop = () => {
   if (stopping) {
     return;
   }
   stopping = true;
-  Promise.allSettled([...inFlight])
-    .then(closeBrowser)
+  within(Promise.allSettled([...inFlight]))
+    .then(() => within(closeBrowser().catch(() => undefined)))
     .finally(() => process.stdout.write('', () => process.exit(0)));
 };
 

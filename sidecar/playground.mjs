@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { openPage } from './browser.mjs';
 import { startBudget } from './deadline.mjs';
-import { bundleLitPackage } from './lit-bundle.mjs';
+import { bundleLitPackage, maskPaths } from './lit-bundle.mjs';
 import { ServiceError } from './protocol.mjs';
 
 const THEMES = ['light', 'dark'];
@@ -28,11 +28,14 @@ const MAX_TOKENS_BYTES = 512 * 1024;
 const MAX_OVERRIDES_BYTES = 256 * 1024;
 const MAX_TEMPLATE_BYTES = 2 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_PAGE_ERRORS = 16;
+const MAX_PAGE_ERROR_LENGTH = 256;
 const OPEN_BUDGET_MS = 40_000;
 const FRAME_WAIT_MS = 40;
 const JPEG_QUALITY = 85;
 const SIGNAL_QUALITY = 30;
 const ACTION_TIMEOUT_MS = 5_000;
+const PAGE_URL = 'https://uigen.invalid/playground';
 const CRASHED = 'the playground page crashed';
 
 const GUARD = `(() => {
@@ -45,11 +48,16 @@ const GUARD = `(() => {
   window.__uigenDefined = defined;
   window.open = () => null;
   document.addEventListener('click', (event) => {
-    const link = event.composedPath().find((node) => node instanceof HTMLAnchorElement || node instanceof HTMLAreaElement);
-    if (link !== undefined && !(link.getAttribute('href') ?? '').startsWith('#')) {
+    const link = event.composedPath().find((node) => node instanceof HTMLAnchorElement || node instanceof HTMLAreaElement || node instanceof SVGAElement);
+    if (link !== undefined && !(link.getAttribute('href') ?? link.getAttribute('xlink:href') ?? '').startsWith('#')) {
       event.preventDefault();
     }
   }, true);
+  window.navigation?.addEventListener('navigate', (event) => {
+    if (event.cancelable && !event.destination.sameDocument) {
+      event.preventDefault();
+    }
+  });
   document.addEventListener('submit', (event) => event.preventDefault(), true);
 })();`;
 
@@ -73,7 +81,7 @@ const serial = (work) => {
 
 const isObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
 const inRange = (value, [min, max]) => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
-const firstLine = (error, fallback) => (error instanceof Error ? error.message.split('\n')[0] : fallback);
+const firstLine = (error, fallback) => (error instanceof Error ? maskPaths(error.message.split('\n')[0]) : fallback);
 
 function checkDir(dir) {
   if (typeof dir !== 'string' || dir === '' || !path.isAbsolute(dir)) {
@@ -113,10 +121,13 @@ async function readStaged(file, maxBytes) {
     }
     return await readFile(file, 'utf8');
   } catch (error) {
+    if (error instanceof ServiceError) {
+      throw error;
+    }
     if (error?.code === 'ENOENT') {
       return '';
     }
-    throw error;
+    throw new ServiceError('render', `cannot read ${path.basename(file)}: ${error?.code ?? 'unknown error'}`);
   }
 }
 
@@ -132,20 +143,40 @@ const replaceBody = (template) => {
 };
 
 const applyShape = (shape) => {
-  const sheet = (window.__uigenShape ??= new CSSStyleSheet());
-  sheet.replaceSync(shape === 'round' ? '' : `:host, * { corner-shape: ${shape}; }`);
-  const visit = (root) => {
-    for (const element of root.querySelectorAll('*')) {
+  window.__uigenShape ??= (() => {
+    const sheet = new CSSStyleSheet();
+    const options = { childList: true, subtree: true };
+    const observer = new MutationObserver((records) => {
+      for (const { addedNodes } of records) {
+        addedNodes.forEach((node) => node instanceof Element && adoptTree(node));
+      }
+    });
+    const adopt = (element) => {
       const shadow = element.shadowRoot;
       if (shadow !== null) {
         if (!shadow.adoptedStyleSheets.includes(sheet)) {
           shadow.adoptedStyleSheets = [...shadow.adoptedStyleSheets, sheet];
         }
-        visit(shadow);
+        observer.observe(shadow, options);
+        adoptTree(shadow);
       }
-    }
-  };
-  visit(document);
+    };
+    const adoptTree = (root) => {
+      if (root instanceof Element) {
+        adopt(root);
+      }
+      root.querySelectorAll('*').forEach(adopt);
+    };
+    return { sheet, options, observer, adoptTree };
+  })();
+  const { sheet, options, observer, adoptTree } = window.__uigenShape;
+  sheet.replaceSync(shape === 'round' ? '' : `:host, * { corner-shape: ${shape}; }`);
+  if (shape === 'round') {
+    observer.disconnect();
+  } else {
+    observer.observe(document, options);
+    adoptTree(document);
+  }
 };
 
 const applyPage = ({ tokens, overrides, theme }) => {
@@ -169,9 +200,13 @@ const probePage = (tags) => ({
 const startScreencast = (current) =>
   current.cdp.send('Page.startScreencast', { format: 'jpeg', quality: SIGNAL_QUALITY, maxWidth: current.width, maxHeight: current.height, everyNthFrame: 1 });
 
-function createSession({ page, close, cdp }, { width, height, scale }) {
-  const current = { page, close, cdp, width, height, scale, shape: 'round', seq: 0, fresh: false, signal: null, pendingAcks: [], crashed: false, waiters: [] };
+function createSession({ page, close, cdp }, { width, height, scale, theme }) {
+  const current = { page, close, cdp, width, height, scale, theme, shape: 'round', seq: 0, fresh: false, signal: null, pendingAcks: [], refused: null, crashed: false, waiters: [] };
   current.wake = () => current.waiters.splice(0).forEach((resolve) => resolve());
+  current.markChanged = () => {
+    current.seq += 1;
+    current.wake();
+  };
   page.setDefaultTimeout(ACTION_TIMEOUT_MS);
   current.crash = new Promise((resolve) => {
     page.once('crash', () => {
@@ -206,23 +241,40 @@ async function closeSession() {
   await previous?.close();
 }
 
-async function start(params) {
+const abandoned = () => new ServiceError('render', 'opening the playground was abandoned');
+
+async function start(params, attempt) {
   const staging = checkDir(params.dir);
   const { code } = await bundleLitPackage({ libDir: path.join(staging, 'lib') });
   const tokens = await readStaged(path.join(staging, 'lib', 'tokens', 'tokens.css'), MAX_TOKENS_BYTES);
   const template = await readTemplate(staging);
+  if (attempt.cancelled) {
+    throw abandoned();
+  }
   const opened = await openPage({ viewport: { width: params.width, height: params.height }, deviceScaleFactor: params.scale, colorScheme: params.theme });
+  attempt.opened = opened;
   try {
+    if (attempt.cancelled) {
+      throw abandoned();
+    }
     const { page } = opened;
     const current = createSession({ ...opened, cdp: await page.context().newCDPSession(page) }, params);
     const errors = [];
-    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('pageerror', (error) => {
+      if (errors.length < MAX_PAGE_ERRORS) {
+        errors.push(error.message.slice(0, MAX_PAGE_ERROR_LENGTH));
+      }
+    });
     await applyWindow(current);
-    await page.setContent(pageHtml(params.theme));
+    await page.route(PAGE_URL, (route) => route.fulfill({ contentType: 'text/html', body: pageHtml(params.theme) }));
+    await page.goto(PAGE_URL);
     await page.evaluate(installContent, { tokens, template });
     await page.addScriptTag({ content: code });
     const probe = await page.evaluate(probePage, params.tags);
     await startScreencast(current);
+    if (attempt.cancelled) {
+      throw abandoned();
+    }
     session = current;
     return { ...probe, errors };
   } catch (error) {
@@ -231,17 +283,20 @@ async function start(params) {
   }
 }
 
-export function open(params) {
+export function open(params, { budgetMs = OPEN_BUDGET_MS } = {}) {
   return serial(async () => {
     checkDir(params.dir);
     checkWindow(params);
     checkTheme(params.theme);
     checkTags(params.tags);
     await closeSession();
-    const budget = startBudget(OPEN_BUDGET_MS, `opening the playground did not finish within ${OPEN_BUDGET_MS / 1000} s`);
+    const budget = startBudget(budgetMs, `opening the playground did not finish within ${budgetMs / 1000} s`);
+    const attempt = { cancelled: false, opened: null };
     try {
-      return await budget.bound(start(params));
+      return await budget.bound(start(params, attempt));
     } catch (error) {
+      attempt.cancelled = true;
+      await attempt.opened?.close();
       throw error instanceof ServiceError ? error : new ServiceError('render', firstLine(error, 'the playground page could not be opened'));
     }
   });
@@ -277,9 +332,12 @@ async function within(work) {
 export function setTemplate(params) {
   return serial(() => {
     const staging = checkDir(params.dir);
-    return within(async ({ page, shape }) => {
-      await page.evaluate(replaceBody, await readTemplate(staging));
-      await page.evaluate(applyShape, shape);
+    return within(async (current) => {
+      await current.page.evaluate(replaceBody, await readTemplate(staging));
+      if (current.shape !== 'round') {
+        await current.page.evaluate(applyShape, current.shape);
+      }
+      current.markChanged();
       return {};
     });
   });
@@ -300,14 +358,16 @@ export function apply({ tokens, overrides, theme, shape }) {
       throw invalid(`"shape" must be one of ${SHAPES.join(', ')}`);
     }
     return within(async (current) => {
-      if (theme !== undefined) {
+      if (theme !== undefined && theme !== current.theme) {
         await current.page.emulateMedia({ colorScheme: theme });
+        current.theme = theme;
       }
       await current.page.evaluate(applyPage, { tokens, overrides, theme });
-      if (shape !== undefined) {
-        current.shape = shape;
+      if (shape !== undefined && shape !== current.shape) {
         await current.page.evaluate(applyShape, shape);
+        current.shape = shape;
       }
+      current.markChanged();
       return {};
     });
   });
@@ -336,6 +396,8 @@ const waitForFrame = (current) =>
       resolve();
     });
   });
+
+const imageRefusal = (current, key) => (current.refused?.key === key ? current.refused.error : null);
 
 async function acknowledge(current) {
   for (const sessionId of current.pendingAcks.splice(0)) {
@@ -370,9 +432,21 @@ export function frame({ after, format = 'jpeg' }) {
       }
       const { seq } = current;
       current.fresh = false;
-      const image = await encode(current, format);
-      await acknowledge(current);
-      return { seq, changed: true, ...image };
+      const key = `${seq} ${format}`;
+      try {
+        const refusal = imageRefusal(current, key);
+        if (refusal !== null) {
+          throw refusal;
+        }
+        return { seq, changed: true, ...(await encode(current, format)) };
+      } catch (error) {
+        if (error instanceof ServiceError && error.kind === 'tooLarge') {
+          current.refused = { key, error };
+        }
+        throw error;
+      } finally {
+        await acknowledge(current);
+      }
     });
   });
 }
@@ -448,8 +522,12 @@ export function input({ events }) {
         throw invalid(`"events" must hold 1 to ${MAX_EVENTS} events`);
       }
       events.forEach((event) => checkEvent(event, current));
-      for (const event of events) {
-        await relay(current.page, event);
+      try {
+        for (const event of events) {
+          await relay(current.page, event);
+        }
+      } finally {
+        current.markChanged();
       }
       return {};
     }),
