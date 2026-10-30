@@ -553,6 +553,8 @@ mod uigen_lot4_review_tests;
 #[cfg(test)]
 mod uigen_place_tests;
 #[cfg(test)]
+mod uigen_theme_tests;
+#[cfg(test)]
 mod variable_tests;
 #[cfg(test)]
 mod variables_behaviour_tests;
