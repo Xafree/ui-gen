@@ -216,7 +216,7 @@ fn a_staged_import_fills_an_import_page_and_leaves_the_current_page_and_the_comp
 
     undo(&mut bench);
     assert_eq!(bench.document_text(0), before, "one undo removes the page and all the import added");
-    assert_eq!(bench.session.undo_depth(), depth);
+    assert_eq!(bench.session.undo_depth().0, depth.0);
 }
 
 // covers: E4-1.2
