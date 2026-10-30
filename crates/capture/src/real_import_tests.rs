@@ -179,3 +179,103 @@ fn real_import_of_an_unknown_component_fails_with_component_not_found_and_leaves
     assert_eq!(document_text(&session), before);
     assert_eq!(session.undo_depth(), depth);
 }
+
+fn staged_import(session: &mut Session, component: &str, styles: &[&str], sizes: &[&str], states: &[&str]) -> Value {
+    let params = json!({"package": PACKAGE, "component": component, "styles": styles, "sizes": sizes, "states": states, "stage": true});
+    let started = session.execute(IMPORT, &params).unwrap();
+    match wait_for(session, IMPORT, &started).outcome {
+        Ok(result) => result,
+        Err(error) => panic!("the staged import of {component} failed: {}", error.message),
+    }
+}
+
+fn enum_values(component: &Value, prop: &str) -> Vec<String> {
+    let props = component["props"].as_array().unwrap_or_else(|| panic!("no props in {component}"));
+    let found = props.iter().find(|candidate| candidate["name"] == json!(prop)).unwrap_or_else(|| panic!("no `{prop}` prop in {component}"));
+    assert_eq!(found["type"], json!("enum"), "{found}");
+    found["values"].as_array().unwrap().iter().filter_map(|value| value.as_str().map(str::to_string)).collect()
+}
+
+fn page_named(session: &Session, page: NodeId) -> (String, Vec<NodeId>) {
+    let node = document(session).node(page).unwrap();
+    (node.name.clone(), node.children.clone())
+}
+
+fn assert_one_set_of(session: &Session, page: NodeId, page_name: &str, name: &str, variants: usize) -> NodeId {
+    let (actual_name, children) = page_named(session, page);
+    assert_eq!(actual_name, page_name);
+    let [set] = children.as_slice() else { panic!("page {actual_name} holds {} layers, expected one set", children.len()) };
+    let node = document(session).node(*set).unwrap();
+    assert!(matches!(node.kind, NodeKind::ComponentSet { .. }), "{:?}", node.kind);
+    assert_eq!(node.name, name);
+    assert_eq!(node.children.len(), variants);
+    *set
+}
+
+// covers: E4-7.1
+#[test]
+#[ignore = "downloads @mui/material from npm and drives Chromium; run by hand"]
+fn real_staged_import_lands_in_the_import_page_and_placing_it_makes_the_page_a_button_then_archives_it() {
+    let (_dir, mut session) = project_with_mui("real-import-stage");
+    let blank = session.docs[session.active].page;
+    assert!(page_children(&session).is_empty(), "the new project's page is not empty");
+
+    let started = session.execute("uigen.listComponents", &json!({"package": PACKAGE})).unwrap();
+    let listing =
+        wait_for(&mut session, "uigen.listComponents", &started).outcome.unwrap_or_else(|error| panic!("listComponents failed: {}", error.message));
+    let components = listing["components"].as_array().expect("listComponents lists components");
+    let button = components.iter().find(|candidate| candidate["name"] == json!("Button")).expect("listComponents lists Button");
+    let variants = enum_values(button, "variant");
+    assert!(variants.iter().any(|value| value == "contained") && variants.iter().any(|value| value == "outlined"), "{variants:?}");
+    let sizes = enum_values(button, "size");
+    assert!(sizes.iter().any(|value| value == "small") && sizes.iter().any(|value| value == "medium"), "{sizes:?}");
+    let cached = session.execute("uigen.listComponents", &json!({"package": PACKAGE})).unwrap();
+    assert_eq!(cached["cached"], json!(true), "{cached}");
+
+    let all_states = ["Default", "Hover", "Pressed", "Disabled"];
+    let staged = staged_import(&mut session, "Button", &["contained", "outlined"], &["small", "medium"], &all_states);
+    assert_eq!(staged["variants"], json!(16), "{staged}");
+    let import_page = figcraft_engine::params::id_of(&staged["page"]).unwrap_or_else(|| panic!("no page in {staged}"));
+    assert_one_set_of(&session, import_page, &format!("- Imported · {PACKAGE} {VERSION}"), "Button", 16);
+    assert!(page_children(&session).is_empty(), "the staged import wrote on the current page");
+
+    let chip = staged_import(&mut session, "Chip", &["filled"], &["medium"], &["Default"]);
+    let chip_variants = chip["variants"]
+        .as_u64()
+        .and_then(|count| usize::try_from(count).ok())
+        .filter(|count| *count >= 1)
+        .unwrap_or_else(|| panic!("no variants in {chip}"));
+    let listed = session.execute("uigen.imported", &json!({})).unwrap();
+    let section = &listed["sections"][0];
+    assert_eq!(section["package"], json!(PACKAGE), "{listed}");
+    let sets = section["components"].as_array().expect("the section lists its sets");
+    let find = |name: &str| sets.iter().find(|candidate| candidate["name"] == json!(name)).unwrap_or_else(|| panic!("no {name} in {listed}"));
+    assert_eq!(find("Button")["variants"], json!(16));
+    let (button_set, chip_set) = (find("Button")["set"].clone(), find("Chip")["set"].clone());
+    let before = document_text(&session);
+    let pages_before = document(&session).pages.len();
+
+    let first = session.execute("uigen.placeImported", &json!({"set": button_set})).unwrap();
+    assert_eq!(first["replaced"], Value::Null, "{first}");
+    assert_eq!(first["name"], json!("Button"), "{first}");
+    assert_eq!(figcraft_engine::params::id_of(&first["page"]), Some(blank), "{first}");
+    assert_one_set_of(&session, blank, "Button", "Button", 16);
+    assert_eq!(document(&session).pages.len(), pages_before);
+
+    let second = session.execute("uigen.placeImported", &json!({"set": chip_set})).unwrap();
+    assert_eq!(second["name"], json!("Chip"), "{second}");
+    assert_eq!(second["replaced"]["name"], json!("Button"), "{second}");
+    let archive = figcraft_engine::params::id_of(&second["replaced"]["page"]).unwrap_or_else(|| panic!("no archive page in {second}"));
+    assert_eq!(
+        document(&session).pages.iter().position(|page| *page == archive),
+        document(&session).pages.iter().position(|page| *page == blank).map(|at| at + 1)
+    );
+    assert_one_set_of(&session, blank, "Chip", "Chip", chip_variants);
+    assert_one_set_of(&session, archive, "Button", "Button", 16);
+    assert_eq!(document(&session).pages.len(), pages_before + 1);
+
+    session.execute("edit.undo", &json!({})).unwrap();
+    session.execute("edit.undo", &json!({})).unwrap();
+    assert!(page_children(&session).is_empty(), "two undos do not give back the blank page");
+    assert_eq!(document_text(&session), before);
+}
