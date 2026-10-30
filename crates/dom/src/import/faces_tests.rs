@@ -29,6 +29,24 @@ fn a_text_face_is_the_platform_font_else_the_first_family_of_the_stack_in_tree_o
 
 // covers: E5-1.1
 #[test]
+fn the_weight_of_a_face_is_the_one_chromium_drew_not_the_requested_css_weight() {
+    let drawn = |style: Value| text_faces(&snapshot(element_with(json!({}), json!([text("a", style)]))))[0].weight;
+
+    let regular_face = json!({ "fontWeight": "500", "platformFont": "Roboto Condensed", "platformFontPostScript": "RobotoCondensed-Regular" });
+    let medium_face = json!({ "fontWeight": "400", "platformFont": "Roboto Condensed", "platformFontPostScript": "RobotoCondensed-Medium" });
+    let bold_mt = json!({ "fontWeight": "500", "platformFont": "Arial", "platformFontPostScript": "Arial-BoldMT" });
+    let plain_mt = json!({ "fontWeight": "700", "platformFont": "Arial", "platformFontPostScript": "ArialMT" });
+    let named_family = json!({ "fontWeight": "400", "platformFont": "Segoe UI Semibold" });
+
+    assert_eq!(drawn(regular_face), 400);
+    assert_eq!(drawn(medium_face), 500);
+    assert_eq!(drawn(bold_mt), 700);
+    assert_eq!(drawn(plain_mt), 400);
+    assert_eq!(drawn(named_family), 600);
+}
+
+// covers: E5-1.1
+#[test]
 fn hidden_elements_and_unreadable_sizes_are_not_faces_of_their_own() {
     let hidden = json!({ "type": "element", "tag": "div", "box": bounds(20.0, 20.0, 5.0, 5.0), "style": { "display": "none" }, "children": [text("gone", json!({}))] });
     let root = element_with(json!({}), json!([hidden, text("kept", json!({ "fontSize": "NaNpx", "fontWeight": "NaN" }))]));
