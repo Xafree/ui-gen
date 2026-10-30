@@ -1,5 +1,8 @@
+pub(crate) mod measure;
 mod pixels;
 mod text;
+
+use serde::{Deserialize, Serialize};
 
 pub use pixels::{difference_image, pixel_diff};
 pub use text::{text_verdict, weight_of_font_style};
@@ -58,9 +61,11 @@ pub struct PixelReport {
     pub text_percent: f64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RefText {
+    #[serde(rename = "box")]
     pub box_: [f64; 4],
+    #[serde(default)]
     pub line: Option<[f64; 4]>,
     pub family: String,
     pub size: f64,

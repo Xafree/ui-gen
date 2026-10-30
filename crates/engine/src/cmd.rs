@@ -23,6 +23,7 @@ pub mod styles;
 pub mod text;
 pub mod uigen;
 pub mod uigen_catalog;
+pub mod uigen_compare;
 pub mod uigen_import;
 pub mod uigen_place;
 pub mod uigen_theme;
@@ -96,6 +97,7 @@ fn registry() -> &'static Registry {
         list.extend(uigen::specs());
         list.extend(uigen_import::specs());
         list.extend(uigen_catalog::specs());
+        list.extend(uigen_compare::specs());
         list.extend(uigen_place::specs());
         list.extend(uigen_theme::specs());
         list.extend(variables::specs());

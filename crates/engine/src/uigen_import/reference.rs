@@ -11,6 +11,7 @@ use serde_json::json;
 
 use super::assemble::Variant;
 use super::pending::Request;
+use crate::uigen_compare::RefText;
 
 pub const REFERENCE_KEY: &str = "uigen.reference";
 pub const OPTIONS_KEY: &str = "uigen.importOptions";
@@ -20,17 +21,6 @@ const MAX_BYTES: usize = 16 * 1024;
 const MAX_PNG_CHARS: usize = 512;
 const CAPTURES_DIR: &str = ".uigen/captures/";
 const SHORT_FAMILY_CHARS: usize = 64;
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RefText {
-    #[serde(rename = "box")]
-    pub box_: [f64; 4],
-    #[serde(default)]
-    pub line: Option<[f64; 4]>,
-    pub family: String,
-    pub size: f64,
-    pub weight: u16,
-}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ThemeReference {

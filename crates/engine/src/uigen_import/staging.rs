@@ -10,7 +10,7 @@ use super::pending::Request;
 use crate::Result;
 
 pub(crate) const IMPORT_PAGE_KEY: &str = "uigen.importPage";
-pub(super) const SOURCE_KEY: &str = "uigen.source";
+pub(crate) const SOURCE_KEY: &str = "uigen.source";
 
 pub(crate) fn import_page_name(package: &str, version: &str) -> String {
     format!("- Imported · {package} {version}")
