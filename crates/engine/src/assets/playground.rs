@@ -16,6 +16,9 @@ mod overrides;
 mod random;
 mod settings;
 mod targets;
+mod templates;
+#[cfg(test)]
+mod templates_alt_tests;
 
 pub use history::History;
 #[cfg_attr(not(test), expect(unused_imports, reason = "the playground session of the next task is the first caller"))]
@@ -24,6 +27,7 @@ pub use overrides::{Effective, Overrides, SettingError, effective, overrides_css
 pub use random::random_settings;
 pub use settings::{Mode, Neutral, RadiusPreset, RadiusShape, Settings};
 pub use targets::{Targets, targets};
+pub use templates::{Composed, Template, compose};
 
 /// The component a playground for `target` shows: an instance's component, a component or a
 /// component set itself. None for other layers.

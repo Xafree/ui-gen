@@ -1,0 +1,61 @@
+<style>
+.pg-mail{display:grid;grid-template-columns:200px minmax(260px,360px) 1fr;min-height:100vh}
+.pg-mail h1,.pg-mail h2{margin:0;font-size:1.125em}
+.pg-mail nav,.pg-mail .pg-list,.pg-mail article{display:grid;align-content:start;gap:12px;padding:16px}
+.pg-mail ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.pg-mail nav li{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pg-message{display:flex;align-items:flex-start;gap:12px}
+.pg-message div{display:grid;gap:2px;flex:1}
+.pg-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pg-meta{display:flex;align-items:center;gap:12px}
+</style>
+<main class="pg-mail">
+  <nav aria-label="Dossiers">
+    <h1>Mail</h1>
+    <uigen-use name="Button" variant="primary" size="medium">Nouveau message</uigen-use>
+    <ul>
+      <li><span>Boîte de réception</span><uigen-use name="Badge" variant="primary">4</uigen-use></li>
+      <li><span>Envoyés</span></li>
+      <li><span>Brouillons</span><uigen-use name="Badge" variant="neutral">2</uigen-use></li>
+      <li><span>Archives</span></li>
+    </ul>
+  </nav>
+  <section class="pg-list" aria-label="Messages">
+    <uigen-use name="Text field" label="Rechercher" placeholder="Rechercher dans les messages"></uigen-use>
+    <uigen-use name="Divider" alt="Separator"></uigen-use>
+    <ul>
+      <li class="pg-message">
+        <uigen-use name="Checkbox" label="Sélectionner le message de Camille" checked></uigen-use>
+        <uigen-use name="Avatar" size="small" label="Camille Durand"></uigen-use>
+        <div><strong>Camille Durand</strong><span>Planning de la semaine prochaine</span></div>
+      </li>
+      <li class="pg-message">
+        <uigen-use name="Checkbox" label="Sélectionner le message de Louis"></uigen-use>
+        <uigen-use name="Avatar" size="small" label="Louis Martin"></uigen-use>
+        <div><strong>Louis Martin</strong><span>Maquettes validées</span></div>
+      </li>
+      <li class="pg-message">
+        <uigen-use name="Checkbox" label="Sélectionner le message d’Inès"></uigen-use>
+        <uigen-use name="Avatar" size="small" label="Inès Garnier"></uigen-use>
+        <div><strong>Inès Garnier</strong><span>Compte rendu de la réunion</span></div>
+      </li>
+    </ul>
+  </section>
+  <article aria-label="Message ouvert">
+    <div class="pg-toolbar">
+      <uigen-use name="Button" variant="secondary" size="small">Répondre</uigen-use>
+      <uigen-use name="Button" variant="secondary" size="small">Transférer</uigen-use>
+      <uigen-use name="Button" variant="ghost" size="small" disabled>Archiver</uigen-use>
+    </div>
+    <h2>Planning de la semaine prochaine</h2>
+    <div class="pg-meta">
+      <uigen-use name="Avatar" size="medium" label="Camille Durand"></uigen-use>
+      <span>Camille Durand, lundi 09:12</span>
+      <uigen-use name="Badge" variant="primary">Nouveau</uigen-use>
+    </div>
+    <p>Bonjour, voici le planning prévu pour la semaine prochaine. Merci de confirmer vos disponibilités avant jeudi.</p>
+    <uigen-use name="Divider" alt="Separator"></uigen-use>
+    <uigen-use name="Text field" label="Votre réponse" placeholder="Écrire une réponse"></uigen-use>
+    <div class="pg-toolbar"><uigen-use name="Button" variant="primary" size="medium">Envoyer</uigen-use></div>
+  </article>
+</main>

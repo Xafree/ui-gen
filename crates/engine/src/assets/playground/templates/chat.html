@@ -1,0 +1,45 @@
+<style>
+.pg-chat{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+.pg-chat h1,.pg-chat h2{margin:0;font-size:1.125em}
+.pg-chat aside,.pg-chat section{display:grid;align-content:start;gap:12px;padding:16px}
+.pg-chat ul{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.pg-conversation{display:flex;align-items:center;gap:12px}
+.pg-conversation div{display:grid;gap:2px;flex:1}
+.pg-thread{display:grid;gap:12px;align-content:start}
+.pg-bubble{display:grid;gap:4px;max-width:420px}
+.pg-out{justify-self:end}
+.pg-composer{display:flex;align-items:flex-end;gap:12px}
+</style>
+<main class="pg-chat">
+  <aside aria-label="Conversations">
+    <h1>Chat</h1>
+    <uigen-use name="Text field" label="Rechercher" placeholder="Rechercher une conversation"></uigen-use>
+    <ul>
+      <li class="pg-conversation">
+        <uigen-use name="Avatar" size="medium" label="Camille Durand"></uigen-use>
+        <div><strong>Camille Durand</strong><span>On se voit à 14 h ?</span></div>
+        <uigen-use name="Badge" variant="primary">2</uigen-use>
+      </li>
+      <li class="pg-conversation">
+        <uigen-use name="Avatar" size="medium" label="Atelier Lune"></uigen-use>
+        <div><strong>Atelier Lune</strong><span>Le fichier est prêt</span></div>
+      </li>
+      <li class="pg-conversation">
+        <uigen-use name="Avatar" size="medium" label="Louis Martin"></uigen-use>
+        <div><strong>Louis Martin</strong><span>Merci beaucoup</span></div>
+      </li>
+    </ul>
+  </aside>
+  <section aria-label="Conversation avec Camille Durand">
+    <h2>Camille Durand</h2>
+    <div class="pg-thread">
+      <uigen-use name="Card" variant="outlined"><div class="pg-bubble"><span>Bonjour, as-tu eu le temps de relire la proposition ?</span><small>09:41</small></div></uigen-use>
+      <div class="pg-out"><uigen-use name="Card" variant="filled"><div class="pg-bubble"><span>Oui, je te fais un retour dans la matinée.</span><small>09:44</small></div></uigen-use></div>
+      <uigen-use name="Card" variant="outlined"><div class="pg-bubble"><span>Parfait, on se voit à 14 h ?</span><small>09:45</small></div></uigen-use>
+    </div>
+    <div class="pg-composer">
+      <uigen-use name="Text field" label="Votre message" placeholder="Écrire un message"></uigen-use>
+      <uigen-use name="Button" variant="primary" size="medium">Envoyer</uigen-use>
+    </div>
+  </section>
+</main>
