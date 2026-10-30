@@ -108,6 +108,7 @@ mod prefs;
 pub mod project;
 mod session;
 mod uigen_import;
+mod uigen_theme;
 mod view_state;
 
 pub use derived::{changed_nodes, normalize};
@@ -118,6 +119,7 @@ pub use uigen_import::{
     ImportSection, ImportedSet, Inspected, InspectedComponent, InspectedProp, MAX_RENDERS, PropKind, is_import_page, render_count,
     sections as imported_sections,
 };
+pub use uigen_theme::{Swatch, ThemeInfo, themes as token_themes};
 pub use view_state::ViewState;
 
 /// The editing session: open documents, the current tool, clipboard and prefs.
