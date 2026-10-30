@@ -17,6 +17,32 @@ const WHITE: [u8; 3] = [255, 255, 255];
 const BLACK: [u8; 3] = [0, 0, 0];
 const RED: [u8; 4] = [255, 0, 0, 255];
 
+// covers: E5-2.4
+#[test]
+fn a_raster_without_pixels_or_of_the_wrong_length_is_refused() {
+    assert!(Raster::new(2, 1, vec![0; 8]).is_ok());
+    assert!(Raster::new(0, 1, Vec::new()).is_err());
+    assert!(Raster::new(1, 0, Vec::new()).is_err());
+    assert!(Raster::new(2, 1, vec![0; 7]).is_err());
+    assert!(Raster::new(u32::MAX, u32::MAX, vec![0; 4]).is_err());
+}
+
+// covers: E5-2.4
+#[test]
+fn a_malformed_raster_does_not_panic_the_measure() {
+    let good = solid(2, 2, WHITE);
+    let malformed = [
+        Raster { width: 2, height: 2, rgba: vec![0; 3] },
+        Raster { width: 0, height: 0, rgba: Vec::new() },
+        Raster { width: u32::MAX, height: u32::MAX, rgba: vec![0; 4] },
+    ];
+    for bad in &malformed {
+        assert!(pixel_diff(bad, &good, &[]).size_mismatch);
+        assert!(pixel_diff(&good, bad, &[]).size_mismatch);
+        let _ = difference_image(bad, &good);
+    }
+}
+
 fn solid(width: usize, height: usize, rgb: [u8; 3]) -> Raster {
     let rgba = [rgb[0], rgb[1], rgb[2], 255].repeat(width * height);
     Raster { width: u32::try_from(width).unwrap(), height: u32::try_from(height).unwrap(), rgba }
