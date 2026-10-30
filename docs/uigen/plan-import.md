@@ -375,6 +375,13 @@ anti-crénelage écarté comme `pixelmatch`). Deux verdicts :
 | Formes | pixels hors des boîtes de texte : **moins de 1 %** d'écart pour `ok` (le seuil ne s'assouplit jamais) ; les pixels du texte sont une information |
 | Texte | par ordre, même famille (casse, ponctuation et suffixes de style ignorés), même taille, même graisse, position et largeur mesurée à 1 px près, police installée, calque à taille automatique |
 
+**Le rendu de la bibliothèque se mesure sur le fond de page de la capture.** Le service de capture photographie
+l'élément sur une page opaque (`#ffffff` en clair, `#1e1e1e` en sombre, `BACKGROUNDS` de `sidecar/render.mjs`) : les PNG
+sont en RGB sans alpha. Le rendu du moteur est transparent là où la variante ne peint rien (bouton `outlined`) ; avant la
+mesure, `uigen_compare::library_raster` le compose sur le même fond (`page_background`, un test lit `render.mjs` pour
+garder les deux valeurs égales). Les images des lignes, Superposition et Différence montrent ce même rendu opaque.
+`pixel_diff`, `difference_image`, le seuil de 1 % et la tolérance de 1 px ne changent pas.
+
 **La taille d'une variante se compare à 1 px près** (`GEOMETRY_TOLERANCE_PX`, décision de l'utilisateur) : largeur
 et hauteur diffèrent chacune d'au plus 1 px, la ligne n'est pas `sizeMismatch`, les deux images sont rognées à leur
 intersection avant `pixel_diff` (la colonne en trop n'est pas comptée) et la ligne rend quand même les deux tailles
@@ -418,6 +425,16 @@ Hover), lancé à la main le 30 octobre 2026. Avant correction, `render_node` re
   `maxDwidth` −0,39). L'essai réel n'affirme le verdict du texte et le statut que si la police n'est pas en cause
   (« police absente »).
 - Une différence de taille de plus de 1 px reste un `sizeMismatch`.
+- **Essai réel `outlined`** (`real_compare_of_every_style_size_and_state_of_the_mui_button_matches_its_original`, 8 variantes
+  `contained`/`outlined` × `small`/`medium` × Default/Hover, lancé à la main le 30 octobre 2026). Avant la composition sur
+  le fond, les quatre lignes `outlined` étaient `ko` (97,57 %, 81,17 %, 98,63 % et 86,95 % d'écart) : le rendu
+  transparent s'opposait à un PNG opaque. Après : `contained` 0,0 % (quatre lignes `ok`), `outlined` Default `small` et
+  `medium` 0,0 % (`ok`), `outlined` Hover `medium` 0,572 % (`ok`) et `outlined` Hover `small` **1,012 %**
+  (10 pixels sur 988) : `ko`. Ces 10 pixels sont les anti-crénelages des quatre coins arrondis (rayon 4) de la bordure,
+  pleine `rgb(25, 118, 210)` au survol : le moteur y couvre plus que Chromium (par exemple (2, 0) : 96 contre 140 sur le
+  canal rouge ; Default a le même écart, mais la bordure à 50 % le laisse sous le seuil de couleur). Écart de
+  rastérisation des coins, sans rapport avec le fond ; rien n'est assoupli, la ligne reste `ko`. Le texte est `ok` sur
+  les huit lignes.
 - Les états Hover, Pressed ne sont pas forcés sur la bibliothèque : la comparaison mesure le rendu de la variante.
 - `uigen.updateSource` recapture dans la version courante de la source ; une version qui change se règle par
   `project.setSourceVersion` d'abord.

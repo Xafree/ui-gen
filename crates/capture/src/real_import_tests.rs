@@ -373,7 +373,11 @@ fn size_of(size: &Value) -> (u32, u32) {
 }
 
 fn assert_rows_match_the_original(result: &Value) {
-    assert_eq!(compared_rows(result).len(), 2, "{result}");
+    assert_rows_count_match_the_original(result, 2);
+}
+
+fn assert_rows_count_match_the_original(result: &Value, count: usize) {
+    assert_eq!(compared_rows(result).len(), count, "{result}");
     for row in compared_rows(result) {
         let percent = row["shapes"]["percent"].as_f64().unwrap_or(f64::NAN);
         assert!(percent < 1.0, "shapes differ by {percent} %: {row}");
@@ -423,6 +427,25 @@ fn is_colour(doc: &Document, id: &str) -> bool {
 
 fn variable_collection(doc: &Document, id: &str) -> String {
     doc.variables.variables.iter().find(|variable| variable.id == id).map(|variable| variable.collection.clone()).unwrap_or_default()
+}
+
+// covers: E5-8.1
+#[test]
+#[ignore = "downloads @mui/material from npm and drives Chromium; run by hand"]
+fn real_compare_of_every_style_size_and_state_of_the_mui_button_matches_its_original() {
+    let (_dir, mut session) = project_with_mui("real-compare-styles");
+    let staged = staged_import(&mut session, "Button", &["contained", "outlined"], &["small", "medium"], &["Default", "Hover"]);
+    assert_eq!(staged["variants"], json!(8), "{staged}");
+    let listed = run(&mut session, "uigen.imported", &json!({}));
+    let placed = run(&mut session, "uigen.placeImported", &json!({"set": listed["sections"][0]["components"][0]["set"]}));
+
+    let light = run(&mut session, COMPARE, &json!({"set": placed["set"], "theme": "light"}));
+    print_rows("light", &light);
+    eprintln!("summary {}", light["summary"]);
+
+    let outlined = compared_rows(&light).iter().filter(|row| row["style"] == json!("outlined")).count();
+    assert_eq!(outlined, 4, "{light}");
+    assert_rows_count_match_the_original(&light, 8);
 }
 
 // covers: E5-8.1

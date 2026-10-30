@@ -272,13 +272,35 @@ pub(crate) fn follow(scratch: &mut Document, variant: NodeId, theme: Theme) {
     crate::normalize(scratch, &before);
 }
 
-pub(crate) fn render_library(scratch: &Document, variant: NodeId) -> Result<Raster, &'static str> {
+const LIGHT_PAGE: [u8; 3] = [255, 255, 255];
+const DARK_PAGE: [u8; 3] = [30, 30, 30];
+
+pub(crate) fn page_background(theme: Theme) -> [u8; 3] {
+    match theme {
+        Theme::Light => LIGHT_PAGE,
+        Theme::Dark => DARK_PAGE,
+    }
+}
+
+fn over(background: [u8; 3], rgba: &mut [u8]) {
+    for pixel in rgba.as_chunks_mut::<4>().0 {
+        let alpha = u32::from(pixel[3]);
+        for (channel, behind) in pixel.iter_mut().zip(background) {
+            *channel = ((u32::from(*channel) * alpha + u32::from(behind) * (255 - alpha) + 127) / 255) as u8;
+        }
+        pixel[3] = 255;
+    }
+}
+
+pub(crate) fn render_library(scratch: &Document, variant: NodeId, theme: Theme) -> Result<Raster, &'static str> {
     let bounds = scratch.world_bounds(variant).ok_or(NOT_RENDERED)?;
     if !(bounds.width() <= f64::from(MAX_SIDE) && bounds.height() <= f64::from(MAX_SIDE)) {
         return Err(LIBRARY_TOO_LARGE);
     }
     let pixels = render_area(scratch, &[variant], bounds, 1.0).ok_or(NOT_RENDERED)?;
-    Raster::new(pixels.width(), pixels.height(), to_rgba8(&pixels)).map_err(|_| NOT_RENDERED)
+    let mut rgba = to_rgba8(&pixels);
+    over(page_background(theme), &mut rgba);
+    Raster::new(pixels.width(), pixels.height(), rgba).map_err(|_| NOT_RENDERED)
 }
 
 fn weight_of(style: &TextStyle) -> u16 {
@@ -354,7 +376,7 @@ impl Context<'_> {
         };
         row.original = size_of(&original);
         follow(&mut self.scratch, id, self.theme);
-        let library = match render_library(&self.scratch, id) {
+        let library = match render_library(&self.scratch, id, self.theme) {
             Ok(library) => library,
             Err(reason) => return row.without(Status::NotComparable, reason),
         };

@@ -554,6 +554,8 @@ mod transform_behaviour_tests;
 #[cfg(test)]
 mod uigen_catalog_tests;
 #[cfg(test)]
+mod uigen_compare_background_tests;
+#[cfg(test)]
 mod uigen_compare_command_tests;
 #[cfg(test)]
 mod uigen_compare_pixels_tests;
