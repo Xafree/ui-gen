@@ -236,50 +236,57 @@ impl Walk<'_> {
 pub fn layer_changes(before: &Document, now: &Document, id: NodeId) -> Vec<PropChange> {
     let (Some(b), Some(a)) = (before.node(id), now.node(id)) else { return Vec::new() };
     let mut out = Vec::new();
-    let mut put = |section: &'static str, property: &str, before: String, after: String| {
-        if before != after {
-            out.push(PropChange::new(section, property.to_string(), before, after));
-        }
-    };
     let parent_name = |d: &Document, n: &Node| n.parent.and_then(|p| d.node(p)).map(|p| p.name.clone()).unwrap_or_default();
     if b.parent != a.parent {
-        put("Layer", "parent", parent_name(before, b), parent_name(now, a));
+        put(&mut out, "Layer", "parent", parent_name(before, b), parent_name(now, a));
     } else if let Some((ib, ia)) = order(before, now, id) {
-        put("Layer", "order", ib.to_string(), ia.to_string());
+        put(&mut out, "Layer", "order", ib.to_string(), ia.to_string());
     }
     // Unchanged layers (shared with the snapshot, or equal) only move with their parent.
     let same = before.node_arc(id).zip(now.node_arc(id)).is_some_and(|(x, y)| std::sync::Arc::ptr_eq(x, y)) || b.same_design(a);
-    if same {
-        return out;
+    if !same {
+        out.extend(design_changes(before, id, now, id));
     }
-    put("Layer", "name", b.name.clone(), a.name.clone());
+    out
+}
+
+fn put(out: &mut Vec<PropChange>, section: &'static str, property: &str, before: String, after: String) {
+    if before != after {
+        out.push(PropChange::new(section, property.to_string(), before, after));
+    }
+}
+
+/// What differs in the design of layer `before_id` of `before` and layer `now_id` of `now`, whatever
+/// their ids and places: two captures of one component hold the same layer under different ids.
+pub(crate) fn design_changes(before: &Document, before_id: NodeId, now: &Document, now_id: NodeId) -> Vec<PropChange> {
+    let (Some(b), Some(a)) = (before.node(before_id), now.node(now_id)) else { return Vec::new() };
+    let mut out = Vec::new();
+    put(&mut out, "Layer", "name", b.name.clone(), a.name.clone());
     let shown = |n: &Node| if n.visible { "visible" } else { "hidden" }.to_string();
-    put("Layer", "visibility", shown(b), shown(a));
+    put(&mut out, "Layer", "visibility", shown(b), shown(a));
     if b.blend != a.blend {
-        put("Layer", "blend", b.blend.label().to_string(), a.blend.label().to_string());
+        put(&mut out, "Layer", "blend", b.blend.label().to_string(), a.blend.label().to_string());
     }
     if a.kind.is_frame_like() && b.kind.is_frame_like() {
         let yes = |v: bool| if v { "on" } else { "off" }.to_string();
-        put("Layer", "clip content", yes(b.clip), yes(a.clip));
+        put(&mut out, "Layer", "clip content", yes(b.clip), yes(a.clip));
     }
     if let (NodeKind::Text(tb), NodeKind::Text(ta)) = (&b.kind, &a.kind) {
-        put("Layer", "text", quoted(&tb.characters), quoted(&ta.characters));
+        put(&mut out, "Layer", "text", quoted(&tb.characters), quoted(&ta.characters));
     }
     if let (NodeKind::Instance { component: cb, props: pb }, NodeKind::Instance { component: ca, props: pa }) = (&b.kind, &a.kind) {
         let main = |d: &Document, c: &NodeId| d.node(*c).map(|n| n.name.clone()).unwrap_or_else(|| c.to_string());
-        put("Layer", "component", main(before, cb), main(now, ca));
+        put(&mut out, "Layer", "component", main(before, cb), main(now, ca));
         let keys: BTreeSet<&String> = pb.keys().chain(pa.keys()).collect();
         for k in keys {
             let v = |m: &std::collections::BTreeMap<String, serde_json::Value>| m.get(k).map(value_text).unwrap_or_else(|| "default".into());
-            put("Layer", k.split('#').next().unwrap_or(k), v(pb), v(pa));
+            put(&mut out, "Layer", k.split('#').next().unwrap_or(k), v(pb), v(pa));
         }
     }
     if b.kind.type_name() != a.kind.type_name() {
-        put("Layer", "type", b.kind.type_name().to_string(), a.kind.type_name().to_string());
+        put(&mut out, "Layer", "type", b.kind.type_name().to_string(), a.kind.type_name().to_string());
     }
-    for c in section_changes(&properties(before, id), &properties(now, id)) {
-        out.push(c);
-    }
+    out.extend(section_changes(&properties(before, before_id), &properties(now, now_id)));
     out
 }
 

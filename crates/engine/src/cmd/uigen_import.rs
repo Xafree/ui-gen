@@ -144,7 +144,7 @@ fn source_of(s: &Session, p: &Value) -> Result<(String, Source, String)> {
     Ok((absolute_root(IMPORT, &binding.root)?, source.clone(), binding.root.clone()))
 }
 
-fn import_component(s: &mut Session, p: &Value) -> Result<Value> {
+pub(super) fn import_component(s: &mut Session, p: &Value) -> Result<Value> {
     let (root, source, project_root) = source_of(s, p)?;
     let stage = staged(p, &source)?;
     let animations = flag(p, "animations")?.unwrap_or(true);
