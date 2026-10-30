@@ -512,7 +512,7 @@ fn plan(ui: &Ui, t: &Tokens, row: &Row, width: f32) -> Plan {
     });
     let text = row.text.as_ref().map(|x| pill(painter, t, tr("Text"), x.ok, &x.reason));
     let notice = notice_of(row).map(wrapped);
-    let size_note = row.pictures.as_ref().filter(|_| row.original != row.library).map(|_| {
+    let size_note = row.pictures.as_ref().filter(|_| !uigen_compare::sizes_agree(row.original, row.library)).map(|_| {
         wrapped(trf(
             "Size differs: original {original}, library {library}",
             &[("original", &dimensions(row.original)), ("library", &dimensions(row.library))],

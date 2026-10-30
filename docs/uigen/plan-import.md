@@ -375,7 +375,16 @@ anti-crénelage écarté comme `pixelmatch`). Deux verdicts :
 | Formes | pixels hors des boîtes de texte : **moins de 1 %** d'écart pour `ok` (le seuil ne s'assouplit jamais) ; les pixels du texte sont une information |
 | Texte | par ordre, même famille (casse, ponctuation et suffixes de style ignorés), même taille, même graisse, position et largeur mesurée à 1 px près, police installée, calque à taille automatique |
 
-Statuts d'une ligne : `ok`, `ko`, `sizeMismatch` (les deux images n'ont pas exactement la même taille), `missingReference`
+**La taille d'une variante se compare à 1 px près** (`GEOMETRY_TOLERANCE_PX`, décision de l'utilisateur) : largeur
+et hauteur diffèrent chacune d'au plus 1 px, la ligne n'est pas `sizeMismatch`, les deux images sont rognées à leur
+intersection avant `pixel_diff` (la colonne en trop n'est pas comptée) et la ligne rend quand même les deux tailles
+réelles dans `original` et `library`. Au-delà de 1 px sur l'un des côtés, rien ne change : `sizeMismatch`, mesure sur
+l'intersection, pixels hors intersection comptés comme différents. `pixel_diff` et le seuil de 1 % ne changent pas. Le
+détail et les images de l'onglet Comparer suivent la même règle : « Size differs » seulement au-delà de la tolérance,
+mode Différence rogné à l'intersection.
+
+Statuts d'une ligne : `ok`, `ko`, `sizeMismatch` (taille des deux images différente de plus de 1 px en largeur ou en
+hauteur), `missingReference`
 (PNG absent, illisible, hors de `.uigen/captures`, de plus de 8 Mio ou de 4096 × 4096), `notComparable` (rendu sombre égal au
 clair). **Les lectures sont confinées à `<projet>/.uigen/captures`** même sans racines d'automatisation : un lien ou un
 `..` qui en sort donne `missingReference`.
@@ -402,14 +411,13 @@ Hover), lancé à la main le 30 octobre 2026. Avant correction, `render_node` re
 
 ### Limites connues (lot 5)
 
-- **Sur ce poste, MUI ne passe pas au vert** : Roboto n'est pas installé, Chromium dessine avec Roboto Condensed
-  (Regular et Bold seulement). Les deux lignes sont `sizeMismatch` : original 82 × 37 (Chromium arrondit la boîte de
-  81,39 px vers le haut), bibliothèque 81 × 37 (le texte mesuré par le moteur fait 49 px, Chromium 49,39 px, pour la même
-  face) ; formes à 2,30 % ; texte `ko` « graisse différente » (500 demandé, 400 disponible) avec `maxDx` 0, `maxDy` 0,75 et
-  `maxDwidth` −0,39. La géométrie du texte est dans la tolérance ; l'essai réel n'affirme le verdict complet que si la
-  police n'est pas en cause.
-- Une différence de taille d'un pixel reste un `sizeMismatch` : la règle est exacte, le moteur de texte et Chromium
-  ne mesurent pas toujours la même largeur.
+- **MUI à 1 px de largeur près** : original 82 × 37 (Chromium arrondit la boîte de 81,39 px vers le haut), bibliothèque
+  81 × 37 (le texte mesuré par le moteur fait 49 px, Chromium 49,39 px, pour la même face). Avant la tolérance, cette
+  seule colonne donnait `sizeMismatch` et des formes à 2,30 %. Avec la tolérance de 1 px (essai réel du 30 octobre 2026),
+  les lignes Default et Hover sont `ok` : formes à 0,229 % sur l'aire commune, texte `ok` (`maxDx` 0, `maxDy` 0,75,
+  `maxDwidth` −0,39). L'essai réel n'affirme le verdict du texte et le statut que si la police n'est pas en cause
+  (« police absente »).
+- Une différence de taille de plus de 1 px reste un `sizeMismatch`.
 - Les états Hover, Pressed ne sont pas forcés sur la bibliothèque : la comparaison mesure le rendu de la variante.
 - `uigen.updateSource` recapture dans la version courante de la source ; une version qui change se règle par
   `project.setSourceVersion` d'abord.

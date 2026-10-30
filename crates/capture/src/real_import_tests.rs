@@ -10,6 +10,7 @@ use figcraft_doc::proto::Trigger;
 use figcraft_doc::{Document, NodeId, NodeKind, VariableType};
 use figcraft_engine::Session;
 use figcraft_engine::capture::{CaptureError, CaptureErrorKind, CaptureEvent, CaptureJob};
+use figcraft_engine::uigen_compare::sizes_agree;
 use serde_json::{Value, json};
 
 use crate::service_tests::TempDir;
@@ -366,13 +367,21 @@ fn assert_all_rows(result: &Value, status: &str) {
     }
 }
 
+fn size_of(size: &Value) -> (u32, u32) {
+    let side = |axis: &str| size[axis].as_u64().and_then(|n| u32::try_from(n).ok()).unwrap_or(u32::MAX);
+    (side("width"), side("height"))
+}
+
 fn assert_rows_match_the_original(result: &Value) {
     assert_eq!(compared_rows(result).len(), 2, "{result}");
     for row in compared_rows(result) {
         let percent = row["shapes"]["percent"].as_f64().unwrap_or(f64::NAN);
         assert!(percent < 1.0, "shapes differ by {percent} %: {row}");
         assert_eq!(row["shapes"]["verdict"], json!("ok"), "{row}");
-        assert_eq!(row["original"], row["library"], "the library raster is not cropped to the original box: {row}");
+        assert!(
+            sizes_agree(size_of(&row["original"]), size_of(&row["library"])),
+            "the library raster is more than 1 px from the original box: {row}"
+        );
         let font_absent = row["text"]["reason"].as_str().is_some_and(|reason| reason.contains(FONT_ABSENT));
         if font_absent {
             eprintln!("the font of the original is not installed on this machine: the text geometry is not asserted ({})", row["text"]["reason"]);

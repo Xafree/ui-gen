@@ -562,6 +562,8 @@ mod uigen_compare_raster_tests;
 #[cfg(test)]
 mod uigen_compare_text_tests;
 #[cfg(test)]
+mod uigen_compare_tolerance_tests;
+#[cfg(test)]
 mod uigen_compare_unconfined_tests;
 #[cfg(test)]
 mod uigen_compare_weight_tests;

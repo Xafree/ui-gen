@@ -118,6 +118,7 @@ fn window(app: &FigApp, ctx: &Context, variant: NodeId, view: &mut View) -> bool
 fn difference_of(app: &FigApp, ctx: &Context, variant: NodeId, dark: bool) -> Option<Shot> {
     let original = original_raster(app, variant, dark)?;
     let library = uigen_compare::library_raster(&app.session.ds().ok()?.doc, variant, dark).ok()?;
+    let (original, library) = uigen_compare::aligned(&original, &library);
     Shot::from_raster(ctx, &uigen_compare::difference_image(&original, &library))
 }
 
@@ -172,7 +173,7 @@ fn footer(ui: &mut Ui, t: &Tokens, row: &Row, view: &mut View) {
                 a11y::slider(&resp, tr("Comparison slider"), f64::from(view.split), true);
             });
         }
-        Mode::SideBySide if row.original != row.library => {
+        Mode::SideBySide if !uigen_compare::sizes_agree(row.original, row.library) => {
             let note = trf(
                 "Size differs: original {original}, library {library}",
                 &[("original", &dimensions(row.original)), ("library", &dimensions(row.library))],

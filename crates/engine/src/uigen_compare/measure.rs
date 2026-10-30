@@ -8,7 +8,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use super::{
-    LibText, PixelReport, Raster, RefText, SHAPES_MAX_PERCENT, TextBox, TextReport, Verdict, pixel_diff, text_verdict, weight_of_font_style,
+    LibText, PixelReport, Raster, RefText, SHAPES_MAX_PERCENT, TextBox, TextReport, Verdict, aligned, pixel_diff, text_verdict, weight_of_font_style,
 };
 use crate::file_access::{self, Access, Roots};
 use crate::uigen_import::{SOURCE_KEY, Theme, reference_of};
@@ -359,7 +359,8 @@ impl Context<'_> {
             Err(reason) => return row.without(Status::NotComparable, reason),
         };
         row.library = size_of(&library);
-        let pixels = pixel_diff(&original, &library, &boxes_of(&kept.texts));
+        let (shared_original, shared_library) = aligned(&original, &library);
+        let pixels = pixel_diff(&shared_original, &shared_library, &boxes_of(&kept.texts));
         let text = text_verdict(&kept.texts, &library_texts(&self.scratch, id));
         row.measured(&pixels, &text)
     }

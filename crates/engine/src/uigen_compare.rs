@@ -29,6 +29,29 @@ pub const SHAPES_MAX_PERCENT: f64 = 1.0;
 pub const COLOR_THRESHOLD: f64 = 0.1;
 pub const GEOMETRY_TOLERANCE_PX: f64 = 1.0;
 
+/// Whether two sizes differ by at most `GEOMETRY_TOLERANCE_PX` on each side.
+pub fn sizes_agree(original: (u32, u32), library: (u32, u32)) -> bool {
+    f64::from(original.0.abs_diff(library.0)) <= GEOMETRY_TOLERANCE_PX && f64::from(original.1.abs_diff(library.1)) <= GEOMETRY_TOLERANCE_PX
+}
+
+fn cropped(raster: &Raster, width: u32, height: u32) -> Raster {
+    let (stride, columns) = (raster.width as usize, width as usize);
+    let rgba = (0..height as usize).filter_map(|row| raster.rgba.get(row * stride * 4..(row * stride + columns) * 4)).flatten().copied().collect();
+    Raster { width, height, rgba }
+}
+
+/// The two rasters on the area they share when their sizes agree within the tolerance, so that a column or a row
+/// of difference in size is not counted; unchanged otherwise.
+pub fn aligned(original: &Raster, library: &Raster) -> (Raster, Raster) {
+    let agree =
+        original.is_well_formed() && library.is_well_formed() && sizes_agree((original.width, original.height), (library.width, library.height));
+    if !agree {
+        return (original.clone(), library.clone());
+    }
+    let (width, height) = (original.width.min(library.width), original.height.min(library.height));
+    (cropped(original, width, height), cropped(library, width, height))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Raster {
     pub width: u32,
