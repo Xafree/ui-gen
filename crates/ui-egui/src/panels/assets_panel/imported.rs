@@ -2,15 +2,18 @@
 //! library project, after the local styles. A section lists the component sets of its import page as
 //! tiles (their thumbnails come from the file like the local ones), folds like a library, and its
 //! tiles offer "Copy to the current page" and "Show in the import page" from their context menu,
-//! with the pointer or the keyboard (Shift+F10, the menu key). A button asks for the import window.
+//! with the pointer or the keyboard (Shift+F10, the menu key). A tile also drags onto the canvas,
+//! where releasing it makes the set the component of the open page. A button asks for the import window.
 
 use std::collections::HashSet;
 
-use egui::{CornerRadius, Id, Key, Modifiers, Rect, Response, Sense, Ui, pos2, vec2};
+use egui::{CornerRadius, Id, Key, Modifiers, Pos2, Rect, Response, Sense, Ui, pos2, vec2};
 use figcraft_doc::{Document, NodeId};
 use figcraft_engine::imported_sections;
+use figcraft_engine::project::component_roots;
+use serde_json::{Value, json};
 
-use super::{Act, PAD, Source, Thumbs, Tile, hint, matches};
+use super::{Act, PAD, PLACE_IMPORTED, Source, Thumbs, Tile, hint, matches};
 use crate::FigApp;
 use crate::a11y::Tip;
 use crate::i18n::{tr, trf};
@@ -171,4 +174,44 @@ pub(super) fn tile_menu(ui: &Ui, resp: &Response, set: NodeId, act: &mut Option<
 /// The tooltip of an imported tile, which also names it for screen readers.
 pub(super) fn tile_tip(resp: Response, name: &str) -> Response {
     resp.tip(trf("{name}\nDrag onto the canvas to copy it into your library.", &[("name", &name)]))
+}
+
+/// What releasing an imported tile over the canvas would do to `page`, painted under the ghost at `p`.
+pub(super) fn drop_hint(ui: &Ui, doc: &Document, page: Option<NodeId>, p: Pos2) {
+    let Some(node) = page.and_then(|page| doc.node(page).map(|node| (page, node))) else { return };
+    let text = if component_roots(doc, node.0).is_empty() {
+        tr("Drop to make it the component of this page").to_string()
+    } else {
+        trf("Drop to replace {name} on this page", &[("name", &node.1.name)])
+    };
+    let t = Tokens::get(ui.ctx());
+    let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, Id::unique("asset_drop_hint")));
+    let galley = painter.layout_no_wrap(text, regular(11.0), t.text);
+    let size = galley.size() + vec2(16.0, 10.0);
+    let screen = ui.ctx().content_rect();
+    let left = (p.x - size.x / 2.0).clamp(screen.min.x, (screen.max.x - size.x).max(screen.min.x));
+    let top = (p.y + 40.0).min((screen.max.y - size.y).max(screen.min.y));
+    let pill = Rect::from_min_size(pos2(left, top), size);
+    painter.rect_filled(pill, CornerRadius::same(6), t.panel.gamma_multiply(0.95));
+    painter.rect_stroke(pill, CornerRadius::same(6), egui::Stroke::new(1.0, crate::theme::COMPONENT), egui::StrokeKind::Inside);
+    painter.galley(pill.center() - galley.size() / 2.0, galley, t.text);
+}
+
+/// The drop of an imported set on the canvas of `page`: place it, then say what happened with an
+/// "Undo" (the toast comes after the command, so its action holds the revision the placement made).
+pub(super) fn drop_on_canvas(app: &mut FigApp, set: NodeId, page: Option<NodeId>) {
+    if crate::menus::dev_mode_refuses(app, PLACE_IMPORTED) {
+        return;
+    }
+    let mut params = json!({"set": set.0});
+    if let Some(page) = page {
+        params["page"] = json!(page.0);
+    }
+    let Some(result) = app.run(PLACE_IMPORTED, params) else { return };
+    let name = |value: &Value| value.get("name").and_then(Value::as_str).unwrap_or_default().to_string();
+    let message = match result.get("replaced").filter(|replaced| !replaced.is_null()) {
+        Some(replaced) => trf("{old} replaced by {new}", &[("old", &name(replaced)), ("new", &name(&result))]),
+        None => trf("Copied {name} into your library", &[("name", &name(&result))]),
+    };
+    app.toast_with_undo(message);
 }

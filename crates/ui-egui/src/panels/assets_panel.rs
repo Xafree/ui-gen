@@ -519,7 +519,7 @@ fn tiles(ui: &mut Ui, w: f32, src: &Source, list: &[Tile], thumbs: &Thumbs, want
                     &[("name", &item.name)],
                 ))
             };
-            if resp.drag_started() && !imported {
+            if resp.drag_started() {
                 *act = Some(Act::Drag(AssetDrag { src: src.clone(), component: item.id, set: item.set }));
             }
             if resp.clicked() && !imported {
@@ -816,17 +816,21 @@ fn drag_feedback(app: &mut FigApp, ui: &mut Ui, doc: &Document, libs: &HashMap<S
     let page = app.session.ds().map(|d| d.page).ok();
     let at = over_canvas.zip(page).map(|(p, page)| (app.to_page(p), page));
     // With Alt: the instance under the pointer (never one inside the dragged component itself).
-    let swap = at.filter(|_| alt).and_then(|(pt, page)| {
+    let imported = matches!(drag.src, Source::Imported(_));
+    let swap = at.filter(|_| alt && !imported).and_then(|(pt, page)| {
         let own = matches!(drag.src, Source::Local).then_some(drag.component);
         figcraft_engine::drop::swap_target(doc, page, pt, drag_family(doc, libs, &drag).as_deref(), own)
     });
-    let slot = at.filter(|_| swap.is_none()).map(|(pt, page)| (pt, figcraft_engine::drop::slot(doc, page, pt)));
+    let slot = at.filter(|_| swap.is_none() && !imported).map(|(pt, page)| (pt, figcraft_engine::drop::slot(doc, page, pt)));
     let ov = &mut app.session.tool.overlay;
     ov.swap_target = swap;
     ov.drop_target = slot.as_ref().and_then(|(_, s)| (Some(s.parent) != page).then_some(s.parent));
     ov.insert_line = slot.as_ref().and_then(|(_, s)| s.line);
     if let Some(p) = pointer {
         ghost(ui, p, drag.set, tex);
+        if imported && over_canvas.is_some() {
+            imported::drop_hint(ui, doc, page, p);
+        }
     }
     if released {
         ui.data_mut(|d| d.remove::<AssetDrag>(drag_id()));
@@ -835,6 +839,11 @@ fn drag_feedback(app: &mut FigApp, ui: &mut Ui, doc: &Document, libs: &HashMap<S
         ov.insert_line = None;
         ov.swap_target = None;
         match (swap, at, slot) {
+            _ if imported => {
+                if over_canvas.is_some() {
+                    imported::drop_on_canvas(app, drag.component, page);
+                }
+            }
             (Some(_), Some((pt, _)), _) => swap_at(app, &drag.src, drag.component, pt.x, pt.y),
             (None, _, Some((pt, _))) => place(app, &drag.src, drag.component, pt.x, pt.y),
             _ => {}
