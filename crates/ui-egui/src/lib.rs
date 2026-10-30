@@ -234,6 +234,8 @@ mod project_sources_ui_tests;
 #[cfg(test)]
 mod project_themes_ui_tests;
 #[cfg(test)]
+mod compare_tab_ui_tests;
+#[cfg(test)]
 mod ui_scale_tests;
 #[cfg(test)]
 mod variables_export_ui_tests;
