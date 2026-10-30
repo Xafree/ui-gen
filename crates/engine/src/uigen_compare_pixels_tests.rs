@@ -8,10 +8,7 @@
 //! differing (ok; 88 with `includeAA: true`); text 95 shapes + 1200 text pixels (1.0795 %, ko; 12.95 %
 //! ko without the mask).
 
-use crate::uigen_compare::{
-    COLOR_THRESHOLD, GEOMETRY_TOLERANCE_PX, PixelReport, Raster, SHAPES_MAX_PERCENT, TextBox, difference_image,
-    pixel_diff,
-};
+use crate::uigen_compare::{COLOR_THRESHOLD, GEOMETRY_TOLERANCE_PX, PixelReport, Raster, SHAPES_MAX_PERCENT, TextBox, difference_image, pixel_diff};
 
 const WHITE: [u8; 3] = [255, 255, 255];
 const BLACK: [u8; 3] = [0, 0, 0];
@@ -89,11 +86,7 @@ fn circle(samples: i64, inner: u8) -> Raster {
                     }
                 }
             }
-            let value = if covered == samples * samples {
-                inner
-            } else {
-                u8::try_from(255 - (255 * covered) / (samples * samples)).unwrap()
-            };
+            let value = if covered == samples * samples { inner } else { u8::try_from(255 - (255 * covered) / (samples * samples)).unwrap() };
             paint(&mut raster, usize::try_from(px).unwrap(), usize::try_from(py).unwrap(), 1, 1, [value; 3]);
         }
     }

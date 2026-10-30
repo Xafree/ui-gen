@@ -132,10 +132,8 @@ fn a_different_size_or_weight_is_ko() {
     let bolder = text_verdict(&[roboto_ref()], &[library("Roboto", 16.0, 700, 10.0, 20.0, 50.0)]);
     assert!(!is_ok(&bolder.verdict));
 
-    let medium_against_regular = text_verdict(
-        &[reference("Roboto Medium", 16.0, 500, 10.0, 20.0, 50.0)],
-        &[library("Roboto", 16.0, 400, 10.0, 20.0, 50.0)],
-    );
+    let medium_against_regular =
+        text_verdict(&[reference("Roboto Medium", 16.0, 500, 10.0, 20.0, 50.0)], &[library("Roboto", 16.0, 400, 10.0, 20.0, 50.0)]);
     assert!(!is_ok(&medium_against_regular.verdict));
 }
 
