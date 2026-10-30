@@ -223,6 +223,7 @@ fn each_job_becomes_the_protocol_request_of_its_method() {
                 package: "@acme/ui".to_string(),
                 component: "Button".to_string(),
                 props: props.clone(),
+                sample_text: None,
                 state: "hover".to_string(),
                 theme: "dark".to_string(),
             },

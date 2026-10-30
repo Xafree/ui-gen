@@ -166,13 +166,21 @@ params: {job?}}` until the job is `done` or `failed` (`error` carries the servic
 with `project.info`. Without a capture service (no Node, or the browser build) the three commands answer `bad`. The
 service and its protocol are described in [UIGEN: Service de capture](uigen/plan-import.md#service-de-capture).
 
-`uigen.importComponent {package, component, styleProp?, sizeProp?, styles?, sizes?, states?, themes?, parent?, x?, y?}`
+`uigen.importComponent {package, component, styleProp?, sizeProp?, styles?, sizes?, states?, themes?, parent?, x?, y?, stage?, animations?}`
 ([MCP: Component import](mcp.md#component-import)) works the same way: it returns `{job}` (the `inspect` job) at once,
 the renders follow as the app pumps the capture service, and the component set is written in one undo step when
 the last one is back. Poll `capture.status {job}` until that job is `done` or `failed` (`error` names the step that
 failed, e.g. `inspect: component "Nope" not found in @mui/material`), then find the new component set with
 `document.inspect` (it is selected). `uigen.importDom {snapshot, parent?, x?, y?, full?}` takes a snapshot you
 hold yourself and answers `{root, warnings}` directly; `full: true` asks for the complete translation.
+
+`uigen.listComponents {package, refresh?}` ([MCP: Component import](mcp.md#component-import)) is a capture job too: it
+returns `{job}` (an `inspect` job) and the components of the source come back as the event of that job, which
+`capture.status {job}` shows `done` or `failed`; the answer is kept in the session, so a second call returns
+`{cached: true, …}` with no job. `uigen.importWindow {package?}` only asks the interface for the import window,
+which a programmatic call never opens. `uigen.imported {}` and `uigen.placeImported {set, page?}`
+([MCP: Component import](mcp.md#component-import)) answer directly, with no job: the first lists the component sets of
+the import pages by source, the second copies one onto a page of the library in one undo step.
 
 ### `engine.commands {}`
 

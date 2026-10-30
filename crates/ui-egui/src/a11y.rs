@@ -546,6 +546,7 @@ fn blocked(app: &FigApp) -> bool {
         || u.present.is_some()
         || u.home
         || u.find.is_some()
+        || u.import_window.is_some()
         || !app.has_files()
 }
 

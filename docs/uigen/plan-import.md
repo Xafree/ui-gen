@@ -54,8 +54,17 @@ journal libre, jamais lu comme protocole.
 | `install` | `dir`, `package`, `version` (exacte ou `latest`) | `{package, version, license, framework}` |
 | `uninstall` | `dir`, `package` | `{package}` |
 | `inspect` | `dir`, `package` | `{package, version, framework, components: [{name, props: [{name, type, values}]}], notes}` (propriétés typées depuis le lot 3, voir « Instantané et `inspect` enrichis ») |
-| `render` | `dir`, `package`, `component`, `props`, `state`, `theme` | `{snapshot (instantané v1 de `figcraft-dom`), png (chemin relatif à `dir`)}` |
+| `render` | `dir`, `package`, `component`, `props`, `state`, `theme`, `sampleText` (facultatif) | `{snapshot (instantané v1 de `figcraft-dom`), png (chemin relatif à `dir`), note (facultatif)}` |
 | `shutdown` | `{}` | `{}` |
+
+`sampleText` est le libellé d'exemple du composant (≤ 256 caractères, `invalidRequest` sinon) ; le moteur y met le
+nom du composant (`Button`), pour tous les états, `Loading` compris. Le service l'injecte sans jamais l'écrire dans
+du code : en contenu enfant du composant React (`createElement(Composant, props, texte)`), en nœud texte enfant de
+l'élément pour un web component (le `<slot>` le reprend). Un composant qui refuse ses enfants (élément vide : React
+lève « void element ») fait échouer ce rendu ; le service réessaie **une fois** sans texte et, si cela réussit,
+ajoute `note` = `sampleText ignored: the component takes no content`. Un composant qui n'affiche simplement pas ses
+enfants ne donne aucune note. Les deux essais tiennent dans les 25 s du service. Le moteur remonte la `note` dans
+les `warnings` de l'import, une seule fois.
 
 `state` ∈ `default`, `hover`, `focus`, `pressed`, `disabled` ; `theme` ∈ `light`, `dark`. `framework` ∈ `react`,
 `vue`, `svelte`, `web-components`, `unknown` ; `render` n'accepte que `react` et `web-components`
@@ -113,6 +122,20 @@ sur le vrai service, dans un projet temporaire (`project.open {create: true}`, `
   composant) et laisse le document et l'historique d'annulation inchangés.
 
 Lancés à la main le 29 octobre 2026 : `cargo test -p figcraft-capture real_import -- --ignored --test-threads=1`, verts.
+
+Un troisième test (lot 4, `real_staged_import_lands_in_the_import_page_and_placing_it_makes_the_page_a_button_then_archives_it`,
+environ 240 s) suit le même chemin avec `stage: true` :
+
+- E4-7.1 : `uigen.listComponents` rend `Button` avec `variant` et `size` (`enum`) puis, au second appel,
+  `{cached: true}` ; `uigen.importComponent {…, stage: true}` aboutit à 16 variantes dans la page
+  `- Imported · @mui/material 7.3.11` sans toucher à la page courante, et un `Chip` s'y range à côté ;
+  `uigen.placeImported` du `Button` sur la page blanche la rend page `Button` de 16 variantes
+  (`replaced: null`) ; celui du `Chip` sur cette page archive le premier dans une page `Button` insérée juste
+  après (l'ancien nom est gardé tel quel parce qu'il diffère du nouveau ; il serait `Button 2` pour deux
+  jeux de même nom) ; deux `edit.undo` rendent l'état d'avant les dépôts (page blanche, import intact).
+
+Lancé à la main le 30 octobre 2026, vert. Le worktree du lot n'a pas de `sidecar/node_modules` : le test se
+lance avec `UIGEN_SIDECAR_DIR` sur un `sidecar/` dont les dépendances sont installées.
 
 ### Instantané et `inspect` enrichis (lot 3)
 
@@ -172,6 +195,70 @@ instantané du lot 0 se relit à l'identique.
 - Les chemins de calques écrivent un `/` d'un nom `\/` et un `\` d'un nom `\\`, pour que deux calques distincts
   n'aient jamais le même chemin ; les noms affichés ne changent pas.
 
+## Onglet Composants et glisser-déposer (lot 4)
+
+Le moteur (L5) garde toute la logique ; l'interface (L6) affiche et relaie, chaque geste passe par
+`app.run`. `figcraft-dom` et `figcraft-project` ne changent pas. Les commandes sont décrites dans
+[`docs/mcp.md`](../mcp.md#component-import).
+
+- **Pages d'import.** `uigen.importComponent {stage: true}` écrit le jeu de variantes dans la page
+  `- Imported · <paquet> <version>` du fichier, créée dans le même pas d'annulation que le jeu et
+  retrouvée par `plugin_data["uigen.importPage"]` = `{package, version}`, jamais par son nom (modifiable).
+  Son nom commence par un tiret : elle n'est donc jamais un composant de la lib (ni exportée en Lit, ni
+  comptée par `project.info`). Un réimport du même composant remplace le jeu précédent à la même place ;
+  un autre composant se range à côté ; une nouvelle version de la source a sa propre page. Sans `stage`,
+  le comportement du lot 3 est inchangé (CLI, MCP, scripts). `animations: false` laisse de côté les
+  interactions `ChangeTo` et les marques `uigen.effect`.
+- **Cache d'inspection.** `uigen.listComponents {package, refresh?}` lance `inspect` et garde la réponse
+  validée et bornée **en mémoire de la session**, par projet, paquet et version (pas de cache disque : une
+  version donnée ne change pas). Un second appel rend `{cached: true, …}` sans travail ;
+  `Session::inspected(package)` la relit ; l'invalidation suit `project.setSourceVersion` et
+  `project.removeSource` terminés, et `refresh: true` la force. La fenêtre « Import a component » s'en sert
+  pour ne pas relancer `inspect` à chaque ouverture ; « Try again » appelle `refresh: true`.
+- **Commandes.** `uigen.listComponents` (travail de capture), `uigen.importWindow {package?}` (demande
+  `dialog.importComponent` à l'interface, jamais ouverte par un appel programmatique), `uigen.imported`
+  (lecture : une section par source du projet non retirée, puis les pages d'import d'une ancienne version
+  ou d'une source retirée), `uigen.placeImported {set, page?}` (un pas d'annulation).
+- **Copie indépendante.** `placeImported` duplique le jeu entier sur la page cible
+  (`Document::duplicate_all_into` : nouveaux identifiants, transitions qui visent les variantes de la
+  copie, liaisons de variables, `uigen.source` et `uigen.effect` gardés) ; la page d'import n'est pas
+  touchée. La page prend le nom du jeu (`Nom 2` quand un **autre** composant le porte ; son ancien nom à
+  elle ne compte pas). Sur une page occupée (`component_roots` non vide), **tout** son contenu (captures
+  de référence, notes, mesures, flux compris) part dans une nouvelle page insérée juste après, qui garde
+  l'ancien nom (`Nom 2` quand l'ancien nom est le nouveau, casse ignorée) ; le résultat porte
+  `replaced: {page, name}`, la copie est posée en haut à gauche de l'ancien contenu et sélectionnée.
+- **Panneau Composants.** Les sections « Importé · <lib> <version> » viennent après « Local styles » et
+  avant les bibliothèques activées : une par source du projet (vide, avec « Nothing imported from this
+  source yet. », tant que rien n'en est importé), puis les anciennes versions et les sources retirées
+  (« source removed »). Les jeux importés quittent « Local components ». Hors projet, le panneau est
+  inchangé. Chaque section se replie, la recherche ne garde que les jeux qui correspondent. La vignette
+  est la variante par défaut du jeu, rendue dans le document de l'onglet. Le menu contextuel d'une tuile
+  propose « Copy to the current page » et « Show in the import page » ; le bouton « Import a component… »
+  (ligne de recherche et titre de chaque section) lance `uigen.importWindow`, bureau seulement.
+- **Glisser.** Une tuile importée se lâche sur le canvas de la page ouverte : « Drop to make it the
+  component of this page » sur une page blanche, « Drop to replace {name} on this page » sur une page
+  occupée, rien hors du canvas, jamais de cadre ou d'instance mis en évidence (Alt sans effet). Le lâcher
+  lance `uigen.placeImported` ; le toast « {old} replaced by {new} » ou « Copied {name} into your library »
+  porte l'action « Undo », qui défait l'archivage et le nom en un pas. Une confirmation avant remplacement
+  n'existe pas (elle casserait le geste) : l'ancien contenu reste dans la lib et le remplacement s'annule.
+- **Fenêtre « Import a component ».** Menu Fichier, palette (« Actions ») et bouton du panneau ; Échap la
+  ferme. Elle lit la liste des composants par `Session::inspected` et traite chargement, erreur (« Try
+  again »), vide, sans source (« Open project settings ») et succès (« Show in Components », « Import
+  another »). Choisir un composant règle les options depuis ses props ; une ligne « {variants} variants ·
+  {renders} renders » suit les cases (`render_count`), et l'import est refusé au-delà de `MAX_RENDERS`
+  (128). Elle envoie toujours `stage: true`.
+- **Écart à la fiche, validé par l'utilisateur.** « Un projet partagé entre deux fichiers » : les sources
+  (`uigen.json`) sont celles du projet et les mêmes dans chaque fichier, donc les deux fichiers montrent
+  les mêmes sections ; le **contenu** importé reste propre à chaque fichier (la page d'import vit dans le
+  fichier), et un import se refait dans l'autre fichier. Partager aussi le contenu demanderait un second
+  format de fichier de projet et une copie entre documents : lot à part.
+- **Limites.** La page d'import apparaît dans la liste des Pages ; la supprimer retire les originaux (les
+  copies de la lib restent) et « Undo » la rend. Un fichier ouvert sans elle n'a plus de section remplie,
+  sans erreur. « Publier ce fichier comme bibliothèque » listerait les jeux d'import comme composants
+  locaux.
+- **Essai réel** (`#[ignore]`, `crates/capture/src/real_import_tests.rs`, E4-7.1) : voir « Service de
+  capture ».
+
 ## Lots
 
 ### Lot 0 · Essai de faisabilité (risque principal d'abord)
@@ -219,10 +306,14 @@ titre d'information. Si l'essai échoue, on revoit l'approche avant d'aller plus
    capture ».
 
 ### Lot 4 · Onglet Composants et glisser-déposer
-1. Sections « Importé · <lib> <version> » dans le panneau (`assets_panel.rs`, `build_listing`).
-2. Fenêtre « Importer un composant » (source, composants, états, thèmes, tailles, animations).
-3. Glisser sur une page : copie indépendante, la page prend le nom ; sur une page occupée,
-   remplacement, l'ancien reste dans la lib, toast « Annuler ».
+- [x] 1. Sections « Importé · <lib> <version> » dans le panneau (`assets_panel.rs`, `build_listing`,
+   sous-module `assets_panel/imported.rs`).
+- [x] 2. Fenêtre « Importer un composant » (source, composants, états, thèmes, tailles, animations ;
+   `dialogs/import_component.rs`).
+- [x] 3. Glisser sur une page : copie indépendante, la page prend le nom ; sur une page occupée,
+   remplacement, l'ancien reste dans la lib, toast « Annuler » (`uigen.placeImported`).
+- [x] 4. Essai réel (`crates/capture/src/real_import_tests.rs`, E4-7.1) : import posé dans la page
+   d'import, copie sur une page blanche, second dépôt qui archive le premier, deux annulations.
 
 ### Lot 5 · Thèmes de tokens et Comparer
 1. Réglages du projet, section « Thèmes de tokens » : choisir le thème appliqué à la lib.

@@ -204,6 +204,14 @@ mod titlebar_tests;
 mod toast_action_tests;
 
 #[cfg(test)]
+mod import_drop_ui_tests;
+#[cfg(test)]
+mod import_review_ui_tests;
+#[cfg(test)]
+mod import_sections_ui_tests;
+#[cfg(test)]
+mod import_window_ui_tests;
+#[cfg(test)]
 mod project_divider_ui_tests;
 #[cfg(test)]
 mod project_open_tests;
@@ -455,6 +463,8 @@ pub struct UiState {
     pub lit_export: Option<dialogs::lit_export::LitExport>,
     /// The Project settings window, when open.
     pub project_settings: Option<dialogs::project_settings::ProjectSettings>,
+    /// The Import a component window, when open.
+    pub import_window: Option<dialogs::import_component::ImportWindow>,
     /// Files the user opened whose fonts are yet to be checked (by document uid).
     pub font_checks: Vec<u64>,
     pub missing_fonts: Option<missing_fonts::Shown>,
@@ -619,6 +629,7 @@ impl Default for UiState {
             import_report: None,
             lit_export: None,
             project_settings: None,
+            import_window: None,
             font_checks: Vec::new(),
             missing_fonts: None,
             screenshot_requests: Vec::new(),

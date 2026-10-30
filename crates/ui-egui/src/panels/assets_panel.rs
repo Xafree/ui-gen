@@ -27,6 +27,8 @@ use crate::i18n::{tr, trf, trn};
 use crate::icons::{self, Icon};
 use crate::theme::{COMPONENT, Tokens, regular, semibold};
 
+mod imported;
+
 const TILE_LABEL: f32 = 22.0;
 const TILE_GAP: f32 = 8.0;
 /// Re-check thumbnails at most this often (seconds) while the document changes.
@@ -50,12 +52,16 @@ const PAD: f32 = 16.0;
 const TO_SERVER: &str = "library.publishToServer";
 const USAGE: &str = "library.usage";
 const ADD: &str = "library.add";
+const IMPORT_WINDOW: &str = "uigen.importWindow";
+const PLACE_IMPORTED: &str = "uigen.placeImported";
 
-/// Where an asset comes from: this file or an enabled library (its id).
+/// Where an asset comes from: this file, an enabled library (its id) or an import page of this file
+/// (`<package> <version>`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum Source {
     Local,
     Library(String),
+    Imported(String),
 }
 
 #[derive(Clone)]
@@ -132,6 +138,7 @@ struct Listing {
     key: (u64, String, u64),
     local: Vec<Folder>,
     local_styles: Vec<StyleRow>,
+    imported: Vec<imported::Block>,
     libraries: Vec<Section>,
     /// Library components and styles in this file with a newer published version.
     updates: usize,
@@ -160,6 +167,11 @@ enum Act {
     Drag(AssetDrag),
     Style(Source, String),
     Toggle(String),
+    /// Copy an imported set onto the current page, or show it in its import page.
+    Copy(NodeId),
+    Show(NodeId),
+    /// Open the import window (for a package).
+    ImportWindow(Option<String>),
     /// Hide the local component when publishing, or show it again.
     Hide(NodeId, bool),
 }
@@ -219,9 +231,15 @@ fn matches(name: &str, q: &str) -> bool {
     q.is_empty() || name.to_lowercase().contains(q)
 }
 
-/// A fingerprint of what the session read for the enabled libraries.
+/// A fingerprint of what the session read for the enabled libraries and of the sources of the
+/// library project.
 fn libraries_key(app: &FigApp, doc: &Document) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
+    if let Some(project) = app.session.project() {
+        for source in &project.config.sources {
+            (&source.package, &source.version, source.removed).hash(&mut h);
+        }
+    }
     for l in &doc.libraries.enabled {
         l.id.hash(&mut h);
         match app.session.libraries.cached(&l.path) {
@@ -234,6 +252,7 @@ fn libraries_key(app: &FigApp, doc: &Document) -> u64 {
 }
 
 fn build_listing(app: &FigApp, doc: &Document, q: &str, key: (u64, String, u64)) -> Listing {
+    let imported = imported::list(app, doc, q);
     let local = library::local_components(doc)
         .into_iter()
         .filter_map(|id| {
@@ -267,7 +286,7 @@ fn build_listing(app: &FigApp, doc: &Document, q: &str, key: (u64, String, u64))
             libraries.push(sec);
         }
     }
-    Listing { key, local: foldered("", local), local_styles, libraries, updates }
+    Listing { key, local: foldered("", local), local_styles, imported: imported.blocks, libraries, updates }
 }
 
 /// Re-read enabled library files that changed on disk (throttled).
@@ -303,7 +322,9 @@ fn search_row(app: &mut FigApp, ui: &mut Ui, w: f32) -> String {
     let filter_id = Id::unique("asset_filter");
     let mut filter: String = ui.data(|d| d.get_temp(filter_id)).unwrap_or_default();
     let (fr, _) = ui.allocate_exact_size(vec2(w, 40.0), Sense::hover());
-    let field = Rect::from_min_max(pos2(fr.min.x + 12.0, fr.min.y + 8.0), pos2(fr.max.x - 44.0, fr.max.y - 4.0));
+    let importable = imported::can_import(app);
+    let field_end = if importable { 72.0 } else { 44.0 };
+    let field = Rect::from_min_max(pos2(fr.min.x + 12.0, fr.min.y + 8.0), pos2(fr.max.x - field_end, fr.max.y - 4.0));
     ui.painter().rect_filled(field, CornerRadius::same(5), t.field);
     icons::paint(ui.painter(), Rect::from_center_size(pos2(field.min.x + 12.0, field.center().y), vec2(12.0, 12.0)), Icon::Search, t.icon_secondary);
     let te_rect = Rect::from_min_max(pos2(field.min.x + 24.0, field.center().y - 7.0), pos2(field.max.x - 6.0, field.center().y + 7.0));
@@ -332,6 +353,12 @@ fn search_row(app: &mut FigApp, ui: &mut Ui, w: f32) -> String {
     icons::paint(ui.painter(), br.shrink(4.0), Icon::Library, t.icon);
     if bresp.clicked() {
         app.ui.libraries = true;
+    }
+    if importable {
+        let import = Rect::from_center_size(pos2(fr.max.x - 54.0, field.center().y), vec2(24.0, 24.0));
+        if imported::import_button(ui, import, Id::unique("asset_import_btn")) {
+            app.run(IMPORT_WINDOW, json!({}));
+        }
     }
     filter.trim().to_lowercase()
 }
@@ -471,6 +498,7 @@ fn tiles(ui: &mut Ui, w: f32, src: &Source, list: &[Tile], thumbs: &Thumbs, want
             }
             let name_colour = if own_hidden { t.text_secondary } else { t.text };
             crate::bidi::paint_name(ui.painter(), pos2(x, label.center().y), &item.label, regular(11.0), name_colour, tile);
+            let imported = matches!(src, Source::Imported(_));
             if *src == Source::Local {
                 crate::right::context_popup(&resp).show(|ui| {
                     if crate::right::menu_check(ui, item.hidden, tr("Hide when publishing"), "") {
@@ -479,14 +507,21 @@ fn tiles(ui: &mut Ui, w: f32, src: &Source, list: &[Tile], thumbs: &Thumbs, want
                     }
                 });
             }
-            let resp = resp.on_hover_text(trf(
-                "{name}\nDrag onto the canvas, or click to place in the middle of the view.\nHold Alt (Option) while dropping onto an instance to swap it.",
-                &[("name", &item.name)],
-            ));
+            if imported {
+                imported::tile_menu(ui, &resp, item.id, act);
+            }
+            let resp = if imported {
+                imported::tile_tip(resp, &item.name)
+            } else {
+                resp.on_hover_text(trf(
+                    "{name}\nDrag onto the canvas, or click to place in the middle of the view.\nHold Alt (Option) while dropping onto an instance to swap it.",
+                    &[("name", &item.name)],
+                ))
+            };
             if resp.drag_started() {
                 *act = Some(Act::Drag(AssetDrag { src: src.clone(), component: item.id, set: item.set }));
             }
-            if resp.clicked() {
+            if resp.clicked() && !imported {
                 *act = Some(Act::Place(src.clone(), item.id));
             }
         }
@@ -528,6 +563,8 @@ fn style_rows(ui: &mut Ui, w: f32, src: &Source, list: &[StyleRow], act: &mut Op
 /// file is read again.
 fn invalidate_thumbs(ui: &Ui, thumbs: &mut Thumbs, current: &[(Source, Arc<Document>)]) {
     let now = ui.input(|i| i.time);
+    let due = now - thumbs.checked_at >= THUMB_REFRESH;
+    let mut checked = false;
     for (src, doc) in current {
         let Some(old) = thumbs.docs.get(src).cloned() else {
             thumbs.docs.insert(src.clone(), doc.clone());
@@ -537,17 +574,20 @@ fn invalidate_thumbs(ui: &Ui, thumbs: &mut Thumbs, current: &[(Source, Arc<Docum
             continue;
         }
         match src {
-            Source::Local if now - thumbs.checked_at < THUMB_REFRESH => {
+            Source::Library(_) => thumbs.map.retain(|(s, _), _| s != src),
+            Source::Local | Source::Imported(_) if !due => {
                 ui.ctx().request_repaint_after(std::time::Duration::from_secs_f64(THUMB_REFRESH));
                 continue;
             }
-            Source::Local => {
-                thumbs.checked_at = now;
-                thumbs.map.retain(|(s, id), _| *s != Source::Local || same_layers(&old, doc, *id));
+            Source::Local | Source::Imported(_) => {
+                checked = true;
+                thumbs.map.retain(|(s, id), _| s != src || same_layers(&old, doc, *id));
             }
-            Source::Library(_) => thumbs.map.retain(|(s, _), _| s != src),
         }
         thumbs.docs.insert(src.clone(), doc.clone());
+    }
+    if checked {
+        thumbs.checked_at = now;
     }
 }
 
@@ -612,11 +652,13 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
     }
     let mut thumbs: Thumbs = ui.data(|d| d.get_temp(Id::unique("asset_thumbs"))).unwrap_or_default();
     let mut sources: Vec<(Source, Arc<Document>)> = vec![(Source::Local, doc.clone())];
+    sources.extend(listing.imported.iter().filter(|b| !b.tiles.is_empty()).map(|b| (Source::Imported(b.key.clone()), doc.clone())));
     sources.extend(listing.libraries.iter().filter_map(|l| l.doc.clone().map(|d| (Source::Library(l.id.clone()), d))));
     invalidate_thumbs(ui, &mut thumbs, &sources);
     let mut wanted = Vec::new();
     let collapsed_id = Id::unique("asset_collapsed_libraries");
     let collapsed: HashSet<String> = ui.data(|d| d.get_temp(collapsed_id)).unwrap_or_default();
+    let importable = imported::can_import(app);
     let mut act = None;
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         title(ui, w, tr("Local components"));
@@ -636,6 +678,11 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
             hint(ui, if q.is_empty() { tr("No styles yet.") } else { tr("No matching styles") });
         }
         style_rows(ui, w, &Source::Local, &listing.local_styles, &mut act);
+        for block in &listing.imported {
+            crate::widgets::separator(ui);
+            ui.add_space(4.0);
+            imported::section(ui, w, block, !q.is_empty(), &collapsed, importable, &thumbs, &mut wanted, &mut act);
+        }
         for sec in &listing.libraries {
             crate::widgets::separator(ui);
             ui.add_space(4.0);
@@ -677,6 +724,18 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
                 app.run("component.hideWhenPublishing", json!({"ids": [id], "on": on}));
             }
         }
+        Some(Act::Copy(set)) => {
+            imported::drop_on_canvas(app, set, None);
+        }
+        Some(Act::Show(set)) => {
+            if let Some(page) = doc.page_of(set) {
+                app.run("page.select", json!({"id": page.0}));
+                app.run("select.set", json!({"ids": [set.0]}));
+            }
+        }
+        Some(Act::ImportWindow(package)) => {
+            app.run(IMPORT_WINDOW, package.map_or_else(|| json!({}), |package| json!({"package": package})));
+        }
         Some(Act::Toggle(id)) => {
             let mut c = collapsed;
             if !c.remove(&id) {
@@ -695,6 +754,7 @@ fn place(app: &mut FigApp, src: &Source, id: NodeId, x: f64, y: f64) {
     let (cmd, params) = match src {
         Source::Local => ("instance.place", json!({"component": id, "x": x, "y": y})),
         Source::Library(lib) => ("library.place", json!({"library": lib, "component": id, "x": x, "y": y})),
+        Source::Imported(_) => return,
     };
     if !crate::menus::dev_mode_refuses(app, cmd) {
         app.run(cmd, params);
@@ -705,6 +765,7 @@ fn apply_style(app: &mut FigApp, src: &Source, style: &str) {
     let (cmd, params) = match src {
         Source::Local => ("style.apply", json!({"style": style})),
         Source::Library(lib) => ("library.applyStyle", json!({"library": lib, "style": style})),
+        Source::Imported(_) => return,
     };
     if crate::menus::dev_mode_refuses(app, cmd) {
         return;
@@ -721,6 +782,7 @@ fn swap_at(app: &mut FigApp, src: &Source, id: NodeId, x: f64, y: f64) {
     let (cmd, params) = match src {
         Source::Local => ("instance.swapAt", json!({"component": id, "x": x, "y": y})),
         Source::Library(lib) => ("library.swapAt", json!({"library": lib, "component": id, "x": x, "y": y})),
+        Source::Imported(_) => return,
     };
     if !crate::menus::dev_mode_refuses(app, cmd) {
         app.run(cmd, params);
@@ -731,7 +793,7 @@ fn swap_at(app: &mut FigApp, src: &Source, id: NodeId, x: f64, y: f64) {
 /// instances an Alt-drop prefers to swap. A set's tile is its own family.
 fn drag_family(doc: &Document, libs: &HashMap<String, Arc<Document>>, drag: &AssetDrag) -> Option<String> {
     let d = match &drag.src {
-        Source::Local => doc,
+        Source::Local | Source::Imported(_) => doc,
         Source::Library(lib) => libs.get(lib)?.as_ref(),
     };
     let n = d.node(drag.component)?;
@@ -751,17 +813,21 @@ fn drag_feedback(app: &mut FigApp, ui: &mut Ui, doc: &Document, libs: &HashMap<S
     let page = app.session.ds().map(|d| d.page).ok();
     let at = over_canvas.zip(page).map(|(p, page)| (app.to_page(p), page));
     // With Alt: the instance under the pointer (never one inside the dragged component itself).
-    let swap = at.filter(|_| alt).and_then(|(pt, page)| {
+    let imported = matches!(drag.src, Source::Imported(_));
+    let swap = at.filter(|_| alt && !imported).and_then(|(pt, page)| {
         let own = matches!(drag.src, Source::Local).then_some(drag.component);
         figcraft_engine::drop::swap_target(doc, page, pt, drag_family(doc, libs, &drag).as_deref(), own)
     });
-    let slot = at.filter(|_| swap.is_none()).map(|(pt, page)| (pt, figcraft_engine::drop::slot(doc, page, pt)));
+    let slot = at.filter(|_| swap.is_none() && !imported).map(|(pt, page)| (pt, figcraft_engine::drop::slot(doc, page, pt)));
     let ov = &mut app.session.tool.overlay;
     ov.swap_target = swap;
     ov.drop_target = slot.as_ref().and_then(|(_, s)| (Some(s.parent) != page).then_some(s.parent));
     ov.insert_line = slot.as_ref().and_then(|(_, s)| s.line);
     if let Some(p) = pointer {
         ghost(ui, p, drag.set, tex);
+        if imported && over_canvas.is_some() {
+            imported::drop_hint(ui, doc, page, p);
+        }
     }
     if released {
         ui.data_mut(|d| d.remove::<AssetDrag>(drag_id()));
@@ -770,6 +836,11 @@ fn drag_feedback(app: &mut FigApp, ui: &mut Ui, doc: &Document, libs: &HashMap<S
         ov.insert_line = None;
         ov.swap_target = None;
         match (swap, at, slot) {
+            _ if imported => {
+                if over_canvas.is_some() {
+                    imported::drop_on_canvas(app, drag.component, page);
+                }
+            }
             (Some(_), Some((pt, _)), _) => swap_at(app, &drag.src, drag.component, pt.x, pt.y),
             (None, _, Some((pt, _))) => place(app, &drag.src, drag.component, pt.x, pt.y),
             _ => {}

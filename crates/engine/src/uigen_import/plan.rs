@@ -6,10 +6,10 @@ use serde_json::{Map, Value, json};
 use super::Request;
 use crate::capture::{CaptureError, CaptureErrorKind};
 
-pub(crate) const MAX_RENDERS: usize = 128;
-const MAX_PROPS: usize = 64;
-const MAX_VALUES: usize = 64;
-const MAX_VALUE_CHARS: usize = 64;
+pub const MAX_RENDERS: usize = 128;
+pub(super) const MAX_PROPS: usize = 64;
+pub(super) const MAX_VALUES: usize = 64;
+pub(super) const MAX_VALUE_CHARS: usize = 64;
 const LOADING: &str = "loading";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
