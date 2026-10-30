@@ -33,18 +33,10 @@ pub(super) struct Block {
     pub tiles: Vec<Tile>,
 }
 
-/// What the file holds from imports: the sections to show and the pages they come from (whose
-/// components are not part of the library).
+/// What the file holds from imports: the sections to show.
 #[derive(Clone, Default)]
 pub(super) struct Imported {
     pub blocks: Vec<Block>,
-    pages: HashSet<NodeId>,
-}
-
-impl Imported {
-    pub fn holds(&self, doc: &Document, component: NodeId) -> bool {
-        doc.page_of(component).is_some_and(|page| self.pages.contains(&page))
-    }
 }
 
 /// Whether the panel offers the import window: in a library project, on the desktop.
@@ -58,7 +50,6 @@ pub(super) fn list(app: &FigApp, doc: &Document, q: &str) -> Imported {
     let Some(binding) = app.session.project() else { return Imported::default() };
     let mut found = Imported::default();
     for section in imported_sections(doc, &binding.config) {
-        found.pages.extend(section.page);
         let tiles: Vec<Tile> = section
             .components
             .iter()

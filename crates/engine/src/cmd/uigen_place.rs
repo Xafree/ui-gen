@@ -88,22 +88,28 @@ fn target_page(s: &Session, p: &Value) -> Result<NodeId> {
     Ok(page)
 }
 
-/// The content of `target` moves, with its flows, to a new page right after it that keeps `name`.
+/// The content of `target` moves, with its flows, prototype settings, guides and plugin data, to a
+/// new page right after it that keeps `name`. The background stays on both pages.
 fn archive(doc: &mut Document, target: NodeId, name: &str) -> Result<NodeId> {
     let archive = doc.add_page(name);
     if let Some(at) = doc.pages.iter().position(|page| *page == target) {
         doc.pages.retain(|page| *page != archive);
         doc.pages.insert(at + 1, archive);
     }
-    if let NodeKind::Page { background, flows, .. } = doc.get(target)?.kind.clone() {
-        if let NodeKind::Page { background: archived_background, flows: archived_flows, .. } = &mut doc.get_mut(archive)?.kind {
+    if let NodeKind::Page { background, flows, prototype, guides } = &mut doc.get_mut(target)?.kind {
+        let background = *background;
+        let (flows, prototype, guides) = (std::mem::take(flows), std::mem::take(prototype), std::mem::take(guides));
+        if let NodeKind::Page { background: archived_background, flows: archived_flows, prototype: archived_prototype, guides: archived_guides } =
+            &mut doc.get_mut(archive)?.kind
+        {
             *archived_background = background;
             *archived_flows = flows;
-        }
-        if let NodeKind::Page { flows, .. } = &mut doc.get_mut(target)?.kind {
-            flows.clear();
+            *archived_prototype = prototype;
+            *archived_guides = guides;
         }
     }
+    let data = std::mem::take(&mut doc.get_mut(target)?.plugin_data);
+    doc.get_mut(archive)?.plugin_data = data;
     for layer in doc.get(target)?.children.clone() {
         doc.reparent(layer, archive, None)?;
     }

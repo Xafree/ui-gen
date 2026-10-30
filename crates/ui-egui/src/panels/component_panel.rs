@@ -17,6 +17,7 @@ use figcraft_engine::components::{
     PROP_BINDING, default_variant, inside_instance, owning_component, owning_instance, slot_def, slot_edited, slots_of, variant_conflicts,
     variant_options, variant_props, variant_set,
 };
+use figcraft_engine::is_import_page;
 use serde_json::{Value, json};
 
 use crate::FigApp;
@@ -105,7 +106,7 @@ pub(crate) fn local_components(app: &FigApp, ui: &Ui, doc: &Document) -> std::sy
 
 fn list_components(doc: &Document) -> Vec<(NodeId, String)> {
     let mut out: Vec<(NodeId, String)> = Vec::new();
-    for page in &doc.pages {
+    for page in doc.pages.iter().filter(|page| !is_import_page(doc, **page)) {
         for d in doc.subtree(*page) {
             let Some(n) = doc.node(d) else { continue };
             let is = match n.kind {

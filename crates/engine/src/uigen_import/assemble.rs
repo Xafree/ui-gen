@@ -86,6 +86,7 @@ fn target(s: &mut Session, request: &Request, destination: &Destination) -> Resu
 }
 
 fn build(s: &mut Session, request: &Request, destination: &Destination, finished: &Finished) -> Result<Value> {
+    let kept_selection = s.ds()?.selection.clone();
     let Target { parent, page, at } = target(s, request, destination)?;
     figcraft_text::scan_system_fonts();
     let (x, y) = origin(s.doc()?, parent, page, at);
@@ -153,6 +154,7 @@ fn build(s: &mut Session, request: &Request, destination: &Destination, finished
     let mut result = json!({"set": set, "collection": collection, "variants": placed.len(), "warnings": warnings});
     if destination.stage {
         result["page"] = json!(parent);
+        s.set_selection(kept_selection);
     } else {
         s.set_selection(vec![set]);
     }

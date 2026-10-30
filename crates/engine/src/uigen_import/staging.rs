@@ -22,7 +22,7 @@ fn marker(doc: &Document, page: NodeId) -> Option<(String, String)> {
     Some((value.get("package")?.as_str()?.to_owned(), value.get("version")?.as_str()?.to_owned()))
 }
 
-pub(crate) fn is_import_page(doc: &Document, page: NodeId) -> bool {
+pub fn is_import_page(doc: &Document, page: NodeId) -> bool {
     marker(doc, page).is_some()
 }
 

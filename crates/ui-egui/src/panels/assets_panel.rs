@@ -255,7 +255,6 @@ fn build_listing(app: &FigApp, doc: &Document, q: &str, key: (u64, String, u64))
     let imported = imported::list(app, doc, q);
     let local = library::local_components(doc)
         .into_iter()
-        .filter(|id| !imported.holds(doc, *id))
         .filter_map(|id| {
             doc.node(id).filter(|n| matches(&n.name, q)).map(|n| Tile::new(doc, id, &n.name, matches!(n.kind, NodeKind::ComponentSet { .. })))
         })

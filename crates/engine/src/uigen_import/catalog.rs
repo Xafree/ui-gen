@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use super::plan::{MAX_PROPS, MAX_VALUE_CHARS, MAX_VALUES};
+use super::plan::{MAX_PROPS, MAX_VALUES, usable_value};
 use crate::Session;
 use crate::capture::{CaptureError, CaptureErrorKind};
 use crate::file_access;
@@ -136,18 +136,23 @@ fn clipped(text: &str, limit: usize) -> String {
     text.chars().take(limit).collect()
 }
 
-fn prop_of(listed: &Value) -> Option<InspectedProp> {
+/// A prop with the values an import accepts, once each; a note says how many were left out as unusable.
+fn prop_of(listed: &Value, component: &str, notes: &mut Vec<String>) -> Option<InspectedProp> {
     let name = listed.get("name")?.as_str().filter(|name| usable_name(name).is_ok())?;
     let kind = PropKind::parse(listed.get("type").and_then(Value::as_str).unwrap_or_default());
-    let values = listed.get("values").and_then(Value::as_array).map_or_else(Vec::new, |values| {
-        values
-            .iter()
-            .filter_map(Value::as_str)
-            .filter(|value| !value.is_empty() && value.chars().count() <= MAX_VALUE_CHARS && !value.chars().any(char::is_control))
-            .take(MAX_VALUES)
-            .map(str::to_string)
-            .collect()
-    });
+    let mut values: Vec<String> = Vec::new();
+    let mut unusable = 0_usize;
+    for value in listed.get("values").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
+        if !usable_value(value) {
+            unusable += 1;
+        } else if values.len() < MAX_VALUES && !values.iter().any(|seen| seen == value) {
+            values.push(value.to_string());
+        }
+    }
+    if unusable > 0 {
+        let shown = clipped(component, SHOWN_NAME_CHARS).escape_debug().to_string();
+        notes.push(format!("{shown}: {unusable} values of `{name}` were left out (a value has no comma, \"=\", edge space or control character)"));
+    }
     Some(InspectedProp { name: name.to_string(), kind, values })
 }
 
@@ -157,8 +162,10 @@ fn component_of(listed: &Value, notes: &mut Vec<String>) -> Option<InspectedComp
         notes.push(format!("a component was left out: {reason} (\"{}\")", clipped(name, SHOWN_NAME_CHARS).escape_debug()));
         return None;
     }
-    let props =
-        listed.get("props").and_then(Value::as_array).map_or_else(Vec::new, |props| props.iter().take(MAX_PROPS).filter_map(prop_of).collect());
+    let props = listed
+        .get("props")
+        .and_then(Value::as_array)
+        .map_or_else(Vec::new, |props| props.iter().take(MAX_PROPS).filter_map(|prop| prop_of(prop, name, notes)).collect());
     Some(InspectedComponent { name: name.to_string(), props })
 }
 

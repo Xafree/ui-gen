@@ -24,6 +24,7 @@ use serde_json::Value;
 
 use crate::components::inside_instance;
 use crate::params::id_of;
+use crate::uigen_import::is_import_page;
 use crate::{EngineError, Result};
 
 /// Largest library file read.
@@ -151,13 +152,14 @@ fn linked_styles(doc: &Document, roots: &[NodeId]) -> BTreeSet<String> {
     roots.iter().flat_map(|r| doc.subtree(*r)).filter_map(|i| doc.node(i)).flat_map(|n| style_links(n).cloned()).collect()
 }
 
-/// Local components and component sets, sets as one entry (never library copies or layers of
-/// instances), in id order.
+/// Local components and component sets, sets as one entry (never library copies, layers of
+/// instances or sets of an import page), in id order.
 pub fn local_components(doc: &Document) -> Vec<NodeId> {
     let in_set = |n: &Node| n.parent.and_then(|p| doc.node(p)).is_some_and(|p| matches!(p.kind, NodeKind::ComponentSet { .. }));
     doc.nodes()
         .filter(|n| matches!(n.kind, NodeKind::Component { .. }) && !in_set(n) || matches!(n.kind, NodeKind::ComponentSet { .. }))
         .filter(|n| !doc.is_remote(n.id) && !inside_instance(doc, n.id))
+        .filter(|n| !doc.page_of(n.id).is_some_and(|page| is_import_page(doc, page)))
         .map(|n| n.id)
         .collect()
 }

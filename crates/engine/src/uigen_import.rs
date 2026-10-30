@@ -16,5 +16,5 @@ pub use plan::MAX_RENDERS;
 pub(crate) use plan::{State, Theme, usable_value};
 #[cfg(test)]
 pub(crate) use staging::IMPORT_PAGE_KEY;
-pub use staging::{ImportSection, ImportedSet, sections};
-pub(crate) use staging::{import_page_name, is_import_page};
+pub(crate) use staging::import_page_name;
+pub use staging::{ImportSection, ImportedSet, is_import_page, sections};
