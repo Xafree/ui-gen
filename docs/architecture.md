@@ -1,6 +1,6 @@
 # FigCraft architecture
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-29 · **Change:** minor (the `figcraft-capture` crate, the `sidecar/` service and the engine's capture port; earlier: the `vectordrawable` crate, L4: Android Vector Drawable export; earlier: the shared hub in `collab-net` and the `figcraft-server` app) · **Target:** Figma Design
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-30 · **Change:** minor (import pages, the inspection cache and the Components tab (UIGEN lot 4); the `figcraft-capture` crate, the `sidecar/` service and the engine's capture port; earlier: the `vectordrawable` crate, L4: Android Vector Drawable export; earlier: the shared hub in `collab-net` and the `figcraft-server` app) · **Target:** Figma Design
 
 How FigCraft is built today. Engine first, a thin swappable UI, everything a command; a Figma-shaped
 data model (a scene graph of frames with auto layout, components and variables). ~108,800 lines of
@@ -73,6 +73,28 @@ layers so the pure part stays pure:
   opacity) → `motion` (`ChangeTo` interactions between the `Default`, `Hover` and `Pressed` variants, ripple and
   spinner flags in `plugin_data`).
 
+### Import pages, the inspection cache and the Components tab
+
+A staged import (`uigen.importComponent {stage: true}`) lands in an **import page**, `- Imported · <package> <version>`,
+of the file instead of the current page. The page is found again by `plugin_data["uigen.importPage"]`, never by its
+name, and its name starts with a hyphen, so the library rule (page = component) never counts it and the Lit export
+never sees it. The engine (L5) owns all of it: `uigen_import/staging.rs` (`import_page_name`, `is_import_page`,
+`sections`) and the commands `uigen.imported` and `uigen.placeImported` (`cmd/uigen_place.rs`). Placing copies the whole
+set onto a page of the library with `Document::duplicate_all_into` (new ids, nothing points back to the source), and a
+page that already holds a component hands everything it holds to a new page right after it, in the same undo step.
+
+`uigen.listComponents` runs `inspect` and keeps the validated, bounded answer **in the session**
+(`uigen_import/catalog.rs`), by project, package and version; there is no disk cache. `pump_capture` files the result,
+a finished `project.setSourceVersion` or `project.removeSource` forgets it, and `Session::inspected` is what the
+interface reads.
+
+The interface (L6) only shows and relays. The Components tab (`panels/assets_panel.rs`, `assets_panel/imported.rs`)
+lists one "Imported · <package> <version>" section per source of the project, after the local styles and before the
+enabled libraries, and a tile dropped on the canvas runs `uigen.placeImported`. The "Import a component" window
+(`dialogs/import_component.rs`, desktop only) opens on the `dialog.importComponent` request of `uigen.importWindow` and
+always imports with `stage: true`. Two files of one project show the same sections (the sources are the project's) but
+each holds its own imported content.
+
 ## Data model
 
 A `Document` holds pages, a persistent map of nodes (frames, groups, sections, rectangles,
@@ -120,6 +142,7 @@ input.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-30 | minor | UIGEN lot 4: import pages (`- Imported · <package> <version>`), the in-session inspection cache, the imported sections of the Components tab, dropping an imported component on the canvas and the "Import a component" window |
 | 2026-10-18 | minor | Added `vectordrawable` (L4), the Android Vector Drawable (XML) writer |
 | 2026-10-11 | minor | `collab-net` hosts through one hub for the app's sessions and the standalone server; added the `figcraft-server` app |
 | 2026-10-10 | minor | Merged main after #101–#103: WASM plugins (plugins area 0% → 35% breadth, 20% ready; ecosystem 5% → 20%) and the multiplayer core without networking (multiplayer 5% → 15% breadth, 5% ready; collaboration 8% → 12%); menu breadth 97.5% → 98.5% (200/203); ready for real work ~46% → ~47%; full parity 420–790 h → 390–745 h; beta 210–380 h → 200–365 h. Fixed the stated weight sums (areas 1–16 sum to 94, total 113; percentages were already computed with those) |
