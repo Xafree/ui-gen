@@ -852,7 +852,7 @@ Two commands bring the output of the capture service into the document; both are
   validation, a `parent` that is neither a frame nor a page and a `full` that isn't a boolean are refused naming
   the cause.
 - `uigen.importComponent {package, component, styleProp?, sizeProp?, styles?, sizes?, states?, themes?, parent?,
-  x?, y?}`: render a component of an installed source library in every style, size, state and theme, and write the
+  x?, y?, stage?, animations?}`: render a component of an installed source library in every style, size, state and theme, and write the
   result as one component set linked to a token theme. It asks the capture service to `inspect` the package and
   returns `{job}` at once; `Session::pump_capture` (every frame in the app, a wait loop in the CLI) then submits
   one `render` per variant and theme and, when all of them are back, writes the import in a single undo step
@@ -896,6 +896,19 @@ Two commands bring the output of the capture service into the document; both are
     in front later; if it was closed the import fails and writes nothing), in `parent` or on the current page of
     that document, at `x`, `y` (default: 80 px right of the page's content and level with its top, or the origin of a `parent` frame). Nothing is added to the file before the last
     render is back: no layer, no collection, no variable, no undo step.
+  - **`stage`** (boolean, default `false`): write the set into the **import page** of the package and version
+    instead of a page of the document. The page is named `- Imported · <package> <version>` (a name starting with a
+    hyphen is never a component, so the page is not exported to Lit and `project.info` does not list it) and carries
+    `plugin_data["uigen.importPage"]` = `{"package", "version"}`, by which it is found again whatever its name. It is
+    added at the end of the file the first time and created in the same undo step as the set; the current page and
+    the selection do not change, and the final event adds `page` (the page's id). Importing the same component again
+    replaces its previous set in that page, at the same place, in one undo step; another component is laid out to the
+    right of what the page holds; a new version of the source has a page of its own. A `stage` that comes with
+    `parent`, `x` or `y`, a `stage` or `animations` that is not a boolean, and an import page name of more than 200
+    characters are refused at once. Without `stage` the set goes where it did before and the result has no `page`.
+  - **`animations`** (boolean, default `true`): `false` leaves out the `ChangeTo` interactions between the states and
+    every `uigen.effect` mark; the layers of a ripple or a spinner are still translated, the rendered states do not
+    change.
 
 ### Local libraries
 

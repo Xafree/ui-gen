@@ -26,9 +26,11 @@ pub(crate) struct Request {
     pub sizes: Option<Vec<String>>,
     pub states: Option<Vec<State>>,
     pub themes: Vec<Theme>,
+    pub animations: bool,
 }
 
 pub(crate) struct Destination {
+    pub stage: bool,
     pub uid: u64,
     pub page: NodeId,
     pub parent: NodeId,

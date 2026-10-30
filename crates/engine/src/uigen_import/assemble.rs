@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 use super::motion;
 use super::pending::{COMMAND, Destination, Request};
 use super::plan::State;
+use super::staging::{self, SOURCE_KEY};
 use super::tokens::{self, Theming, VariantTokens};
 use crate::capture::{CaptureError, CaptureErrorKind};
 use crate::params::id_of;
@@ -16,7 +17,7 @@ use crate::{EngineError, Result, Session, bad};
 
 const GAP: f64 = 20.0;
 const LABEL: &str = "Import component";
-const SOURCE_KEY: &str = "uigen.source";
+const EFFECT_KEY: &str = "uigen.effect";
 const MAX_WARNINGS: usize = 200;
 
 pub(super) struct Variant {
@@ -57,21 +58,47 @@ pub(super) fn write(s: &mut Session, request: &Request, destination: &Destinatio
     .map_err(|e: EngineError| failed(CaptureErrorKind::Internal, format!("the layers could not be written: {e}")))
 }
 
-fn build(s: &mut Session, request: &Request, destination: &Destination, finished: &Finished) -> Result<Value> {
+struct Target {
+    parent: NodeId,
+    page: NodeId,
+    at: Option<(f64, f64)>,
+}
+
+/// Where the set goes. A staged import takes the import page of its package and version, and the
+/// place of the set of the same component that page already holds.
+fn target(s: &mut Session, request: &Request, destination: &Destination) -> Result<Target> {
+    if destination.stage {
+        let doc = s.doc_mut()?;
+        let page = staging::page_for(doc, request)?;
+        let previous = staging::previous_sets(doc, page, request);
+        let at = previous.first().and_then(|set| staging::position(doc, *set));
+        for set in previous {
+            doc.remove(set)?;
+        }
+        return Ok(Target { parent: page, page, at });
+    }
     let parent = destination.parent;
     let allowed = s.doc()?.node(parent).is_some_and(|node| node.is_page() || matches!(node.kind, NodeKind::Frame | NodeKind::Component { .. }));
     if !allowed {
         return Err(bad(COMMAND, "the layer the import was started in is gone or is no longer a frame or a page"));
     }
+    Ok(Target { parent, page: destination.page, at: destination.at })
+}
+
+fn build(s: &mut Session, request: &Request, destination: &Destination, finished: &Finished) -> Result<Value> {
+    let Target { parent, page, at } = target(s, request, destination)?;
     figcraft_text::scan_system_fonts();
-    let (x, y) = origin(s.doc()?, parent, destination.page, destination.at);
+    let (x, y) = origin(s.doc()?, parent, page, at);
     let (collection, added_modes) = collection(s, request)?;
     let mut warnings: Vec<String> = finished.warnings.clone();
     let mut placed: Vec<(NodeId, usize, usize)> = Vec::with_capacity(finished.variants.len());
     let mut themed: Vec<VariantTokens> = Vec::with_capacity(finished.variants.len());
     for variant in &finished.variants {
-        let translated = figcraft_dom::translate_snapshot(s.doc_mut()?, &variant.snapshot, parent, 0.0, 0.0, &TranslateOptions::default())
+        let mut translated = figcraft_dom::translate_snapshot(s.doc_mut()?, &variant.snapshot, parent, 0.0, 0.0, &TranslateOptions::default())
             .map_err(|e| bad(COMMAND, format!("{}: {e}", variant.label)))?;
+        if !request.animations {
+            drop_effects(s.doc_mut()?, &mut translated.layers);
+        }
         for warning in translated.warnings {
             if warnings.len() < MAX_WARNINGS && !warnings.contains(&warning) {
                 warnings.push(warning);
@@ -120,9 +147,25 @@ fn build(s: &mut Session, request: &Request, destination: &Destination, finished
             layers: &themed.layers,
         })
         .collect();
-    motion::apply(s.doc_mut()?, &linked)?;
-    s.set_selection(vec![set]);
-    Ok(json!({"set": set, "collection": collection, "variants": placed.len(), "warnings": warnings}))
+    if request.animations {
+        motion::apply(s.doc_mut()?, &linked)?;
+    }
+    let mut result = json!({"set": set, "collection": collection, "variants": placed.len(), "warnings": warnings});
+    if destination.stage {
+        result["page"] = json!(parent);
+    } else {
+        s.set_selection(vec![set]);
+    }
+    Ok(result)
+}
+
+fn drop_effects(doc: &mut Document, layers: &mut [LayerFacts]) {
+    for layer in layers {
+        layer.effect = None;
+        if let Some(node) = doc.node_mut(layer.id) {
+            node.plugin_data.remove(EFFECT_KEY);
+        }
+    }
 }
 
 /// The layer facts of another theme's render, translated in a scratch document: the document keeps only the layers of the first theme.

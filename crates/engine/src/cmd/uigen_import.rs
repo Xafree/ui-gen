@@ -18,13 +18,14 @@ const IMPORT: &str = uigen_import::COMMAND;
 const CAPTURES_DIR: &str = "captures";
 const MAX_NAME_CHARS: usize = 128;
 const MAX_LIST: usize = 256;
+const MAX_PAGE_NAME_CHARS: usize = 200;
 const DEFAULT_STATES: usize = 5;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![spec!(
         IMPORT,
         "Import component",
-        "{package (a source of the library project), component, styleProp? (default \"variant\"), sizeProp? (default \"size\"), styles? [values of styleProp], sizes? [values of sizeProp], states? [Default|Hover|Focus|Pressed|Disabled|Loading], themes? [light|dark] (default both), parent? (a frame or page id; default the current page), x?, y?}  asks the capture service to render the component in every style, size, state and theme and returns {job} at once; when all the renders are back they become one component set (Style=…, Size=…, State=… variants) in one undo step, with the variable collection \"<package> <version>\". The job's final event carries {set, collection, variants, warnings}; one render that fails stops the import and nothing is added",
+        "{package (a source of the library project), component, styleProp? (default \"variant\"), sizeProp? (default \"size\"), styles? [values of styleProp], sizes? [values of sizeProp], states? [Default|Hover|Focus|Pressed|Disabled|Loading], themes? [light|dark] (default both), parent? (a frame or page id; default the current page), x?, y?, stage? (default false: write into the import page \"- Imported · <package> <version>\" instead of the current page; not with parent, x or y), animations? (default true: false leaves out the transitions between states and the ripple and spinner marks)}  asks the capture service to render the component in every style, size, state and theme and returns {job} at once; when all the renders are back they become one component set (Style=…, Size=…, State=… variants) in one undo step, with the variable collection \"<package> <version>\". The job's final event carries {set, collection, variants, warnings}, and {page} with stage; one render that fails stops the import and nothing is added",
         true,
         import_component
     )]
@@ -112,6 +113,28 @@ fn parent_of(s: &Session, p: &Value) -> Result<figcraft_doc::NodeId> {
     Ok(parent)
 }
 
+fn flag(p: &Value, key: &str) -> Result<Option<bool>> {
+    match get(p, key) {
+        None => Ok(None),
+        Some(Value::Bool(on)) => Ok(Some(*on)),
+        Some(_) => Err(bad(IMPORT, format!("`{key}` must be true or false"))),
+    }
+}
+
+fn staged(p: &Value, source: &Source) -> Result<bool> {
+    if !flag(p, "stage")?.unwrap_or(false) {
+        return Ok(false);
+    }
+    if let Some(key) = ["parent", "x", "y"].into_iter().find(|key| get(p, key).is_some()) {
+        return Err(bad(IMPORT, format!("`stage` writes into the import page: it can't come with `{key}`")));
+    }
+    let name = uigen_import::import_page_name(&source.package, &source.version);
+    if name.chars().count() > MAX_PAGE_NAME_CHARS {
+        return Err(bad(IMPORT, format!("the import page name is more than {MAX_PAGE_NAME_CHARS} characters: \"{name}\"")));
+    }
+    Ok(true)
+}
+
 fn source_of(s: &Session, p: &Value) -> Result<(String, Source, String)> {
     let binding = binding(s, IMPORT)?;
     let package = text(p, "package")?.ok_or_else(|| bad(IMPORT, "package is required"))?;
@@ -123,6 +146,8 @@ fn source_of(s: &Session, p: &Value) -> Result<(String, Source, String)> {
 
 fn import_component(s: &mut Session, p: &Value) -> Result<Value> {
     let (root, source, project_root) = source_of(s, p)?;
+    let stage = staged(p, &source)?;
+    let animations = flag(p, "animations")?.unwrap_or(true);
     let component = name_of(p, "component", None)?;
     let style_prop = name_of(p, "styleProp", Some("variant"))?;
     let size_prop = name_of(p, "sizeProp", Some("size"))?;
@@ -140,6 +165,7 @@ fn import_component(s: &mut Session, p: &Value) -> Result<Value> {
         sizes: values(p, "sizes")?,
         states: states(p)?,
         themes: themes(p)?,
+        animations,
     };
     let renders = request.styles.as_ref().map_or(1, Vec::len)
         * request.sizes.as_ref().map_or(1, Vec::len)
@@ -153,7 +179,9 @@ fn import_component(s: &mut Session, p: &Value) -> Result<Value> {
             ),
         ));
     }
-    let destination = Destination { uid: s.ds()?.uid, page: s.page()?, parent: parent_of(s, p)?, at: at(p)? };
+    let page = s.page()?;
+    let (parent, at) = if stage { (page, None) } else { (parent_of(s, p)?, at(p)?) };
+    let destination = Destination { stage, uid: s.ds()?.uid, page, parent, at };
     file_access::allow(Path::new(&project_root).join(WORK_DIR).join(CAPTURES_DIR), Access::Write).map_err(|e| bad(IMPORT, e.to_string()))?;
     let job = uigen_import::start(s, request, destination).map_err(|e| bad(IMPORT, e.message))?;
     Ok(json!({"job": job}))
