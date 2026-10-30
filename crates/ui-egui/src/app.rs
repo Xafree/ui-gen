@@ -7,8 +7,8 @@ use super::state::{LEFT_PANEL, LeftTab, MOBILE_STRIP, MobilePanel, NARROW_WIDTH,
 use super::{
     Arc, Done, FigApp, NodeId, OsStr, Path, PathBuf, PendingAck, PendingDialog, Poll, Session, TaskContext, UiState, Value, Waker, a11y, branch_ui,
     canvas, cjk, comments, cursors, dev_compare, dialogs, frame_stats, home, home_recents, i18n, icons, import_report, json, layers, live, menus,
-    missing_fonts, online, plugins_ui, present, render_worker, right, selection_spacing, shortcuts, style_picker, tabs, theme, toolbar, ui_scale,
-    updates_ui, variable_ui, versions, widgets, windows,
+    missing_fonts, online, playground, plugins_ui, present, render_worker, right, selection_spacing, shortcuts, style_picker, tabs, theme, toolbar,
+    ui_scale, updates_ui, variable_ui, versions, widgets, windows,
 };
 
 mod clipboard;
@@ -231,6 +231,7 @@ impl FigApp {
         self.sync_dev_mode();
         self.end_pen_outside_design();
         tabs::relink_presents(self);
+        playground::sync(self);
         tabs::tab_bar(self, ui);
         // Control/window work and this pass's physical tab click may have replaced the owner.
         // A shared field ID in that replacement must never consume the old commit marker.
@@ -263,7 +264,8 @@ impl FigApp {
             self.observe_ime(&ctx, false);
             return;
         }
-        let hidden = self.session.ds().map(|d| d.view.ui_hidden).unwrap_or(false);
+        let playground_front = playground::on_screen(self);
+        let hidden = playground_front || self.session.ds().map(|d| d.view.ui_hidden).unwrap_or(false);
         let narrow = !hidden && ui.available_width() < NARROW_WIDTH;
         let mobile = self.ui.mobile_panel.filter(|_| narrow);
         self.ui.narrow = narrow;
@@ -326,6 +328,10 @@ impl FigApp {
                 });
         }
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {
+            if playground_front {
+                playground::show(self, ui);
+                return;
+            }
             let worker = self.worker.take();
             let mut worker = worker.unwrap_or_else(|| render_worker::Worker::new(ctx.clone()));
             canvas::show(self, ui, &mut worker);

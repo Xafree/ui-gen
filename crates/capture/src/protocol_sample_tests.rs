@@ -20,7 +20,7 @@ fn render(sample_text: Option<&str>) -> CaptureJob {
 
 #[test]
 fn the_sample_text_is_a_field_of_the_request_next_to_the_props() {
-    let request = request_of(render(Some("Button")), &Timeouts::default());
+    let request = request_of(render(Some("Button")), &Timeouts::default()).unwrap();
 
     assert_eq!(request.params["sampleText"], json!("Button"));
     assert_eq!(request.params["props"], json!({"variant": "primary"}));
@@ -28,7 +28,7 @@ fn the_sample_text_is_a_field_of_the_request_next_to_the_props() {
 
 #[test]
 fn without_a_sample_text_the_request_has_no_such_field() {
-    let request = request_of(render(None), &Timeouts::default());
+    let request = request_of(render(None), &Timeouts::default()).unwrap();
 
     assert!(request.params.get("sampleText").is_none(), "{}", request.params);
 }

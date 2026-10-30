@@ -15,3 +15,4 @@ serde_json = { workspace = true }
 [dev-dependencies]
 figcraft-doc = { workspace = true }
 figcraft-dom = { workspace = true }
+image = { workspace = true }

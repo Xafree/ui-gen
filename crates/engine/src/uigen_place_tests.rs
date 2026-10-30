@@ -93,7 +93,7 @@ impl CaptureBackend for Backend {
                 self.version = version.clone();
                 Ok(json!({"package": package, "version": version, "framework": "react", "license": "MIT"}))
             }
-            CaptureJob::Uninstall { .. } => Ok(json!({})),
+            CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
         };
         self.submitted += 1;
         self.ready.push((self.submitted, outcome));

@@ -93,7 +93,7 @@ impl Worker {
     }
 
     fn execute(&mut self, job: CaptureJob) -> CaptureOutcome {
-        let request = request_of(job, &self.config.timeouts);
+        let request = request_of(job, &self.config.timeouts)?;
         let client = match self.client.as_mut() {
             Some(client) => client,
             None => self.client.insert(Client::launch(&self.config, &self.stop)?),

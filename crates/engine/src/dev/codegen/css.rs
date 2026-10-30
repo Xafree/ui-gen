@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use figcraft_doc::VariableId;
+use figcraft_doc::{Collection, VariableId};
 
 use super::{
     ContentAlign, CrossAlign, Document, EffectKind, LayoutMode, LetterSpacing, LineHeight, MainAlign, Node, NodeId, NodeKind, PaintKind, TextAlignH,
@@ -46,6 +46,7 @@ pub(crate) struct IgnoredSyntax {
 
 /// The names Lit gives the file's variables: `--<prefix>-<slug>`, unique in the file (a numeric
 /// suffix tells apart two variables with one slug), so a component and `tokens.css` agree.
+#[derive(Clone)]
 pub(crate) struct LitNames(HashMap<VariableId, String>);
 
 impl LitNames {
@@ -75,6 +76,46 @@ impl LitNames {
 
     pub fn name(&self, v: &Variable) -> String {
         self.0.get(&v.id).cloned().unwrap_or_else(|| css_var_name(&v.name))
+    }
+
+    /// The variables of `selected` that no component cites take the name of the same-named variable
+    /// of another collection that one does, so the components find the theme they are written for.
+    pub fn follow_citations(&mut self, doc: &Document, selected: &[&Collection], cited: &HashSet<String>) {
+        let in_selected = |v: &Variable| selected.iter().any(|c| c.id == v.collection);
+        let mut used: HashSet<String> = doc.variables.variables.iter().filter(|v| in_selected(v)).map(|v| self.name(v)).collect();
+        let uncited: Vec<&Variable> = doc.variables.variables.iter().filter(|v| in_selected(v) && !cited.contains(&self.name(v))).collect();
+        for v in uncited {
+            let twin = doc
+                .variables
+                .variables
+                .iter()
+                .find(|w| !in_selected(w) && w.name == v.name && cited.contains(&self.name(w)) && !used.contains(&self.name(w)));
+            if let Some(twin) = twin {
+                let name = self.name(twin);
+                used.insert(name.clone());
+                self.0.insert(v.id.clone(), name);
+            }
+        }
+    }
+
+    /// The names with the variables of `chosen` called after the same-named variables of `exported`:
+    /// another theme of the page keeps the names its components cite.
+    pub fn follow_theme(&self, doc: &Document, prefix: &str, exported: &Collection, chosen: &Collection) -> Self {
+        let mut names = self.clone();
+        if exported.id == chosen.id {
+            return names;
+        }
+        let fresh = LitNames::new(doc, prefix);
+        for v in doc.variables.variables.iter().filter(|v| v.collection == chosen.id) {
+            let twin = doc.variables.variables.iter().find(|w| w.collection == exported.id && w.name == v.name);
+            match twin {
+                Some(twin) => names.0.insert(v.id.clone(), self.name(twin)),
+                None => {
+                    names.0.insert(v.id.clone(), self.0.get(&v.id).or_else(|| fresh.0.get(&v.id)).cloned().unwrap_or_else(|| css_var_name(&v.name)))
+                }
+            };
+        }
+        names
     }
 }
 

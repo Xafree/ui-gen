@@ -1626,6 +1626,7 @@ dependencies = [
  "figcraft-doc",
  "figcraft-dom",
  "figcraft-engine",
+ "image",
  "serde_json",
 ]
 

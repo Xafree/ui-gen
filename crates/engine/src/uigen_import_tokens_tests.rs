@@ -121,7 +121,9 @@ impl CaptureBackend for Backend {
                 let snapshot = button(&self.look.lock().unwrap(), style, size, theme);
                 Ok(json!({"snapshot": snapshot, "png": ".uigen/captures/synthetic.png"}))
             }
-            CaptureJob::Install { .. } | CaptureJob::Uninstall { .. } => Err(service_failure(CaptureErrorKind::Internal, "unexpected job")),
+            CaptureJob::Install { .. } | CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => {
+                Err(service_failure(CaptureErrorKind::Internal, "unexpected job"))
+            }
         };
         self.submitted += 1;
         self.ready.push((self.submitted, outcome));

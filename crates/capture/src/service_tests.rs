@@ -85,6 +85,9 @@ fn timeouts() -> Timeouts {
         install: Duration::from_secs(10),
         inspect: Duration::from_secs(10),
         render: Duration::from_secs(10),
+        playground_open: Duration::from_secs(10),
+        playground_frame: Duration::from_secs(10),
+        playground: Duration::from_secs(10),
         shutdown: Duration::from_secs(2),
     }
 }

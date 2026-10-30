@@ -159,6 +159,16 @@ mod pen_mode_tests;
 #[cfg(test)]
 mod perf_tests;
 #[cfg(test)]
+mod playground_bars_tests;
+#[cfg(test)]
+mod playground_input_tests;
+#[cfg(test)]
+mod playground_review_ui_tests;
+#[cfg(test)]
+mod playground_save_tests;
+#[cfg(test)]
+mod playground_view_tests;
+#[cfg(test)]
 mod plugin_panel_tests;
 #[cfg(test)]
 mod plugin_save_ui_tests;
@@ -275,6 +285,10 @@ pub use panels::frame_presets;
 pub use panels::layers;
 pub use panels::layout_panel;
 pub use panels::list_drag;
+pub use panels::playground;
+pub use panels::playground_bars;
+pub use panels::playground_decode;
+pub use panels::playground_input;
 pub use panels::proto_editor;
 pub use panels::proto_panel;
 pub use panels::right;
@@ -459,6 +473,8 @@ pub struct UiState {
     pub pending_open_frames: u8,
     /// The latest successful file import's summary and compatibility notes.
     pub import_report: Option<import_report::Report>,
+    /// The Playground tab, when open.
+    pub playground: playground::PlaygroundTab,
     /// The Export library as Lit window, when open.
     pub lit_export: Option<dialogs::lit_export::LitExport>,
     /// The Project settings window, when open.
@@ -627,6 +643,7 @@ impl Default for UiState {
             pending_opens: Vec::new(),
             pending_open_frames: 0,
             import_report: None,
+            playground: playground::PlaygroundTab::default(),
             lit_export: None,
             project_settings: None,
             import_window: None,

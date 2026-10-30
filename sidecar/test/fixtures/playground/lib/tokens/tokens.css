@@ -1,0 +1,10 @@
+:root {
+  --x-color-primary: rgb(200, 30, 30);
+  --x-radius: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --x-color-primary: rgb(30, 60, 200);
+  }
+}

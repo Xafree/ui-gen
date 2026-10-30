@@ -185,7 +185,7 @@ impl CaptureBackend for FakeBackend {
             CaptureJob::Install { package, version, .. } => {
                 Ok(json!({"package": package, "version": version, "framework": "react", "license": "MIT"}))
             }
-            CaptureJob::Uninstall { .. } => Ok(json!({})),
+            CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
         };
         shared.submitted.push(job);
         let id = u64::try_from(shared.submitted.len()).unwrap();

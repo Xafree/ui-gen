@@ -28,6 +28,9 @@ impl Session {
         }
         branches::sync(self);
         self.apply_view_prefs();
+        if cmd::playground::leaves_document_alone(id) {
+            return guard::run(id, || (spec.run)(self, params));
+        }
         if textpreview::COMMANDS.contains(&id) {
             // A live preview is no edit: no undo step, normalisation or rollback here.
             let r = guard::run(id, || (spec.run)(self, params));

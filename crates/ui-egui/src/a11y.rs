@@ -208,6 +208,14 @@ pub fn canvas(nav: &mut Nav, resp: &Response, describe: impl FnOnce() -> String)
     });
 }
 
+/// The playground's page view, an image named `label`: F6 and Escape give it the keyboard like the
+/// canvas, but the canvas shortcuts stay off while it has it (the page gets the keys).
+pub fn page_view(nav: &mut Nav, resp: &Response, label: &str) {
+    nav.next.canvas = Some(resp.id);
+    area(nav, Region::Canvas, resp.rect);
+    node(resp, label, |n| n.set_role(Role::Image));
+}
+
 /// An open popup drawn by the app itself (egui `Area` `area`), opened from `opener`: a keyboard
 /// user who opened it moves into it.
 pub fn popup(nav: &mut Nav, opener: Id, area: Id) {
@@ -251,6 +259,8 @@ struct Shared {
     ring_rect: Option<(Id, Rect, Rect)>,
     /// The focused control's name (`ui.inspect` › `focus.control`).
     name: String,
+    /// The focused control reads the arrow keys itself (a slider): the toolbar leaves them alone.
+    arrows: Option<Id>,
 }
 
 /// Run `f` on the per-context temporary `Shared` accessibility state keyed by
@@ -302,6 +312,7 @@ pub fn begin(app: &mut FigApp, ctx: &Context, root_scope: Id) {
         s.ring_rect = None;
         // Written again by the focused control as it draws.
         s.name.clear();
+        s.arrows = None;
     });
 }
 
@@ -388,10 +399,11 @@ fn keys(app: &mut FigApp, ctx: &Context) {
     if focused.is_some() && arrows.iter().any(|k| ctx.input(|i| i.key_pressed(*k))) {
         ctx.memory_mut(|m| m.move_focus(FocusDirection::None));
     }
+    let own_arrows = shared(ctx, |s| s.arrows);
     let in_region =
         focused.is_some_and(|f| widget.is_some_and(|w| app.ui.nav.region_at(w.rect.center()) == Some(region)) && Some(f) != app.ui.nav.last.canvas);
     match region {
-        Region::Toolbar if in_region => {
+        Region::Toolbar if in_region && focused != own_arrows => {
             for (k, step) in [(Key::ArrowLeft, -1), (Key::ArrowRight, 1)] {
                 if pressed(k, Modifiers::NONE) {
                     ctx.input_mut(|i| i.consume_key(Modifiers::NONE, k));
@@ -546,6 +558,8 @@ fn blocked(app: &FigApp) -> bool {
         || u.present.is_some()
         || u.home
         || u.find.is_some()
+        || u.playground.save_open
+        || u.playground.code_open
         || u.import_window.is_some()
         || !app.has_files()
 }
@@ -909,6 +923,20 @@ pub fn number(resp: &Response, label: &str, value: Option<f64>, suffix: &str, em
             None => n.set_value(empty),
         }
     });
+}
+
+/// A slider at `value`, enabled or not. Its arrows change the value, so a toolbar's arrows leave them to it.
+pub fn slider(resp: &Response, label: &str, value: f64, enabled: bool) {
+    node(resp, label, |n| {
+        n.set_role(Role::Slider);
+        n.set_numeric_value(value);
+        if !enabled {
+            n.set_disabled();
+        }
+    });
+    if resp.has_focus() {
+        shared(&resp.ctx, |s| s.arrows = Some(resp.id));
+    }
 }
 
 /// A text field showing `value`.

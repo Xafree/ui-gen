@@ -1,0 +1,58 @@
+<style>
+.pg-finance{display:grid;gap:24px;padding:24px;max-width:1200px;margin:0 auto}
+.pg-finance header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.pg-finance h1{margin:0;font-size:1.5em}
+.pg-finance h2{margin:0;font-size:1em}
+.pg-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pg-figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.pg-figure{display:grid;gap:6px;justify-items:start}
+.pg-figure strong{font-size:1.75em}
+.pg-panel{display:grid;gap:12px}
+.pg-panel table{border-collapse:collapse;width:100%;text-align:left}
+.pg-panel th,.pg-panel td{padding:8px 12px}
+.pg-budgets{display:grid;gap:12px}
+</style>
+<main class="pg-finance">
+  <header>
+    <h1>Finances</h1>
+    <div class="pg-actions">
+      <uigen-use name="Select" alt="Dropdown|Combobox" label="Période" value="Ce mois-ci"></uigen-use>
+      <uigen-use name="Button" variant="primary" size="medium">Nouveau virement</uigen-use>
+    </div>
+  </header>
+  <section class="pg-figures" aria-label="Synthèse">
+    <uigen-use name="Card" variant="outlined">
+      <div class="pg-figure"><span>Solde</span><strong>24 310,00 €</strong><uigen-use name="Badge" variant="success">+2,4 %</uigen-use></div>
+    </uigen-use>
+    <uigen-use name="Card" variant="outlined">
+      <div class="pg-figure"><span>Dépenses</span><strong>6 482,30 €</strong><uigen-use name="Badge" variant="warning">+5,9 %</uigen-use></div>
+    </uigen-use>
+    <uigen-use name="Card" variant="outlined">
+      <div class="pg-figure"><span>Épargne</span><strong>11 900,00 €</strong><uigen-use name="Badge" variant="success">Objectif atteint</uigen-use></div>
+    </uigen-use>
+  </section>
+  <uigen-use name="Card" variant="outlined">
+    <div class="pg-panel"><h2>Trésorerie sur douze mois</h2><uigen-use name="Chart" variant="area" size="large"></uigen-use></div>
+  </uigen-use>
+  <uigen-use name="Card" variant="outlined">
+    <div class="pg-budgets">
+      <h2>Budgets du mois</h2>
+      <uigen-use name="Progress" label="Alimentation" value="72"></uigen-use>
+      <uigen-use name="Progress" label="Transports" value="38"></uigen-use>
+      <uigen-use name="Progress" label="Loisirs" value="91"></uigen-use>
+    </div>
+  </uigen-use>
+  <uigen-use name="Card" variant="outlined">
+    <div class="pg-panel">
+      <h2>Dernières opérations</h2>
+      <table>
+        <thead><tr><th scope="col">Date</th><th scope="col">Libellé</th><th scope="col">Montant</th><th scope="col">Statut</th></tr></thead>
+        <tbody>
+          <tr><td>12/10</td><td>Loyer de l’atelier</td><td>-950,00 €</td><td><uigen-use name="Badge" variant="success">Payé</uigen-use></td></tr>
+          <tr><td>14/10</td><td>Facture client 0042</td><td>+3 200,00 €</td><td><uigen-use name="Badge" variant="warning">En attente</uigen-use></td></tr>
+          <tr><td>18/10</td><td>Abonnement logiciel</td><td>-29,00 €</td><td><uigen-use name="Badge" variant="success">Payé</uigen-use></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </uigen-use>
+</main>

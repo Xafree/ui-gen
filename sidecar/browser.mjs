@@ -1,6 +1,9 @@
 import { chromium } from 'playwright';
 
-const LAUNCH_OPTIONS = { args: ['--disable-lcd-text'], chromiumSandbox: true };
+const LAUNCH_OPTIONS = {
+  args: ['--disable-lcd-text', '--host-resolver-rules=MAP * ~NOTFOUND', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'],
+  chromiumSandbox: true,
+};
 const LOCAL_SCHEMES = new Set(['data:', 'about:', 'blob:']);
 const CLOSE_TIMEOUT_MS = 5_000;
 
@@ -35,14 +38,25 @@ const blockRemote = (route) => {
 const closeWithin = (context) =>
   Promise.race([context.close(), new Promise((resolve) => setTimeout(resolve, CLOSE_TIMEOUT_MS).unref())]).catch(() => undefined);
 
-export async function withPage(options, work) {
+export async function openPage(options) {
   const browser = await ensureBrowser();
   const context = await browser.newContext({ ...options, offline: true });
   try {
     await context.route('**/*', blockRemote);
-    return await work(await context.newPage());
-  } finally {
+    await context.routeWebSocket(/.*/, (socket) => socket.close());
+    return { page: await context.newPage(), close: () => closeWithin(context) };
+  } catch (error) {
     await closeWithin(context);
+    throw error;
+  }
+}
+
+export async function withPage(options, work) {
+  const { page, close } = await openPage(options);
+  try {
+    return await work(page);
+  } finally {
+    await close();
   }
 }
 

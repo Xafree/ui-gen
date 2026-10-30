@@ -1,0 +1,58 @@
+<style>
+.pg-dashboard{display:grid;gap:24px;padding:24px;max-width:1200px;margin:0 auto}
+.pg-dashboard header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.pg-dashboard h1{margin:0;font-size:1.5em}
+.pg-dashboard h2{margin:0;font-size:1em}
+.pg-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pg-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.pg-stat{display:grid;gap:6px;justify-items:start}
+.pg-stat strong{font-size:1.75em}
+.pg-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.pg-panel{display:grid;gap:12px}
+.pg-team{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+</style>
+<main class="pg-dashboard">
+  <header>
+    <h1>Tableau de bord</h1>
+    <div class="pg-actions">
+      <uigen-use name="Text field" label="Rechercher" placeholder="Rechercher un projet"></uigen-use>
+      <uigen-use name="Button" variant="secondary" size="medium">Filtrer</uigen-use>
+      <uigen-use name="Button" variant="primary" size="medium">Exporter le rapport</uigen-use>
+    </div>
+  </header>
+  <section class="pg-stats" aria-label="Indicateurs du mois">
+    <uigen-use name="Card" variant="outlined">
+      <div class="pg-stat"><span>Visiteurs</span><strong>12 480</strong><uigen-use name="Badge" variant="success">+8,2 %</uigen-use></div>
+    </uigen-use>
+    <uigen-use name="Card" variant="outlined">
+      <div class="pg-stat"><span>Commandes</span><strong>1 036</strong><uigen-use name="Badge" variant="success">+3,1 %</uigen-use></div>
+    </uigen-use>
+    <uigen-use name="Card" variant="outlined">
+      <div class="pg-stat"><span>Panier moyen</span><strong>48,50 €</strong><uigen-use name="Badge" variant="warning">-1,4 %</uigen-use></div>
+    </uigen-use>
+    <uigen-use name="Card" variant="outlined">
+      <div class="pg-stat"><span>Tickets ouverts</span><strong>27</strong><uigen-use name="Badge" variant="neutral">Stable</uigen-use></div>
+    </uigen-use>
+  </section>
+  <section class="pg-charts" aria-label="Évolution">
+    <uigen-use name="Card" variant="outlined">
+      <div class="pg-panel"><h2>Visites par semaine</h2><uigen-use name="Chart" variant="line" size="large"></uigen-use></div>
+    </uigen-use>
+    <uigen-use name="Card" variant="outlined">
+      <div class="pg-panel"><h2>Ventes par catégorie</h2><uigen-use name="Chart" variant="bar" size="large"></uigen-use></div>
+    </uigen-use>
+  </section>
+  <section aria-label="Équipe">
+    <uigen-use name="Card" variant="outlined">
+      <div class="pg-panel">
+        <h2>Équipe du projet</h2>
+        <div class="pg-team">
+          <uigen-use name="Avatar" size="medium" label="Camille Durand"></uigen-use>
+          <uigen-use name="Avatar" size="medium" label="Louis Martin"></uigen-use>
+          <uigen-use name="Avatar" size="medium" label="Inès Garnier"></uigen-use>
+          <uigen-use name="Button" variant="ghost" size="small" disabled>Inviter</uigen-use>
+        </div>
+      </div>
+    </uigen-use>
+  </section>
+</main>

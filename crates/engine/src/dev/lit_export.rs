@@ -19,6 +19,7 @@ mod plan;
 mod write;
 
 pub use command::specs;
+pub(crate) use plan::plan_named;
 pub use plan::{ExportOptions, ExportPlan, Issue, PlannedComponent, PlannedFile, Status, plan};
 pub use write::{MANIFEST, Reason, Skipped, WriteReport, write};
 
@@ -55,14 +56,14 @@ fn named(c: &Collection, matches: impl Fn(&str) -> bool) -> Option<&Mode> {
     c.modes.iter().find(|m| matches(m.name.trim()))
 }
 
-fn light_of<'a>(c: &'a Collection, wanted: Option<&str>) -> Option<&'a Mode> {
+pub(crate) fn light_of<'a>(c: &'a Collection, wanted: Option<&str>) -> Option<&'a Mode> {
     wanted
         .and_then(|w| named(c, |n| n.eq_ignore_ascii_case(w.trim())))
         .or_else(|| named(c, |n| LIGHT_MODES.iter().any(|l| n.eq_ignore_ascii_case(l))))
         .or_else(|| c.modes.first())
 }
 
-fn dark_of<'a>(c: &'a Collection, wanted: Option<&str>, light: &Mode) -> Option<&'a Mode> {
+pub(crate) fn dark_of<'a>(c: &'a Collection, wanted: Option<&str>, light: &Mode) -> Option<&'a Mode> {
     let found = match wanted {
         Some(w) => named(c, |n| n.eq_ignore_ascii_case(w.trim())),
         None => named(c, |n| DARK_MODES.iter().any(|d| n.eq_ignore_ascii_case(d))),
@@ -90,10 +91,37 @@ fn rule(out: &mut String, selector: &str, lines: &[String], depth: usize) {
 
 /// `colls` as `tokens.css`.
 pub fn tokens_css(doc: &Document, colls: &[&Collection], opts: &TokenOptions) -> TokensCss {
+    tokens_css_named(doc, colls, opts, &LitNames::new(doc, &opts.prefix))
+}
+
+/// `theme` and the collections its aliases reach, transitively, `theme` first: what a page needs to
+/// show the theme.
+pub(crate) fn with_aliased<'a>(doc: &'a Document, theme: &'a Collection) -> Vec<&'a Collection> {
+    let mut found = vec![theme];
+    let mut next = 0;
+    while let Some(collection) = found.get(next).copied() {
+        next += 1;
+        let values = doc.variables.variables.iter().filter(|v| v.collection == collection.id).flat_map(|v| v.values.values());
+        for target in values.filter_map(|x| if let VariableValue::Alias(a) = x { doc.variables.get(a) } else { None }) {
+            if let Some(reached) = doc.variables.collections.iter().find(|c| c.id == target.collection)
+                && !found.iter().any(|c| c.id == reached.id)
+            {
+                found.push(reached);
+            }
+        }
+    }
+    found
+}
+
+/// `colls` as `tokens.css`, the custom properties called by `names`; one name declared twice is kept once.
+pub(crate) fn tokens_css_named(doc: &Document, colls: &[&Collection], opts: &TokenOptions, names: &LitNames) -> TokensCss {
     let vars = &doc.variables;
-    let names = LitNames::new(doc, &opts.prefix);
     let roles = Roles::new(doc);
-    let declared: Vec<String> = colls.iter().flat_map(|c| vars.variables.iter().filter(|v| v.collection == c.id)).map(|v| names.name(v)).collect();
+    let mut declared: Vec<String> =
+        colls.iter().flat_map(|c| vars.variables.iter().filter(|v| v.collection == c.id)).map(|v| names.name(v)).collect();
+    let mut seen = HashSet::new();
+    declared.retain(|name| seen.insert(name.clone()));
+    let mut written: HashSet<String> = HashSet::new();
     let known: HashSet<&String> = declared.iter().collect();
     let (mut root, mut dark, mut others): (Vec<String>, Vec<String>, Vec<Block>) = (Vec::new(), Vec::new(), Vec::new());
     let (mut notes, mut has_dark) = (Vec::new(), false);
@@ -105,6 +133,9 @@ pub fn tokens_css(doc: &Document, colls: &[&Collection], opts: &TokenOptions) ->
         let attribute = attribute.trim_start_matches('-');
         for v in vars.variables.iter().filter(|v| v.collection == c.id) {
             let name = names.name(v);
+            if !written.insert(name.clone()) {
+                continue;
+            }
             for target in v.values.values().filter_map(|x| if let VariableValue::Alias(a) = x { vars.get(a) } else { None }) {
                 let missing = names.name(target);
                 let note = Note {

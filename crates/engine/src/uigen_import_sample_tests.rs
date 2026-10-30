@@ -29,7 +29,9 @@ impl CaptureBackend for Backend {
                 }
                 Ok(result)
             }
-            CaptureJob::Install { .. } | CaptureJob::Uninstall { .. } => Err(service_failure(CaptureErrorKind::Internal, "unexpected job")),
+            CaptureJob::Install { .. } | CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => {
+                Err(service_failure(CaptureErrorKind::Internal, "unexpected job"))
+            }
         };
         let mut jobs = self.jobs.lock().unwrap();
         jobs.push(job);

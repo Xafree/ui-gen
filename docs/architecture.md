@@ -1,6 +1,6 @@
 # FigCraft architecture
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-30 · **Change:** minor (import pages, the inspection cache and the Components tab (UIGEN lot 4); the `figcraft-capture` crate, the `sidecar/` service and the engine's capture port; earlier: the `vectordrawable` crate, L4: Android Vector Drawable export; earlier: the shared hub in `collab-net` and the `figcraft-server` app) · **Target:** Figma Design
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-30 · **Change:** minor (import pages, the inspection cache and the Components tab (UIGEN lot 4); the playground view: images relayed from the capture service, the engine's `playground.*` commands, the sidecar's `playground.*` methods; earlier: the `figcraft-capture` crate, the `sidecar/` service and the engine's capture port; earlier: the `vectordrawable` crate, L4: Android Vector Drawable export; earlier: the shared hub in `collab-net` and the `figcraft-server` app) · **Target:** Figma Design
 
 How FigCraft is built today. Engine first, a thin swappable UI, everything a command; a Figma-shaped
 data model (a scene graph of frames with auto layout, components and variables). ~108,800 lines of
@@ -35,7 +35,7 @@ replaced.
 | L6 | `figcraft-collab-net` | ~3.0k | Live sessions over the network: the WebSocket transport (tungstenite, a reader and a writer thread per connection), the hub that runs a collaboration core server per open file for the session host the app embeds and for `figcraft-server` (behind a `Backend`), the joining and managing clients (publishing), invite links, presence relay and limits; the browser client; the only crate allowed networking dependencies |
 | apps | `figcraft`, `figcraft-cli`, `figcraft-web`, `figcraft-server` | ~3.2k | Desktop app (eframe + wgpu), command line, browser build (WASM, WebGPU/WebGL2), collaboration server (files, share links, persistence; [`server.md`](server.md)) |
 | plugins | `plugins/` (own workspace) | | Rust plugin SDK and two example plugins, built for wasm32 by `cargo xtask plugins` ([`plugins.md`](plugins.md)) |
-| sidecar | `sidecar/` (Node, own `package.json`) | | UIGEN capture service, the one JavaScript exception to "Rust only": installs npm packages into a project's `.uigen/sources/` (always `--ignore-scripts`), lists their components and renders one in Chromium (Playwright, pipe mode) into a DOM snapshot and a PNG. Opens no port, is never shipped to wasm; tested by `npm --prefix sidecar test` |
+| sidecar | `sidecar/` (Node, own `package.json`) | | UIGEN capture service, the one JavaScript exception to "Rust only": installs npm packages into a project's `.uigen/sources/` (always `--ignore-scripts`), lists their components, renders one in Chromium (Playwright, pipe mode) into a DOM snapshot and a PNG, and keeps the playground page of a project's Lit export open (`lit` bundles it, BSD-3-Clause). Opens no port, is never shipped to wasm; tested by `npm --prefix sidecar test` |
 | tools | `xtask` | | `ci`, `layers`, `assets`, `parity`, `version`, `icon`, `wasm`, `plugins`, `bench` |
 
 ### The capture port
@@ -51,6 +51,32 @@ on its process group). One that crashed alone leaves npm and Chromium behind: on
 them; on Windows the orphans are found by the parent id the dead service had (a PowerShell query), which fails only if
 that id was reused first (a job object would need `unsafe`). A clean exit (code 0) is not swept: the service stops its
 own children.
+
+### The playground view
+
+The Playground tab shows a live web page (the library project's Lit export and a model) without a second window: **the
+view is made of relayed images**. The page lives in the capture service's Chromium; the app shows its images and sends
+it the pointer and keyboard. Three roles, none of which knows the others' internals:
+
+- **Engine (L5, `assets/playground/`, commands `playground.*`)** owns the state: the export being shown (a snapshot of
+  the active tab's document, `stale` once it changes), the model, the settings and their own history, and the targets
+  each setting drives. It plans the export with `lit_export::plan`, writes `<project>/.uigen/playground/` through
+  `file_access`, composes the model into the library's tags, and hands the service `playground.*` calls through the
+  same `CaptureBackend` port (`CaptureJob::Playground`), tracked by the playground and never listed by `capture.status`.
+  `Session::playground_poll` asks for an image when none is on its way, `playground_take_frame` hands over the latest.
+  The settings never touch the document: they become a token override sheet pushed to the page.
+- **Interface (L6, `ui-egui/src/panels/playground*.rs`)** polls an image about thirty times a second (every 250 ms
+  while the service is busy), draws it, and translates egui's pointer, wheel and keyboard into `playground.input`
+  events. Top bar, settings bar, and the save and code windows act only through `app.run`.
+- **Service (`sidecar/playground.mjs`, `sidecar/lit-bundle.mjs`)** bundles the exported package (esbuild in memory,
+  `lit` from `sidecar/node_modules`, never installed in the project), keeps one page, swaps the text of two `<style>`
+  elements to change the tokens without a reload, renders images (a CDP screencast says when the page changed; each image is a
+  `Page.captureScreenshot`, JPEG quality 85, PNG on request) and applies the input. It reads staging files and style sheets; it does not know the document or the component names.
+
+The page's isolation (offline context, remote requests blocked, no popups) is the one of `render`; the exported module
+runs in Chromium only. Measured on the real service: a setting reaches the next image in about 34 ms (median over 20).
+Limits: no clipboard, no text selection and no accessibility tree of the page; the browser build has no tab.
+Protocol: [`uigen/plan-import.md`](uigen/plan-import.md#playground-lot-7).
 
 ### Translating a render into layers
 
@@ -142,6 +168,7 @@ input.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-30 | minor | The playground view (UIGEN lot 7): the Playground tab shows images relayed from the capture service's Chromium and sends it the pointer and keyboard; the engine owns the state (`playground.*` commands, settings as token overrides, own history), the sidecar the page |
 | 2026-10-30 | minor | UIGEN lot 4: import pages (`- Imported · <package> <version>`), the in-session inspection cache, the imported sections of the Components tab, dropping an imported component on the canvas and the "Import a component" window |
 | 2026-10-18 | minor | Added `vectordrawable` (L4), the Android Vector Drawable (XML) writer |
 | 2026-10-11 | minor | `collab-net` hosts through one hub for the app's sessions and the standalone server; added the `figcraft-server` app |

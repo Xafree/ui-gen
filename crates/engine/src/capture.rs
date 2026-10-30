@@ -8,6 +8,7 @@ use serde_json::Value;
 
 use crate::Session;
 use crate::cmd::project_sources;
+use crate::playground::PlaygroundState;
 use crate::uigen_import::{self, Cache, PendingImport};
 
 pub type JobId = u64;
@@ -18,6 +19,7 @@ pub enum CaptureJob {
     Uninstall { root: String, package: String },
     Inspect { root: String, package: String },
     Render { root: String, package: String, component: String, props: Value, sample_text: Option<String>, state: String, theme: String },
+    Playground { root: String, method: String, params: Value },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,7 +100,11 @@ struct JobRecord {
 impl CaptureJob {
     pub(crate) fn root(&self) -> &str {
         match self {
-            Self::Install { root, .. } | Self::Uninstall { root, .. } | Self::Inspect { root, .. } | Self::Render { root, .. } => root,
+            Self::Install { root, .. }
+            | Self::Uninstall { root, .. }
+            | Self::Inspect { root, .. }
+            | Self::Render { root, .. }
+            | Self::Playground { root, .. } => root,
         }
     }
 }
@@ -108,12 +114,23 @@ pub(crate) struct Capture {
     backend: Option<Box<dyn CaptureBackend>>,
     jobs: Vec<JobRecord>,
     pub(crate) imports: Vec<PendingImport>,
+    pub(crate) playground: PlaygroundState,
     pub(crate) catalog: Cache,
 }
 
 impl Capture {
+    pub(crate) fn available(&self) -> bool {
+        self.backend.is_some()
+    }
+
+    /// Whether an install, inspect or render job is still to finish: the service does one job at a time.
+    pub(crate) fn busy(&self) -> bool {
+        self.jobs.iter().any(|record| record.finished.is_none())
+    }
+
     fn stop(&mut self) {
         self.imports.clear();
+        self.playground = PlaygroundState::default();
         self.jobs.retain(|record| record.finished.is_some());
         if let Some(mut backend) = self.backend.take() {
             backend.shutdown();
@@ -150,6 +167,9 @@ impl Session {
     }
 
     pub fn submit_capture(&mut self, command: &str, package: &str, job: CaptureJob) -> Result<JobId, CaptureError> {
+        if matches!(job, CaptureJob::Playground { .. }) {
+            return Err(CaptureError { kind: CaptureErrorKind::InvalidRequest, message: "playground jobs are not capture jobs".to_string() });
+        }
         let capture = &mut self.capture;
         let Some(backend) = capture.backend.as_mut() else {
             return Err(CaptureError { kind: CaptureErrorKind::Unavailable, message: unavailable_message().to_string() });
@@ -160,14 +180,30 @@ impl Session {
         Ok(id)
     }
 
+    /// Hand a `playground.*` call to the service. It is tracked by the playground, never listed with the capture jobs.
+    pub(crate) fn submit_playground(&mut self, root: &str, method: &str, params: Value) -> Result<JobId, CaptureError> {
+        let Some(backend) = self.capture.backend.as_mut() else {
+            return Err(CaptureError { kind: CaptureErrorKind::Unavailable, message: unavailable_message().to_string() });
+        };
+        Ok(backend.submit(CaptureJob::Playground { root: root.to_string(), method: method.to_string(), params }))
+    }
+
     /// Bring back the jobs the service finished. A finished install or uninstall of a source is
     /// applied to `uigen.json` first; one that can't be applied comes out as a failure.
     pub fn pump_capture(&mut self) -> Vec<CaptureEvent> {
+        if !self.capture.available() {
+            return Vec::new();
+        }
+        self.playground_sync();
         let Some(backend) = self.capture.backend.as_mut() else {
             return Vec::new();
         };
         let mut events = Vec::new();
         for (job, outcome) in backend.poll() {
+            if self.capture.playground.owns(job) {
+                events.extend(crate::playground::advance(self, job, outcome));
+                continue;
+            }
             let Some(position) = self.capture.jobs.iter().position(|record| record.id == job && record.finished.is_none()) else {
                 continue;
             };
@@ -219,11 +255,11 @@ impl Session {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn unavailable_message() -> &'static str {
+pub(crate) fn unavailable_message() -> &'static str {
     "capture service unavailable in the browser"
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn unavailable_message() -> &'static str {
+pub(crate) fn unavailable_message() -> &'static str {
     "capture service not available"
 }
