@@ -1,7 +1,7 @@
 //! The Playground tab's top bar and settings bar (E7-7.1 to E7-7.4, and the code window, the
 //! keyboard and the catalogs of E7-7.6), driven through egui headless on the harness of
 //! `playground_view_tests.rs`. The service is a scripted fake backend; what the interface asks of the
-//! engine is read from the session journal, what it shows from the accessibility tree and the painted
+//! engine is read from the commands the app ran, what it shows from the accessibility tree and the painted
 //! text. Control names (the English keys of the catalogs):
 //! buttons "Undo setting", "Redo setting", "Revert settings", "Random settings", "Light mode",
 //! "Dark mode", "Save theme", "Show code"; sliders "Accent" (OKLCH hue of the effective accent,
@@ -153,6 +153,7 @@ fn enrich(doc: &mut Document) {
 }
 
 pub(crate) fn studio(tag: &str, language: &str, tokens: Tokens, start: Start, shape: bool) -> Studio {
+    crate::FigApp::clear_run_log();
     let mut b = Bench::without_backend(tag, language, Library::Full);
     let script = Arc::new(Mutex::new(Script {
         submitted: Vec::new(),
@@ -201,7 +202,8 @@ impl Studio {
     }
 
     pub(crate) fn calls(&self, command: &str) -> Vec<Value> {
-        self.b.v.app.session.journal.iter().filter(|(id, _)| id == command).map(|(_, params)| params.clone()).collect()
+        let journaled = self.b.v.app.session.journal.iter().filter(|(id, _)| id == command).map(|(_, params)| params.clone());
+        crate::FigApp::runs_of(command).into_iter().chain(journaled).collect()
     }
 
     pub(crate) fn jobs(&self, method: &str) -> usize {

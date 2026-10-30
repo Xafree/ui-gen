@@ -3,6 +3,22 @@ use super::{
     layers, live, menus, missing_fonts, playground, plugins_ui, present, tabs, updates_ui, versions,
 };
 
+#[cfg(test)]
+thread_local! {
+    static RUN_LOG: std::cell::RefCell<Vec<(String, Value)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+impl FigApp {
+    pub(crate) fn clear_run_log() {
+        RUN_LOG.with_borrow_mut(Vec::clear);
+    }
+
+    pub(crate) fn runs_of(command: &str) -> Vec<Value> {
+        RUN_LOG.with_borrow(|log| log.iter().filter(|(id, _)| id == command).map(|(_, params)| params.clone()).collect())
+    }
+}
+
 impl FigApp {
     /// Dismiss the composer after a successful switch away from the Comment tool.
     pub(crate) fn clear_comment_draft_after_tool_set(&mut self, id: &str, succeeded: bool) {
@@ -25,6 +41,8 @@ impl FigApp {
     /// Run a command, surfacing errors as a toast. Returns the result.
     pub fn run(&mut self, id: &str, params: Value) -> Option<Value> {
         let params = self.with_component_template(id, params);
+        #[cfg(test)]
+        RUN_LOG.with_borrow_mut(|log| log.push((id.to_string(), params.clone())));
         let layers_generation = self.session.clipboard.layers_generation;
         let r = self.session.execute(id, &params);
         self.clear_comment_draft_after_tool_set(id, r.is_ok());
