@@ -590,6 +590,8 @@ mod uigen_place_tests;
 #[cfg(test)]
 mod uigen_reference_tests;
 #[cfg(test)]
+mod uigen_theme_review_tests;
+#[cfg(test)]
 mod uigen_theme_tests;
 #[cfg(test)]
 mod uigen_update_review_tests;

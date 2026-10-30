@@ -109,6 +109,24 @@ impl Session {
         Err(EngineError::Disabled(id.to_string(), PREVIEW_READ_ONLY.into()))
     }
 
+    /// For a command that writes outside the document (a manifest on disk): refuse before writing it
+    /// when a version is viewed or a live session is read-only, since the edit would be rolled back.
+    pub(crate) fn require_editable(&self, id: &str) -> Result<()> {
+        let ds = self.ds()?;
+        if ds.preview.is_some() {
+            return Err(EngineError::Disabled(id.to_string(), PREVIEW_READ_ONLY.into()));
+        }
+        match self.live_read_only(ds.uid) {
+            Some(why) => Err(EngineError::Disabled(id.to_string(), why.into())),
+            None => Ok(()),
+        }
+    }
+
+    /// The state `check_instance_structure` compares a command's edit with.
+    pub(crate) fn edit_baseline(&self) -> Option<(Arc<Document>, Vec<NodeId>, NodeId, u64)> {
+        self.ds().ok().map(|d| (d.doc.clone(), d.selection.clone(), d.page, d.uid))
+    }
+
     /// A layer's position and size stay finite: infinity and NaN are written as `null`, so a file
     /// holding them saves but can't be reopened. Refuse such an edit (it is rolled back).
     fn check_finite_geometry(&self, id: &str, before: &Option<(Arc<Document>, Vec<NodeId>, NodeId, u64)>) -> Result<()> {
