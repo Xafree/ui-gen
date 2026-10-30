@@ -566,6 +566,8 @@ mod uigen_reference_tests;
 #[cfg(test)]
 mod uigen_theme_tests;
 #[cfg(test)]
+mod uigen_update_tests;
+#[cfg(test)]
 mod variable_tests;
 #[cfg(test)]
 mod variables_behaviour_tests;

@@ -268,3 +268,145 @@ impl Bench {
         serde_json::to_string(self.session.docs[tab].doc.as_ref()).unwrap()
     }
 }
+
+pub(crate) const NEXT_VERSION: &str = "1.1.0";
+
+const SYNTHETIC_PNG: &str = ".uigen/captures/synthetic.png";
+const CROWD_LAYERS: usize = 2100;
+
+pub(crate) type EvolvingSnapshot = fn(&str, &str, &str, &str, &str) -> Value;
+
+fn painted_layer(label: &str, fill: &str, box_: [f64; 4]) -> Value {
+    let [x, y, width, height] = box_;
+    json!({
+        "type": "element", "tag": "span", "label": label,
+        "box": {"x": x, "y": y, "width": width, "height": height},
+        "style": {"backgroundColor": fill}
+    })
+}
+
+fn with_layers(mut snapshot: Value, layers: Vec<Value>) -> Value {
+    if let Some(children) = snapshot["root"]["children"].as_array_mut() {
+        children.extend(layers);
+    }
+    snapshot
+}
+
+/// The button of the version 1.0.0, or of the version 1.1.0 where the default state paints its icon
+/// another colour and loses its ripple, and the hover state gains a badge.
+pub(crate) fn evolving_button(version: &str, style: &str, size: &str, state: &str, theme: &str) -> Value {
+    let (next, hover) = (version == NEXT_VERSION, state == "hover");
+    let icon = match (hover, next) {
+        (true, _) => "rgb(40, 50, 60)",
+        (false, true) => "rgb(200, 30, 30)",
+        (false, false) => "rgb(10, 20, 30)",
+    };
+    let mut layers = vec![painted_layer("Icon", icon, [74.0, 24.0, 12.0, 12.0])];
+    if hover || !next {
+        layers.push(painted_layer("Ripple", "rgb(70, 80, 90)", [88.0, 24.0, 10.0, 10.0]));
+    }
+    if hover && next {
+        layers.push(painted_layer("Badge", "rgb(0, 150, 0)", [100.0, 24.0, 10.0, 10.0]));
+    }
+    with_layers(synthetic_button(style, size, state, theme), layers)
+}
+
+/// Like [`evolving_button`], and the default state of the version 1.1.0 gains more layers than the
+/// update lists.
+pub(crate) fn crowded_button(version: &str, style: &str, size: &str, state: &str, theme: &str) -> Value {
+    let snapshot = evolving_button(version, style, size, state, theme);
+    if version != NEXT_VERSION || state == "hover" {
+        return snapshot;
+    }
+    let crowd = (0..CROWD_LAYERS)
+        .map(|index| {
+            painted_layer(&format!("Extra {index}"), "rgb(10, 20, 30)", [20.0 + f64::from(u8::try_from(index % 50).unwrap_or(0)), 20.0, 4.0, 4.0])
+        })
+        .collect();
+    with_layers(snapshot, crowd)
+}
+
+pub(crate) struct Evolving {
+    pub snapshot: EvolvingSnapshot,
+    pub failing_at: Option<&'static str>,
+}
+
+struct EvolvingBackend {
+    calls: Arc<Mutex<Calls>>,
+    version: String,
+    service: Evolving,
+}
+
+impl EvolvingBackend {
+    fn listing(&self) -> Value {
+        let props = json!([
+            {"name": "variant", "type": "enum", "values": ["solid", "outline"]},
+            {"name": "size", "type": "enum", "values": ["sm", "md"]}
+        ]);
+        json!({
+            "package": PACKAGE,
+            "version": self.version,
+            "framework": "react",
+            "components": [{"name": "Button", "props": props}, {"name": "Chip", "props": props}],
+            "notes": []
+        })
+    }
+
+    fn answer(&mut self, job: &CaptureJob) -> CaptureOutcome {
+        match job {
+            CaptureJob::Inspect { .. } => Ok(self.listing()),
+            CaptureJob::Render { props, state, theme, .. } => {
+                if self.service.failing_at == Some(self.version.as_str()) {
+                    return Err(service_failure(CaptureErrorKind::Render, "page crashed: boom"));
+                }
+                let style = props.get("variant").and_then(Value::as_str).unwrap_or("solid");
+                let size = props.get("size").and_then(Value::as_str).unwrap_or("md");
+                Ok(json!({"snapshot": (self.service.snapshot)(&self.version, style, size, state, theme), "png": SYNTHETIC_PNG}))
+            }
+            CaptureJob::Install { package, version, .. } => {
+                self.version.clone_from(version);
+                Ok(json!({"package": package, "version": version, "framework": "react", "license": "MIT"}))
+            }
+            CaptureJob::Uninstall { .. } => Ok(json!({})),
+        }
+    }
+}
+
+impl CaptureBackend for EvolvingBackend {
+    fn submit(&mut self, job: CaptureJob) -> JobId {
+        let outcome = self.answer(&job);
+        let mut calls = self.calls.lock().unwrap();
+        calls.submitted.push(job);
+        let id = u64::try_from(calls.submitted.len()).unwrap();
+        calls.ready.push((id, outcome));
+        id
+    }
+
+    fn poll(&mut self) -> Vec<(JobId, CaptureOutcome)> {
+        std::mem::take(&mut self.calls.lock().unwrap().ready)
+    }
+
+    fn shutdown(&mut self) {}
+}
+
+impl Bench {
+    /// A project with the source at [`VERSION`] and a service that renders another snapshot per
+    /// installed version: `project.setSourceVersion` moves the service to the new version.
+    pub(crate) fn evolving(tag: &str, service: Evolving) -> Self {
+        let mut bench = Self::without_backend(tag, &[synthetic_source(false)]);
+        let backend = EvolvingBackend { calls: Arc::clone(&bench.calls), version: VERSION.to_string(), service };
+        bench.session.set_capture_backend(Box::new(backend));
+        bench
+    }
+
+    /// The same project saved and opened again in a session that has no capture service.
+    pub(crate) fn reopened_without_backend(self) -> Self {
+        let Self { mut session, calls: _, _dir: dir } = self;
+        session.execute("file.save", &json!({})).unwrap();
+        drop(session);
+        let mut fresh = Session::empty();
+        let opened = fresh.execute("project.open", &json!({"path": dir.root()})).unwrap();
+        assert_eq!(opened["opened"], json!(true), "{opened}");
+        Self { session: fresh, calls: Arc::new(Mutex::new(Calls::default())), _dir: dir }
+    }
+}
