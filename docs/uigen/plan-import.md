@@ -172,6 +172,102 @@ instantané du lot 0 se relit à l'identique.
 - Les chemins de calques écrivent un `/` d'un nom `\/` et un `\` d'un nom `\\`, pour que deux calques distincts
   n'aient jamais le même chemin ; les noms affichés ne changent pas.
 
+### Playground (lot 7)
+
+L'onglet « Playground » montre une page web vivante, construite avec l'export Lit du projet, dans le
+Chromium du service de capture. **La vue est faite d'images relayées** : le service garde la page
+ouverte, l'interface en affiche les images (JPEG) et lui relaie la souris, la molette et le clavier.
+Aucun port, aucune fenêtre tierce, aucune dépendance Rust nouvelle.
+
+| Rôle | Ce qu'il fait |
+|---|---|
+| Moteur (L5, `crates/engine/src/assets/playground/`, commandes `cmd/playground.rs` et `cmd/playground_settings.rs`) | Possède l'état : export en cours (instantané du document de l'onglet actif à l'ouverture), modèle, réglages, historique, cibles des réglages. Compose le modèle en balises de la lib, écrit le dossier de staging, dit au service quoi pousser. |
+| Interface (L6, `crates/ui-egui/src/panels/playground*.rs`) | Demande une image toutes les 33 ms (250 ms quand le service est occupé), l'affiche, traduit la souris, la molette et le clavier en évènements `playground.input`. Barre du haut, barre de réglages, fenêtres « Enregistrer le thème » et « Code ». |
+| Service (Node, `sidecar/playground.mjs`, `sidecar/lit-bundle.mjs`) | Bundle le paquet Lit exporté (esbuild en mémoire, `lit` pris dans `sidecar/node_modules`, jamais dans le projet), tient **une seule** page, pousse les feuilles de style sans recharger, rend les images, applique les entrées. Ne connaît ni le document ni les noms de composants : il lit des fichiers de staging. |
+
+**Staging** : `<projet>/.uigen/playground/` contient `lib/` (le paquet Lit exporté du thème appliqué, par
+`lit_export::plan` puis `write(force)` ; le dossier de sortie Lit du projet n'est jamais touché) et
+`template.html` (le modèle composé). Le moteur ne l'écrit que par `file_access` : le dossier doit être dans les
+racines d'écriture de l'automatisation. Le thème appliqué est `appliedTheme` de `uigen.json`, à défaut la première
+collection du document ; sans collection, `playground.open` refuse.
+
+**Protocole du service**, toujours en **version 1** (méthodes nouvelles, aucune méthode ni champ existant ne
+change ; un service plus ancien répond `invalidRequest` « unknown method "playground.open" »). Les appels du
+playground ne sont jamais listés par `capture.status`.
+
+| Méthode | Paramètres | Résultat |
+|---|---|---|
+| `playground.open` | `dir`, `width` (320 à 3840), `height` (240 à 2160), `scale` (1 à 2), `theme` (`light` / `dark`), `tags` (au plus 256) | `{defined, missing, errors, shape}` (`shape` : Chromium connaît `corner-shape`) |
+| `playground.setTemplate` | `dir` | `{}` : remplace le `<body>` par `template.html`, garde les définitions et les feuilles |
+| `playground.apply` | `tokens?` (≤ 512 Kio), `overrides?` (≤ 256 Kio), `theme?`, `shape?` (`round` / `squircle` / `bevel`) | `{}` : remplace le texte des `<style id="uigen-tokens">` et `<style id="uigen-overrides">`, sans recharger la page |
+| `playground.resize` | `width`, `height`, `scale` | `{}` |
+| `playground.frame` | `after`, `format?` (`jpeg` par défaut, `png`) | `{seq, changed: false}` ou `{seq, changed: true, format, width, height, data}` (base64) ; attend au plus 40 ms une image plus récente |
+| `playground.input` | `events` (1 à 64) | `{}` |
+| `playground.close` | `{}` | `{}` (idempotent) |
+
+Évènements d'entrée : `move`, `down` / `up` (boutons `left`, `middle`, `right`), `wheel` (|dx|, |dy| ≤ 4000),
+`key` (liste fermée : Enter, Tab, Escape, Backspace, Delete, flèches, Home, End, PageUp, PageDown, Space ; modificateurs
+shift, ctrl, alt), `text` (≤ 256 caractères, sans caractère de contrôle). Une image dépasse au plus 8 Mio (sinon
+`tooLarge`). Délais côté client : `open` 45 s, `frame` 5 s, les autres 10 s ; un délai dépassé tue le service et le
+playground passe à `Failed`. La page est isolée comme celle de `render` : contexte hors ligne, requêtes distantes
+bloquées, fenêtres surgissantes fermées, `alert` / `confirm` refusés, clic sur un lien hors de la page sans effet ;
+le module n'est exécuté que dans Chromium, jamais dans Node.
+
+**Commandes du moteur** (aucune n'est annulable sauf `saveTheme`) : `playground.open {template?, width?, height?,
+scale?}` et `playground.refresh` (rendent `{job}`, dernier évènement `playground.open` ou `playground.refresh`),
+`playground.close`, `playground.template {name}`, `playground.resize`, `playground.state`, `playground.input`,
+`playground.set`, `playground.undo`, `playground.redo`, `playground.revert`, `playground.random {seed?}`,
+`playground.saveTheme {name, update?, apply?}` et `playground.code`. Détail : [`docs/mcp.md`](../mcp.md#playground).
+
+**Réglages** : Accent, Base, Police, Rayon, Forme du rayon, Thème, mode clair / sombre. Ils ne changent pas le
+document : ils produisent une feuille de surcharges (propriétés personnalisées sur `:root[data-theme="light"]` et
+`:root[data-theme="dark"]`) poussée par `playground.apply`, avec une pile d'historique propre au playground (100 étapes,
+distincte de `edit.undo`). Chaque réglage vise des **cibles** détectées par règles : Accent, les couleurs dont le nom
+contient `primary`, `primaire` ou `accent` (sans `contrast`, `text`, `foreground`, `on`…) ; Base, les couleurs neutres
+(chroma OKLCH ≤ 0,04, luminosité de 0,1 à 0,985) ; Police, les chaînes de portée `FONT_FAMILY` ou nommées `font` /
+`police` avec `family` / `famille` ; Rayon, les nombres de rôle `Radius`. Un réglage sans cible est grisé avec sa
+raison, jamais inventé. La forme du rayon (`corner-shape`) n'agit que dans l'aperçu : elle ne passe ni dans l'export Lit ni
+dans le thème enregistré. `playground.saveTheme` écrit les surcharges dans une nouvelle collection (chaque mode) ou
+réécrit le thème choisi, en un seul pas d'annulation, après une confirmation dans l'interface.
+
+**Modèles** : fragments HTML de `crates/engine/src/assets/playground/templates/` dont les emplacements
+`<uigen-use name="Button" …>` deviennent les balises de la lib ; « Composants » est généré (une instance par variante
+de chaque composant). Un composant absent donne `<div data-uigen-missing="Chart" role="note">Composant absent de la lib :
+Chart</div>`, jamais un élément natif ni un composant externe.
+
+**Limites connues (lot 7)**
+
+- La page n'est pas un widget d'UIGEN : **pas de presse-papiers** (ni copier, ni coller depuis ou vers la page),
+  **pas de sélection de texte** dans la page, **pas d'arbre d'accessibilité de la page** (les lecteurs d'écran ne
+  voient que l'image et son libellé), pas de composition IME (le texte arrive par évènements `text`).
+- Un seul playground par `Session` ; il vise le document de l'onglet actif à l'ouverture, passe à `stale` quand
+  ce document change (bouton « Actualiser » = `playground.refresh`) et se ferme avec son onglet.
+- Pendant une installation, une inspection ou un rendu, le service ne sert pas le playground : la vue garde la
+  dernière image et le dit.
+- **Le contenu placé dans une balise de la lib n'apparaît que si le composant a un `<slot>` par défaut.** Les modèles
+  Tableau de bord et Finances imbriquent du contenu (dont `Chart`) dans `Card` ; avec une `Card` dont le design n'a pas
+  de slot, ce contenu, et un marqueur « composant absent » qu'il porte, n'est pas dessiné. Constaté au Task 8 sur un
+  composant synthétique ; un composant **absent** ne cache pas ses enfants.
+- `playground.close` ferme la page ; le Chromium du service, partagé avec les rendus, ne s'arrête qu'avec le service.
+- Web (wasm) : `playground.open` répond « capture service unavailable in the browser » et l'onglet n'existe pas.
+
+**Essai réel, à la main** (`crates/capture/src/real_playground_tests.rs`, Node et Chromium du poste, aucun réseau) :
+
+```
+cargo test --offline -p figcraft-capture real_playground -- --ignored --test-threads=1 --nocapture
+```
+
+- E7-8.1 : sur un projet temporaire à trois composants synthétiques dont le fond est lié à des jetons,
+  `playground.open {template: "components"}` aboutit, une image JPEG arrive, `playground.set {accent}` change des pixels
+  de l'image suivante sans nouvel évènement `playground.open`, `playground.set {mode: "dark"}` fonce le fond, et il ne
+  reste aucun processus Node, esbuild ni Chromium sous le test une fois le service arrêté.
+- E7-8.2 : le temps entre `playground.set` et l'image qui le montre, sur 20 réglages. Mesuré le 30 octobre 2026 :
+  **médiane 34 ms, minimum 30 ms, maximum 56 ms** (le test dit si la médiane dépasse 150 ms ; ce n'est pas le cas, le
+  repli « fenêtre Chromium séparée » n'est pas nécessaire).
+- E7-8.3 : un `open` sur le modèle Tableau de bord d'une lib sans `Chart` liste `Chart` dans `missing`, le modèle de
+  staging porte son marqueur, et l'image change quand `Chart` est ajouté puis `playground.refresh` lancé (le marqueur
+  était donc visible).
+
 ## Lots
 
 ### Lot 0 · Essai de faisabilité (risque principal d'abord)
@@ -248,14 +344,18 @@ titre d'information. Si l'essai échoue, on revoit l'approche avant d'aller plus
    calque s'affiche dans Comparer.
 
 ### Lot 7 · Playground
-1. Onglet « Playground » : vue web (Chromium du service de capture) qui charge l'export Lit en
-   cours et un modèle.
-2. Modèles Composants, Tableau de bord, Mail, Chat, Finances, CRM, écrits avec les balises de la
+- [x] 1. Onglet « Playground » : vue web (Chromium du service de capture) qui charge l'export Lit en
+   cours et un modèle, par images relayées (voir « Playground (lot 7) »).
+- [x] 2. Modèles Composants, Tableau de bord, Mail, Chat, Finances, CRM, écrits avec les balises de la
    lib ; un composant absent est marqué, jamais remplacé.
-3. Barre de réglages (Accent, Base, Police, Rayon, Forme du rayon, Thème) : chaque réglage écrit
+- [x] 3. Barre de réglages (Accent, Base, Police, Rayon, Forme du rayon, Thème) : chaque réglage écrit
    des tokens du thème en mémoire et les pousse au modèle sans rechargement.
-4. Barre du haut : annuler, rétablir, revenir, hasard, clair / sombre, code.
-5. Enregistrer les réglages en thème de tokens (fenêtre Variables).
+- [x] 4. Barre du haut : annuler, rétablir, revenir, hasard, clair / sombre, code. « Claude » et
+   « Partager » n'en font pas partie : aucun bouton, aucune commande.
+- [x] 5. Enregistrer les réglages en thème de tokens (fenêtre « Enregistrer le thème » : nouvelle collection ou
+   mise à jour du thème choisi, jamais sans confirmation).
+- [x] 6. Essai réel et mesure de latence (`crates/capture/src/real_playground_tests.rs`, E7-8.1 à E7-8.3) :
+   médiane de 34 ms de `playground.set` à l'image, sous le seuil de 150 ms.
 
 ### Lot 8 · Livraison
 Node et Chromium embarqués dans l'installeur Windows, mesure du poids, licences affichées.

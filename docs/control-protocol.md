@@ -174,6 +174,17 @@ failed, e.g. `inspect: component "Nope" not found in @mui/material`), then find 
 `document.inspect` (it is selected). `uigen.importDom {snapshot, parent?, x?, y?, full?}` takes a snapshot you
 hold yourself and answers `{root, warnings}` directly; `full: true` asks for the complete translation.
 
+The playground commands (`playground.open`, `playground.refresh`, `playground.close`, `playground.template`,
+`playground.resize`, `playground.state`, `playground.input`, `playground.set`, `playground.undo`, `playground.redo`,
+`playground.revert`, `playground.random`, `playground.saveTheme`, `playground.code`; [MCP: Playground](mcp.md#playground))
+also run through `engine.execute`. `playground.open` and `playground.refresh` return `{job}` at once and export the
+applied theme into `<project>/.uigen/playground/`, which must be inside `--automation-write-root`; the page then opens in
+the capture service on the app's next frames. Playground jobs are not listed by `capture.status`: poll `engine.execute
+{command: "playground.state"}` until `status` is `ready` (or `failed`, with `error`). The other commands are answered at
+once and need a ready playground. No command returns the page's image; the app shows it in the Playground tab (it asks
+the service for an image about thirty times a second while the tab is in front), and `ui.screenshot` captures the window.
+Without a capture service, or in the browser build, `playground.open` answers `bad`.
+
 ### `engine.commands {}`
 
 Every command: `[{id, label, params, menu, shortcut, undoable}]`.
