@@ -43,11 +43,6 @@ impl FigApp {
         let params = self.with_component_template(id, params);
         #[cfg(test)]
         RUN_LOG.with_borrow_mut(|log| log.push((id.to_string(), params.clone())));
-        if id.starts_with("panel.") && figcraft_engine::find_command(id).is_none() {
-            self.session.request_ui(id, params);
-            self.handle_ui_requests();
-            return Some(json!({}));
-        }
         let layers_generation = self.session.clipboard.layers_generation;
         let r = self.session.execute(id, &params);
         self.clear_comment_draft_after_tool_set(id, r.is_ok());
