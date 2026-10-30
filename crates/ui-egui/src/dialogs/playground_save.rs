@@ -19,6 +19,7 @@ const WIDTH: f32 = 320.0;
 struct Draft {
     name: String,
     overwrite: bool,
+    apply: bool,
     problem: Option<String>,
     themes: Vec<String>,
     chosen: String,
@@ -45,7 +46,7 @@ fn reason(error: EngineError) -> String {
 
 fn commit(app: &mut FigApp, draft: &mut Draft) -> bool {
     let name = draft.name.trim().to_string();
-    let params = if draft.overwrite {
+    let mut params = if draft.overwrite {
         json!({"name": draft.chosen, "update": true})
     } else if name.is_empty() {
         draft.problem = Some(tr("Give the theme a name").to_string());
@@ -56,6 +57,9 @@ fn commit(app: &mut FigApp, draft: &mut Draft) -> bool {
     } else {
         json!({"name": name})
     };
+    if draft.apply {
+        params["apply"] = json!(true);
+    }
     match app.session.execute(SAVE, &params) {
         Ok(_) => {
             let saved = params["name"].as_str().unwrap_or_default();
@@ -77,6 +81,7 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
     let stored = ctx.data_mut(|data| data.get_temp::<Draft>(data_id()));
     let mut draft = stored.unwrap_or_else(|| Draft::open(app));
     let t = Tokens::get(ctx);
+    let stale = app.session.playground_stale();
     let (mut open, mut save, mut cancel) = (true, false, false);
     window(tr("Save theme"), ctx).id(Id::unique("playground_save_window")).open(&mut open).show(ctx, |ui| {
         ui.set_width(WIDTH);
@@ -99,6 +104,17 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
                 }
                 widgets::label(ui, &draft.chosen, t.text_secondary);
             });
+        }
+        if widgets::checkbox(ui, draft.apply, tr("Set as the applied theme")) {
+            draft.apply = !draft.apply;
+        }
+        if stale {
+            ui.add(
+                egui::Label::new(
+                    RichText::new(tr("The file changed since the page was exported: the saved theme may differ from the page.")).color(t.warning),
+                )
+                .wrap(),
+            );
         }
         if let Some(problem) = &draft.problem {
             ui.label(RichText::new(problem).color(t.danger));

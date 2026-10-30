@@ -1,7 +1,6 @@
 //! The Playground tab: the page the capture service keeps open, shown as the images it sends, with
 //! the pointer and keyboard relayed to it. The view takes the canvas area while the tab is in front.
 
-use std::io::Cursor;
 use std::time::Duration;
 
 use egui::{
@@ -11,11 +10,12 @@ use figcraft_engine::EngineError;
 use figcraft_engine::playground::{NO_COMPONENT, Status};
 use serde_json::json;
 
-use super::playground_bars::{self, Bars};
+use super::playground_bars::{self, Bars, Snapshot};
+use super::playground_decode::Decoder;
 use super::playground_input::{Frame, Relay};
 use crate::FigApp;
 use crate::a11y;
-use crate::i18n::tr;
+use crate::i18n::{tr, trn};
 use crate::theme::{Tokens, regular, semibold};
 use crate::widgets;
 
@@ -27,11 +27,17 @@ const INPUT: &str = "playground.input";
 const RESIZE_DELAY: f64 = 0.25;
 const PAGE_WIDTH: (f32, f32) = (320.0, 3840.0);
 const PAGE_HEIGHT: (f32, f32) = (240.0, 2160.0);
-const MAX_PICTURE_SIDE: u32 = 8192;
-const MAX_PICTURE_BYTES: u64 = 256 << 20;
 const POLL_EVERY: Duration = Duration::from_millis(33);
 const BUSY_POLL_EVERY: Duration = Duration::from_millis(250);
+const QUIET: f64 = 1.0;
+const RESUME_AFTER: f64 = 0.5;
+const INPUT_BOUND: usize = 256;
 const MESSAGE_WIDTH: f32 = 420.0;
+const NOTICES_WIDTH: f32 = 480.0;
+const NOTICES_MARGIN: f32 = 12.0;
+const MAX_LISTED: usize = 3;
+const KEPT_SHORTCUTS: [&str; 8] =
+    ["app.actions", "help.shortcuts", "view.fullscreen", "app.preferences", "file.new", "file.open", "file.save", "file.saveAs"];
 
 /// The size of the page's window, as the service gets it: points of the view, the pixel ratio of the screen.
 #[derive(Clone, Copy, PartialEq)]
@@ -47,6 +53,49 @@ struct Resizing {
     wanted: Option<(Window, f64)>,
 }
 
+/// When the view asks the page for images: while something just happened (an image, an input, a
+/// setting, the tab coming back) and for a moment after it, and as long as something waits. A page
+/// that stays the same is not asked again.
+#[derive(Default)]
+struct Pace {
+    touched: bool,
+    active_until: f64,
+    polled: Option<f64>,
+    seen: f64,
+    signature: u64,
+}
+
+impl Pace {
+    fn touch(&mut self) {
+        self.touched = true;
+    }
+
+    fn arrive(&mut self, now: f64, signature: u64) {
+        if self.touched || signature != self.signature || now - self.seen > RESUME_AFTER {
+            self.extend(now);
+        }
+        self.touched = false;
+        self.seen = now;
+        self.signature = signature;
+    }
+
+    fn extend(&mut self, now: f64) {
+        self.active_until = now + QUIET;
+    }
+
+    fn active(&self, now: f64) -> bool {
+        now < self.active_until
+    }
+
+    fn poll_due(&mut self, now: f64) -> bool {
+        let due = self.polled.is_none_or(|at| now - at >= POLL_EVERY.as_secs_f64());
+        if due {
+            self.polled = Some(now);
+        }
+        due
+    }
+}
+
 /// The Playground tab of the window and what its view keeps between frames.
 #[derive(Default)]
 pub struct PlaygroundTab {
@@ -58,8 +107,10 @@ pub struct PlaygroundTab {
     pub code_open: bool,
     pub bars: Bars,
     picture: Option<TextureHandle>,
+    decoder: Option<Decoder>,
     resizing: Resizing,
     relay: Relay,
+    pace: Pace,
 }
 
 impl PlaygroundTab {
@@ -77,8 +128,12 @@ impl PlaygroundTab {
 
     fn forget_page(&mut self) {
         self.picture = None;
+        self.decoder = None;
         self.resizing = Resizing::default();
         self.relay = Relay::default();
+        self.pace = Pace::default();
+        self.pace.touch();
+        self.bars.errors.clear();
     }
 }
 
@@ -96,6 +151,9 @@ pub fn on_screen(app: &FigApp) -> bool {
 /// tab in front, one refused for want of a component opens it empty. Returns whether the refusal
 /// is already told by the tab's empty state.
 pub fn after_command(app: &mut FigApp, id: &str, result: &Result<serde_json::Value, EngineError>) -> bool {
+    if id.starts_with("playground.") {
+        app.ui.playground.pace.touch();
+    }
     if id != OPEN && id != REFRESH {
         return false;
     }
@@ -148,13 +206,21 @@ pub fn show_tab(app: &mut FigApp) {
     }
     app.ui.home = false;
     app.ui.playground.front = true;
+    app.ui.playground.pace.touch();
+}
+
+/// Whether the shortcut of command `id` still works while the tab is in front: the document it
+/// would act on is out of sight.
+pub fn keeps_shortcut(id: &str) -> bool {
+    KEPT_SHORTCUTS.contains(&id)
 }
 
 /// Draws the view in the canvas area `ui` covers, whatever state the playground is in.
 pub fn show(app: &mut FigApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let status = app.session.playground_status().clone();
-    let bars = if status == Status::Closed { 0.0 } else { playground_bars::show(app, ui, &status) };
+    let snap = if status == Status::Ready { playground_bars::snapshot(app) } else { Snapshot::default() };
+    let bars = if status == Status::Closed { 0.0 } else { playground_bars::show(app, ui, &status, &snap) };
     let outer = ui.max_rect();
     let zone = Rect::from_min_max(pos2(outer.min.x, outer.min.y + bars), outer.max);
     ui.scope_builder(egui::UiBuilder::new().max_rect(zone), |ui| match status {
@@ -164,7 +230,7 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
             loading(ui, &t);
         }
         Status::Failed(cause) => failure(app, ui, &t, &cause),
-        Status::Ready => page(app, ui, &t, zone),
+        Status::Ready => page(app, ui, &t, zone, &snap),
     });
 }
 
@@ -245,50 +311,85 @@ fn without_root(app: &FigApp, message: &str) -> String {
     message.replace(root, ".").replace(&root.replace('\\', "/"), ".")
 }
 
-fn page(app: &mut FigApp, ui: &mut Ui, t: &Tokens, zone: Rect) {
+fn page(app: &mut FigApp, ui: &mut Ui, t: &Tokens, zone: Rect, snap: &Snapshot) {
     let ctx = ui.ctx().clone();
+    let now = ctx.input(|i| i.time);
     let busy = app.session.playground_busy();
-    app.session.playground_poll();
-    if let Some(frame) = app.session.playground_take_frame() {
-        match decode(&frame) {
-            Some(picture) => match app.ui.playground.picture.as_mut() {
-                Some(texture) => texture.set(picture, TextureOptions::LINEAR),
-                None => app.ui.playground.picture = Some(ctx.load_texture("playground-page", picture, TextureOptions::LINEAR)),
-            },
-            None => log::warn!("the playground sent an image that cannot be shown"),
-        }
+    let tab = &mut app.ui.playground;
+    tab.pace.arrive(now, snap.signature);
+    let waiting = busy || snap.waiting() || tab.relay.waiting() || tab.picture.is_none();
+    if (waiting || tab.pace.active(now)) && tab.pace.poll_due(now) {
+        app.session.playground_poll();
     }
-    ctx.request_repaint_after(if busy { BUSY_POLL_EVERY } else { POLL_EVERY });
-    let Some(texture) = app.ui.playground.picture.clone() else {
+    if let Some(frame) = app.session.playground_take_frame() {
+        tab.decoder.get_or_insert_with(|| Decoder::new(&ctx)).submit(frame);
+        tab.pace.extend(now);
+    }
+    match tab.decoder.as_mut().and_then(Decoder::take) {
+        Some(Some(picture)) => match tab.picture.as_mut() {
+            Some(texture) => texture.set(picture, TextureOptions::LINEAR),
+            None => tab.picture = Some(ctx.load_texture("playground-page", picture, TextureOptions::LINEAR)),
+        },
+        Some(None) => log::warn!("the playground sent an image that cannot be shown"),
+        None => {}
+    }
+    if waiting {
+        ctx.request_repaint_after(if busy { BUSY_POLL_EVERY } else { POLL_EVERY });
+    } else if tab.pace.active(now) {
+        ctx.request_repaint_after(POLL_EVERY);
+    }
+    let Some(texture) = tab.picture.clone() else {
         loading(ui, t);
-        notices(app, &ctx, t, zone);
+        notices(app, &ctx, t, zone, snap);
         return;
     };
+    let shown = page_rect(&ctx, zone);
     let resp = ui.interact(zone, ui.scope_id().with("playground_view"), Sense::click_and_drag());
-    ui.painter().image(texture.id(), zone, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+    ui.painter_at(zone).image(texture.id(), shown, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
     a11y::page_view(&mut app.ui.nav, &resp, tr("Playground preview"));
     a11y::ring_around(ui, zone.shrink(3.0), &resp);
     if resp.contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {
         resp.request_focus();
     }
-    relay(app, &ctx, &resp, zone);
+    relay(app, &ctx, &resp, shown, snap, now);
     resize(app, &ctx, zone);
-    notices(app, &ctx, t, zone);
+    notices(app, &ctx, t, zone, snap);
 }
 
-fn relay(app: &mut FigApp, ctx: &egui::Context, resp: &egui::Response, zone: Rect) {
+fn page_rect(ctx: &egui::Context, zone: Rect) -> Rect {
+    let window = window_of(ctx, zone);
+    Rect::from_min_size(zone.min, vec2(window.width as f32, window.height as f32))
+}
+
+fn relay(app: &mut FigApp, ctx: &egui::Context, resp: &egui::Response, shown: Rect, snap: &Snapshot, now: f64) {
+    let tab = &mut app.ui.playground;
+    let escape_taken = tab.save_open || tab.code_open || egui::Popup::is_any_open(ctx);
     let (events, pointer) = ctx.input(|i| (i.events.clone(), i.pointer.latest_pos()));
-    let focused = resp.has_focus();
-    let frame = Frame { events: &events, pointer, zone, hovered: resp.contains_pointer(), focused };
-    let relayed = app.ui.playground.relay.translate(&frame);
+    let frame = Frame { events: &events, pointer, zone: shown, hovered: resp.contains_pointer(), focused: resp.has_focus(), escape_taken };
+    let relayed = tab.relay.translate(&frame);
     if let Some(step) = relayed.leave {
         resp.surrender_focus();
         app.ui.nav.step(step);
     }
-    if !relayed.events.is_empty()
-        && let Err(error) = app.session.execute(INPUT, &json!({"events": relayed.events}))
-    {
-        log::debug!("{INPUT}: {error}");
+    let relay = &mut app.ui.playground.relay;
+    relay.queue(relayed.events);
+    let batch = relay.take(INPUT_BOUND.saturating_sub(snap.input_waiting));
+    if batch.is_empty() {
+        return;
+    }
+    match app.session.execute(INPUT, &json!({"events": batch})) {
+        Ok(_) => {
+            let tab = &mut app.ui.playground;
+            tab.relay.accepted();
+            tab.pace.extend(now);
+        }
+        Err(error) => {
+            let relay = &mut app.ui.playground.relay;
+            if relay.first_refusal(&error.to_string()) {
+                log::debug!("{INPUT}: {error}");
+            }
+            relay.put_back(batch);
+        }
     }
 }
 
@@ -321,21 +422,47 @@ fn resize(app: &mut FigApp, ctx: &egui::Context, zone: Rect) {
     }
     let params = json!({"width": wanted.width, "height": wanted.height, "scale": wanted.scale});
     match app.session.execute(RESIZE, &params) {
-        Ok(_) => app.ui.playground.resizing = Resizing { sent: Some(wanted), wanted: None },
+        Ok(_) => {
+            app.ui.playground.resizing = Resizing { sent: Some(wanted), wanted: None };
+            app.ui.playground.pace.touch();
+        }
         Err(error) => log::debug!("{RESIZE}: {error}"),
     }
 }
 
-fn notices(app: &mut FigApp, ctx: &egui::Context, t: &Tokens, zone: Rect) {
+fn too_small(zone: Rect) -> bool {
+    zone.width() < PAGE_WIDTH.0 || zone.height() < PAGE_HEIGHT.0
+}
+
+fn listing(ui: &mut Ui, t: &Tokens, title: &str, lines: &[String]) {
+    ui.label(RichText::new(title).font(semibold(12.0)).color(t.text));
+    for line in lines.iter().take(MAX_LISTED) {
+        ui.add(egui::Label::new(RichText::new(line).font(regular(12.0)).color(t.text_secondary)).wrap());
+    }
+    if lines.len() > MAX_LISTED {
+        ui.label(RichText::new(trn("and {n} more", lines.len() - MAX_LISTED, &[])).font(regular(12.0)).color(t.text_secondary));
+    }
+}
+
+fn notices(app: &mut FigApp, ctx: &egui::Context, t: &Tokens, zone: Rect, snap: &Snapshot) {
     let (busy, stale) = (app.session.playground_busy(), app.session.playground_stale());
-    if !busy && !stale {
+    let errors = app.ui.playground.bars.errors.clone();
+    let missing = if snap.missing.is_empty() { Vec::new() } else { vec![snap.missing.join(", ")] };
+    let notes: Vec<String> = snap
+        .notes
+        .iter()
+        .map(|note| if note.component.is_empty() { note.message.clone() } else { format!("{}: {}", note.component, note.message) })
+        .collect();
+    if too_small(zone) || (!busy && !stale && errors.is_empty() && missing.is_empty() && notes.is_empty()) {
         return;
     }
+    let width = NOTICES_WIDTH.min(zone.width() - 2.0 * NOTICES_MARGIN).max(0.0);
     let mut refresh = false;
     egui::Area::new(Id::unique("playground_notices"))
         .order(Order::Foreground)
         .pivot(Align2::CENTER_TOP)
-        .fixed_pos(pos2(zone.center().x, zone.min.y + 12.0))
+        .fixed_pos(pos2(zone.center().x, zone.min.y + NOTICES_MARGIN))
+        .constrain_to(zone)
         .show(ctx, |ui| {
             egui::Frame::NONE
                 .fill(t.panel)
@@ -343,37 +470,34 @@ fn notices(app: &mut FigApp, ctx: &egui::Context, t: &Tokens, zone: Rect) {
                 .corner_radius(CornerRadius::same(6))
                 .inner_margin(Margin::symmetric(12, 8))
                 .show(ui, |ui| {
+                    ui.set_max_width(width);
+                    ui.spacing_mut().item_spacing.y = 6.0;
                     if busy {
-                        ui.label(
-                            RichText::new(tr("The capture service is busy: the page updates when it is free.")).font(regular(12.0)).color(t.text),
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(tr("The capture service is busy: the page updates when it is free.")).font(regular(12.0)).color(t.text),
+                            )
+                            .wrap(),
                         );
                     }
                     if stale {
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.label(RichText::new(tr("The file changed since the page was exported.")).font(regular(12.0)).color(t.text));
                             refresh = widgets::button(ui, tr("Refresh"), false, true).clicked();
                         });
+                    }
+                    for (title, lines) in [
+                        (tr("Errors reported by the page"), &errors),
+                        (tr("Components missing from the library"), &missing),
+                        (tr("What the export could not do"), &notes),
+                    ] {
+                        if !lines.is_empty() {
+                            listing(ui, t, title, lines);
+                        }
                     }
                 });
         });
     if refresh {
         app.run(REFRESH, json!({}));
     }
-}
-
-fn decode(frame: &figcraft_engine::playground::Frame) -> Option<egui::ColorImage> {
-    use figcraft_engine::playground::FrameFormat;
-    let format = match frame.format {
-        FrameFormat::Jpeg => image::ImageFormat::Jpeg,
-        FrameFormat::Png => image::ImageFormat::Png,
-    };
-    let mut reader = image::ImageReader::with_format(Cursor::new(&frame.data), format);
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MAX_PICTURE_SIDE);
-    limits.max_image_height = Some(MAX_PICTURE_SIDE);
-    limits.max_alloc = Some(MAX_PICTURE_BYTES);
-    reader.limits(limits);
-    let rgba = reader.decode().ok()?.into_rgba8();
-    let size = [usize::try_from(rgba.width()).ok()?, usize::try_from(rgba.height()).ok()?];
-    Some(egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()))
 }

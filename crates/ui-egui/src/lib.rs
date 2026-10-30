@@ -163,6 +163,8 @@ mod playground_bars_tests;
 #[cfg(test)]
 mod playground_input_tests;
 #[cfg(test)]
+mod playground_review_ui_tests;
+#[cfg(test)]
 mod playground_save_tests;
 #[cfg(test)]
 mod playground_view_tests;
@@ -277,6 +279,7 @@ pub use panels::layout_panel;
 pub use panels::list_drag;
 pub use panels::playground;
 pub use panels::playground_bars;
+pub use panels::playground_decode;
 pub use panels::playground_input;
 pub use panels::proto_editor;
 pub use panels::proto_panel;

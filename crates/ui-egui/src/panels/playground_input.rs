@@ -2,6 +2,7 @@ use egui::{Event, Key, Modifiers, MouseWheelUnit, PointerButton, Pos2, Rect};
 use serde_json::{Value, json};
 
 pub const MAX_EVENTS: usize = 64;
+const MAX_HELD: usize = 256;
 const MAX_WHEEL: f64 = 4000.0;
 const MAX_TEXT_CHARS: usize = 256;
 const LINE_HEIGHT: f32 = 40.0;
@@ -16,6 +17,7 @@ pub struct Frame<'a> {
     pub zone: Rect,
     pub hovered: bool,
     pub focused: bool,
+    pub escape_taken: bool,
 }
 
 /// What a frame's input comes to for the page: the events of `playground.input`, and a Tab that
@@ -32,9 +34,52 @@ pub struct Relayed {
 #[derive(Default)]
 pub struct Relay {
     held: [bool; 3],
+    outbox: Vec<Value>,
+    refusal: Option<String>,
 }
 
 impl Relay {
+    pub fn queue(&mut self, events: Vec<Value>) {
+        for event in events {
+            match self.outbox.last_mut() {
+                Some(last) if is_move(last) && is_move(&event) => *last = event,
+                _ => self.outbox.push(event),
+            }
+        }
+        self.forget_oldest();
+    }
+
+    fn forget_oldest(&mut self) {
+        if self.outbox.len() > MAX_HELD {
+            self.outbox.drain(..self.outbox.len() - MAX_HELD);
+        }
+    }
+
+    pub fn take(&mut self, room: usize) -> Vec<Value> {
+        let count = self.outbox.len().min(room).min(MAX_EVENTS);
+        self.outbox.drain(..count).collect()
+    }
+
+    pub fn put_back(&mut self, mut batch: Vec<Value>) {
+        batch.append(&mut self.outbox);
+        self.outbox = batch;
+        self.forget_oldest();
+    }
+
+    pub fn waiting(&self) -> bool {
+        !self.outbox.is_empty()
+    }
+
+    pub fn first_refusal(&mut self, reason: &str) -> bool {
+        let is_new = self.refusal.as_deref() != Some(reason);
+        self.refusal = Some(reason.to_string());
+        is_new
+    }
+
+    pub fn accepted(&mut self) {
+        self.refusal = None;
+    }
+
     pub fn translate(&mut self, frame: &Frame) -> Relayed {
         let mut out = Relayed::default();
         let mut typing = frame.focused;
@@ -51,6 +96,7 @@ impl Relay {
                     out.leave = Some(if modifiers.shift { -1 } else { 1 });
                     typing = false;
                 }
+                Event::Key { key: Key::Escape, pressed: true, .. } if frame.escape_taken => {}
                 Event::Key { key, pressed: true, modifiers, .. } if typing => out.events.extend(key_event(*key, *modifiers)),
                 Event::Text(text) if typing => out.events.extend(text_event(text)),
                 _ => {}
@@ -92,8 +138,12 @@ fn button_of(button: PointerButton) -> Option<(usize, &'static str)> {
     }
 }
 
+fn is_move(event: &Value) -> bool {
+    event["type"] == "move"
+}
+
 fn replace_move(events: &mut Vec<Value>, event: Value) {
-    if let Some(earlier) = events.iter().position(|e| e["type"] == "move") {
+    if let Some(earlier) = events.iter().position(is_move) {
         events.remove(earlier);
     }
     events.push(event);

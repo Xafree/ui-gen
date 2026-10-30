@@ -1,6 +1,8 @@
 //! The Playground tab's top bar, model selector and settings bar. They read `playground.state` and
 //! act through the `playground.*` commands; nothing here touches the document.
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
@@ -44,8 +46,21 @@ struct Found {
     radius: bool,
 }
 
+/// One thing the export could not do, as `playground.state` lists it.
 #[derive(Clone, Default)]
-struct Snapshot {
+pub struct Note {
+    pub component: String,
+    pub message: String,
+}
+
+/// What `playground.state` says, read once a frame.
+#[derive(Clone, Default)]
+pub struct Snapshot {
+    pub input_waiting: usize,
+    pub apply_waiting: bool,
+    pub missing: Vec<String>,
+    pub notes: Vec<Note>,
+    pub signature: u64,
     dark: bool,
     theme: String,
     themes: Vec<String>,
@@ -63,12 +78,25 @@ struct Snapshot {
 }
 
 impl Snapshot {
-    fn read(state: &Value) -> Self {
+    pub fn read(state: &Value) -> Self {
+        let text = |value: &Value| value.as_str().map(str::to_string);
+        let texts = |value: &Value| value.as_array().map(|names| names.iter().filter_map(text).collect()).unwrap_or_default();
+        let mut hasher = DefaultHasher::new();
+        [&state["settings"], &state["template"], &state["applied"], &state["canUndo"], &state["canRedo"], &state["themes"]]
+            .iter()
+            .for_each(|part| part.to_string().hash(&mut hasher));
+        let waiting = Self {
+            input_waiting: state["inputWaiting"].as_u64().and_then(|count| usize::try_from(count).ok()).unwrap_or(0),
+            apply_waiting: state["applyWaiting"].as_bool().unwrap_or(false),
+            missing: texts(&state["missing"]),
+            notes: state["notes"].as_array().map(|notes| notes.iter().map(Note::read).collect()).unwrap_or_default(),
+            signature: hasher.finish(),
+            ..Self::default()
+        };
         let settings = &state["settings"];
         if settings.is_null() {
-            return Self::default();
+            return waiting;
         }
-        let text = |value: &Value| value.as_str().map(str::to_string);
         let effective = &state["effective"];
         let found = |key: &str| state["targets"][key].as_u64().is_some_and(|count| count > 0);
         let flag = |key: &str| state[key].as_bool().unwrap_or(false);
@@ -78,7 +106,7 @@ impl Snapshot {
         Self {
             dark,
             theme: text(&settings["theme"]).or_else(|| text(&state["applied"])).unwrap_or_default(),
-            themes: state["themes"].as_array().map(|names| names.iter().filter_map(text).collect()).unwrap_or_default(),
+            themes: texts(&state["themes"]),
             template: text(&state["template"]).unwrap_or_default(),
             radius: text(&settings["radius"]),
             font: text(&settings["font"]),
@@ -90,7 +118,19 @@ impl Snapshot {
             can_redo: flag("canRedo"),
             changed: touched || shape != "round" || dark,
             shape,
+            ..waiting
         }
+    }
+
+    pub fn waiting(&self) -> bool {
+        self.input_waiting > 0 || self.apply_waiting
+    }
+}
+
+impl Note {
+    fn read(note: &Value) -> Self {
+        let text = |key: &str| note[key].as_str().unwrap_or_default().to_string();
+        Self { component: text("component"), message: text("message") }
     }
 }
 
@@ -98,7 +138,7 @@ impl Snapshot {
 #[derive(Default)]
 pub struct Bars {
     shape: bool,
-    cache: Option<((usize, u64), Snapshot)>,
+    pub errors: Vec<String>,
     fonts: Option<Arc<[String]>>,
 }
 
@@ -124,25 +164,20 @@ pub fn note_event(app: &mut FigApp, event: &CaptureEvent) -> bool {
     if !OPENED.contains(&event.command.as_str()) {
         return false;
     }
+    let bars = &mut app.ui.playground.bars;
+    bars.errors.clear();
     if let Ok(answer) = &event.outcome {
-        app.ui.playground.bars.shape = answer["shape"].as_bool().unwrap_or(false);
+        bars.shape = answer["shape"].as_bool().unwrap_or(false);
+        bars.errors =
+            answer["errors"].as_array().map(|errors| errors.iter().filter_map(|e| e.as_str().map(str::to_string)).collect()).unwrap_or_default();
     }
     true
 }
 
-fn stamp(app: &FigApp) -> (usize, u64) {
-    (app.session.journal.len(), app.session.docs.get(app.session.active).map_or(0, |doc| doc.revision))
-}
-
-fn snapshot(app: &mut FigApp) -> Snapshot {
-    if let Some((cached, snapshot)) = &app.ui.playground.bars.cache
-        && *cached == stamp(app)
-    {
-        return snapshot.clone();
-    }
-    let snapshot = app.session.execute(STATE, &json!({})).map(|state| Snapshot::read(&state)).unwrap_or_default();
-    app.ui.playground.bars.cache = Some((stamp(app), snapshot.clone()));
-    snapshot
+/// The state of the playground now: the playground commands leave the document's revision and
+/// journal alone, so nothing but the state itself says that a setting changed.
+pub fn snapshot(app: &mut FigApp) -> Snapshot {
+    app.session.execute(STATE, &json!({})).map(|state| Snapshot::read(&state)).unwrap_or_default()
 }
 
 /// The themes of the document and the one the settings are written from.
@@ -152,15 +187,14 @@ pub fn theme_choices(app: &mut FigApp) -> (Vec<String>, String) {
 }
 
 /// Draws the bars at the top of the area `ui` covers; the height they take.
-pub fn show(app: &mut FigApp, ui: &mut Ui, status: &Status) -> f32 {
+pub fn show(app: &mut FigApp, ui: &mut Ui, status: &Status, snap: &Snapshot) -> f32 {
     let t = Tokens::get(ui.ctx());
     let ready = *status == Status::Ready;
-    let snap = if ready { snapshot(app) } else { Snapshot::default() };
     let band = egui::Frame::NONE.fill(t.panel).inner_margin(Margin::symmetric(12, 6)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.spacing_mut().item_spacing = vec2(8.0, 6.0);
-        top_bar(app, ui, &t, &snap, ready);
-        settings_bar(app, ui, &t, &snap, ready);
+        top_bar(app, ui, &t, snap, ready);
+        settings_bar(app, ui, &t, snap, ready);
     });
     let rect = band.response.rect;
     ui.painter().hline(rect.x_range(), rect.max.y - 0.5, Stroke::new(1.0, t.border));
