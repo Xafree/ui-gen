@@ -419,6 +419,8 @@ mod playground_overrides_tests;
 #[cfg(test)]
 mod playground_targets_tests;
 #[cfg(test)]
+mod playground_templates_tests;
+#[cfg(test)]
 mod playground_tests;
 #[cfg(test)]
 mod plugin_data_tests;
