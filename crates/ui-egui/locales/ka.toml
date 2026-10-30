@@ -1973,6 +1973,10 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Recapture" = "ხელახლა გადაღება"
 "Original of {variant}" = "{variant}-ის ორიგინალი"
 "Library version of {variant}" = "{variant}-ის ბიბლიოთეკის ვერსია"
+"Comparison slider" = "შედარების სლაიდერი"
+"Difference of {variant}" = "{variant}-ის განსხვავება"
+"Differing pixels are shown in red" = "განსხვავებული პიქსელები ნაჩვენებია წითლად"
+"The difference can't be drawn." = "განსხვავების დახატვა შეუძლებელია."
 [commands]
 "align.bottom" = "ქვემოთ სწორება"
 "align.hcenter" = "ჰორიზონტალური ცენტრების სწორება"

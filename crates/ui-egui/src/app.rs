@@ -6,9 +6,9 @@ use super::services::{DialogFuture, PickFuture, Picked, RepaintWaker, Services};
 use super::state::{LEFT_PANEL, LeftTab, MOBILE_STRIP, MobilePanel, NARROW_WIDTH, PANEL_DEFAULT, RIGHT_PANEL, RightTab, TitleBar, fit_panels};
 use super::{
     Arc, Done, FigApp, NodeId, OsStr, Path, PathBuf, PendingAck, PendingDialog, Poll, Session, TaskContext, UiState, Value, Waker, a11y, branch_ui,
-    canvas, cjk, comments, compare_tab, cursors, dev_compare, dialogs, frame_stats, home, home_recents, i18n, icons, import_report, json, layers,
-    live, menus, missing_fonts, online, playground, plugins_ui, present, render_worker, right, selection_spacing, shortcuts, style_picker, tabs,
-    theme, toolbar, ui_scale, updates_ui, variable_ui, versions, widgets, windows,
+    canvas, cjk, comments, compare_tab, compare_view, cursors, dev_compare, dialogs, frame_stats, home, home_recents, i18n, icons, import_report,
+    json, layers, live, menus, missing_fonts, online, playground, plugins_ui, present, render_worker, right, selection_spacing, shortcuts,
+    style_picker, tabs, theme, toolbar, ui_scale, updates_ui, variable_ui, versions, widgets, windows,
 };
 
 mod clipboard;
@@ -366,6 +366,7 @@ impl FigApp {
         present::show_pane(self, &ctx);
         comments::keys(self, &ctx);
         dev_compare::keys(self, &ctx);
+        compare_view::keys(self, &ctx);
         branch_ui::keys(self, &ctx);
         live::dialog_keys(self, &ctx);
         dialogs::keys(self, &ctx);

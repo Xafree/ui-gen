@@ -1988,6 +1988,10 @@ name = "Svenska"
 "Recapture" = "Fånga igen"
 "Original of {variant}" = "Original av {variant}"
 "Library version of {variant}" = "Biblioteksversion av {variant}"
+"Comparison slider" = "Jämförelsereglage"
+"Difference of {variant}" = "Skillnad för {variant}"
+"Differing pixels are shown in red" = "Pixlar som skiljer sig visas i rött"
+"The difference can't be drawn." = "Skillnaden kan inte ritas."
 [commands]
 
 "align.bottom" = "Justera nederkant"

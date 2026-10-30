@@ -2,6 +2,7 @@
 //! original its import kept (`uigen.compare`, one variant per frame), one row per state. The
 //! measure runs through `app.run`; everything else is read from the document.
 
+use std::cell::OnceCell;
 use std::sync::Arc;
 
 use egui::{Color32, CornerRadius, Galley, Painter, Pos2, Rect, Sense, Stroke, Ui, pos2, vec2};
@@ -12,6 +13,7 @@ use serde_json::{Value, json};
 
 use crate::FigApp;
 use crate::a11y;
+use crate::compare_view::View;
 use crate::dev_compare::{Place, Shot, pane};
 use crate::i18n::{tr, trf};
 use crate::theme::{Tokens, regular, semibold};
@@ -90,10 +92,11 @@ pub(crate) struct Row {
     pub shapes: Option<Shapes>,
     pub text: Option<TextVerdict>,
     pub pictures: Option<Pictures>,
+    pub difference: OnceCell<Option<Shot>>,
 }
 
 impl Row {
-    fn title(&self) -> &str {
+    pub(crate) fn title(&self) -> &str {
         self.state.as_deref().unwrap_or(&self.name)
     }
 
@@ -145,6 +148,13 @@ impl Run {
     pub(crate) fn set(&self) -> Option<NodeId> {
         self.key.set
     }
+
+    fn knows(&self, variant: NodeId) -> bool {
+        match &self.phase {
+            Phase::Measuring(queue) => queue.iter().any(|(id, _)| *id == variant),
+            _ => self.rows.iter().any(|row| row.variant == variant),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -152,6 +162,7 @@ pub struct CompareTab {
     dark: bool,
     run: Option<Run>,
     pub(crate) detail: Option<NodeId>,
+    pub(crate) view: View,
 }
 
 impl CompareTab {
@@ -225,7 +236,9 @@ fn follow(app: &FigApp, tab: &mut CompareTab) {
     let set = set_of(&ds.doc, &ds.selection);
     let key = Key { uid: ds.uid, revision: ds.revision, page: ds.page, set, dark: tab.dark, finished_job };
     if tab.run.as_ref().is_none_or(|run| run.key != key) {
-        tab.run = Some(Run::start(&ds.doc, key));
+        let run = Run::start(&ds.doc, key);
+        tab.detail = tab.detail.filter(|variant| run.knows(*variant));
+        tab.run = Some(run);
     }
 }
 
@@ -293,15 +306,21 @@ fn row_of(entry: &Value, variant: NodeId, name: &str) -> Option<Row> {
         shapes,
         text,
         pictures: None,
+        difference: OnceCell::new(),
     })
 }
 
-fn pictures(app: &FigApp, ctx: &egui::Context, variant: NodeId, dark: bool) -> Option<Pictures> {
+pub(crate) fn original_raster(app: &FigApp, variant: NodeId, dark: bool) -> Option<uigen_compare::Raster> {
     let ds = app.session.ds().ok()?;
     let root = &app.session.project()?.root;
     let theme = if dark { "dark" } else { "light" };
     let png = reference_of(&ds.doc, variant)?.themes.get(theme)?.png.clone()?;
-    let original = Shot::from_raster(ctx, &uigen_compare::original_raster(root, &png).ok()?)?;
+    uigen_compare::original_raster(root, &png).ok()
+}
+
+fn pictures(app: &FigApp, ctx: &egui::Context, variant: NodeId, dark: bool) -> Option<Pictures> {
+    let ds = app.session.ds().ok()?;
+    let original = Shot::from_raster(ctx, &original_raster(app, variant, dark)?)?;
     let themed = uigen_compare::themed(&ds.doc, variant, dark);
     let library = Shot::new(ctx, &themed, variant, std::iter::empty())?;
     Some(Pictures { original, library })
@@ -405,7 +424,7 @@ fn notice_of(row: &Row) -> Option<String> {
     }
 }
 
-fn dimensions(size: (u32, u32)) -> String {
+pub(crate) fn dimensions(size: (u32, u32)) -> String {
     format!("{} × {}", size.0, size.1)
 }
 
