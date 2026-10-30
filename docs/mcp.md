@@ -975,6 +975,29 @@ Two more commands list the token themes of the file (its local variable collecti
   that is empty, not a string, longer than 200 characters or with control characters; an unknown collection or a
   library copy; a theme where no bound variable has an equivalent.
 
+Comparing an import with its original, and updating a source:
+
+- `uigen.compare {set?, theme?, variants?}` (no undo step, writes nothing): measures each variant of an imported set (an
+  import page or its copy in the library; default the one of the current page) against the image its import kept in
+  `.uigen/captures`. `theme` is `"light"` (default) or `"dark"`. Returns `{set, name, source, theme, rows, summary}`; a row is
+  `{variant, style, size, state, status, reason?, original, library, shapes, text}` with `status` one of `ok`, `ko`,
+  `sizeMismatch`, `missingReference`, `notComparable`. `shapes` (pixels outside the text boxes) is `ok` under 1 %; `text`
+  judges family, size, weight, position and measured width (1 px). The library is rendered in its own box (an outer
+  shadow is cut), and the images are read only inside `<project>/.uigen/captures`, with or without automation roots: a
+  missing, unreadable, oversized (8 MiB, 4096 × 4096) or linked-out image is a `missingReference` row, never an error.
+  A dark render equal to the light one is `notComparable`. **Refused** (`bad`): outside a library project; a `set` that is
+  missing, not a component set, without `uigen.source` or of more than 128 variants; an unknown `theme` or variant.
+- `panel.compare {}`: asks the interface to open the Compare tab of the right panel; refused outside a library project.
+- `uigen.updateSource {package, components?}`: captures again every component imported from a source, with the options of its
+  first import, and returns `{jobs, components}` at once (one `uigen.importComponent` event per component). The library
+  never changes. **Refused** (`bad`, no job): outside a library project, a package that is not an active source, nothing
+  imported from it, an unknown component, no capture service.
+- `uigen.sourceDiff {copy}`: what changed between the capture a copy comes from and the current one: `{copy, name, from, to,
+  base, latest, differences: [{id, variant, path, kind, field, state}], summary}`; `state` is `clean`, `modified` or `unknown`.
+  Pure.
+- `uigen.applyDifferences {copy, ids?}` (one undo step): takes the named differences into the copy (without `ids`, every
+  clean one) and returns `{applied, skipped, version}`.
+
 ### Playground
 
 The Playground tab shows a live web page built from the library project's Lit export, in the Chromium of the

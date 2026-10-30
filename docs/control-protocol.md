@@ -195,6 +195,13 @@ the import pages by source, the second copies one onto a page of the library in 
 `uigen.applyTheme {theme}` ([MCP: Component import](mcp.md#component-import)) answer directly too: the first lists the
 token themes of the file, the second makes the library components follow one in one undo step.
 
+`uigen.compare {set?, theme?, variants?}`, `uigen.sourceDiff {copy}`, `uigen.applyDifferences {copy, ids?}` and
+`panel.compare {}` ([MCP: Component import](mcp.md#component-import)) answer directly as well: the first measures an imported
+set against the images its import kept (read only inside `.uigen/captures`), the third changes the copy in one undo step,
+the last only asks the interface to open the Compare tab. `uigen.updateSource {package, components?}` is a capture job
+like `uigen.importComponent`: it returns `{jobs, components}` at once, and each job ends with its own event, which
+`capture.status {job}` shows `done` or `failed`.
+
 ### `engine.commands {}`
 
 Every command: `[{id, label, params, menu, shortcut, undoable}]`.

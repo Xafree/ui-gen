@@ -52,6 +52,17 @@ them; on Windows the orphans are found by the parent id the dead service had (a 
 that id was reused first (a job object would need `unsafe`). A clean exit (code 0) is not swept: the service stops its
 own children.
 
+### Original references and applying a theme
+
+An import keeps what it measured against: each variant carries `uigen.reference` (per theme, the path of the PNG under
+`.uigen/captures/`, the size of the root box, a `distinct` flag and the text boxes with their fonts), the set carries
+`uigen.importOptions`. The image stays on disk; there is no locked capture layer in the document.
+`uigen.compare` (`engine/src/uigen_compare/`) renders the variant in its own box on a copy of the document (following the
+Light or Dark mode), reads the PNG through `file_access` confined to `<project>/.uigen/captures` whether or not
+automation roots are active (`measure::read_original`), and returns the pixel and text verdicts. Applying a theme is a
+rebinding by name: `uigen.applyTheme` moves each variable binding of the library's components to the variable of the same
+name and type in the chosen collection, in one undo step, then writes `appliedTheme` to `uigen.json`.
+
 ### The playground view
 
 The Playground tab shows a live web page (the library project's Lit export and a model) without a second window: **the
