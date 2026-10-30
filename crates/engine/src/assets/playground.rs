@@ -14,6 +14,7 @@ use crate::{EngineError, Result, Session, bad, spec};
 mod history;
 mod overrides;
 mod random;
+mod save;
 mod session;
 mod settings;
 mod targets;
@@ -22,10 +23,10 @@ mod templates;
 mod templates_alt_tests;
 
 pub use history::History;
-#[cfg_attr(not(test), expect(unused_imports, reason = "the playground session of the next task is the first caller"))]
-pub(crate) use overrides::overrides;
 pub use overrides::{Effective, Overrides, SettingError, effective, overrides_css};
+pub(crate) use overrides::{is_font_name, overrides, rewrites};
 pub use random::random_settings;
+pub(crate) use save::{copy_with, write_into};
 pub use session::{Frame, FrameFormat, Status};
 pub(crate) use session::{PlaygroundState, Target, Window, advance};
 pub use settings::{Mode, Neutral, RadiusPreset, RadiusShape, Settings};

@@ -36,7 +36,7 @@ const MAX_WHEEL: f64 = 4000.0;
 const MAX_TEXT_CHARS: usize = 256;
 const MAX_SHOWN: usize = 40;
 const NOT_IN_PROJECT: &str = "the current file is not in a library project";
-const NOT_OPEN: &str = "the playground is not open";
+pub(super) const NOT_OPEN: &str = "the playground is not open";
 const KEYS: [&str; 14] = [
     "Enter",
     "Tab",
@@ -77,7 +77,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             STATE,
             "Playground state",
-            "{} → {status: closed|opening|ready|failed, error, template, stale (the document changed since the export), busy (the capture service has an install, inspect or render to do first)}",
+            "{} → {status: closed|opening|ready|failed, error, template, stale (the document changed since the export), busy (the capture service has an install, inspect or render to do first), themes: [collection names], applied (the applied theme), settings, effective, targets, canUndo, canRedo, missing: [component names the library lacks]}",
             false,
             state
         ),
@@ -99,7 +99,7 @@ struct Tab {
     doc: Arc<Document>,
 }
 
-fn shown(name: &str) -> String {
+pub(super) fn shown(name: &str) -> String {
     name.chars().take(MAX_SHOWN).collect::<String>().escape_debug().to_string()
 }
 
@@ -143,7 +143,13 @@ fn window_param(p: &Value) -> Result<Window> {
     Ok(Window { width: width as u32, height: height as u32, scale })
 }
 
-fn export_plan(cmd: &str, tab: &Tab) -> Result<ExportPlan> {
+struct Exported {
+    plan: ExportPlan,
+    theme: String,
+    token_prefix: String,
+}
+
+fn export_plan(cmd: &str, tab: &Tab) -> Result<Exported> {
     let variables = &tab.doc.variables;
     let theme = tab.applied_theme.as_deref().and_then(|name| variables.collection(name)).or(variables.collections.first());
     let theme = theme.ok_or_else(|| bad(cmd, "the project has no variable collection to take a theme from"))?;
@@ -151,6 +157,7 @@ fn export_plan(cmd: &str, tab: &Tab) -> Result<ExportPlan> {
     if valid_prefix(&tab.tag_prefix) {
         options.lit = LitOptions::new(&tab.tag_prefix);
     }
+    let token_prefix = options.lit.token_prefix.clone();
     let exported = plan(&tab.doc, &options);
     if exported.components.is_empty() {
         return Err(bad(cmd, "the project has no component to show"));
@@ -158,7 +165,7 @@ fn export_plan(cmd: &str, tab: &Tab) -> Result<ExportPlan> {
     if !exported.ready() {
         return Err(bad(cmd, format!("fix these components first: {}", exported.blockers().join(", "))));
     }
-    Ok(exported)
+    Ok(Exported { plan: exported, theme: theme.name.clone(), token_prefix })
 }
 
 fn staging(root: &str) -> PathBuf {
@@ -173,7 +180,7 @@ fn start(s: &mut Session, command: &'static str, tab: Tab, template: Template, w
     if !s.capture.available() {
         return Err(bad(command, unavailable_message()));
     }
-    let mut exported = export_plan(command, &tab)?;
+    let Exported { plan: mut exported, theme, token_prefix } = export_plan(command, &tab)?;
     let composed = compose(template, &exported);
     let root = absolute_root(command, &tab.root)?;
     let dir = staging(&root);
@@ -185,7 +192,7 @@ fn start(s: &mut Session, command: &'static str, tab: Tab, template: Template, w
         exported.components.iter().filter(|c| c.status == ComponentStatus::Ok).filter_map(|c| c.tag.as_deref()).take(MAX_TAGS).collect();
     let params = json!({"tags": tags, "theme": "light", "width": window.width, "height": window.height, "scale": window.scale});
     exported.files.clear();
-    let target = Target { uid: tab.uid, root, doc: tab.doc, template, plan: exported, window };
+    let target = Target { uid: tab.uid, root, doc: tab.doc, template, plan: exported, window, composed, base_theme: theme, token_prefix };
     let job = s.playground_opening(command, target, params).map_err(|e| bad(command, e.message))?;
     Ok(json!({"job": job}))
 }
@@ -218,10 +225,12 @@ fn template(s: &mut Session, p: &Value) -> Result<Value> {
     let composed = compose(template, &target.plan);
     write_template(&staging(&target.root), &composed)?;
     s.playground_set_template().map_err(|e| bad(TEMPLATE, e.message))?;
+    let missing = composed.missing.clone();
     if let Some(target) = s.capture.playground.target_mut() {
         target.template = template;
+        target.composed = composed;
     }
-    Ok(json!({"missing": composed.missing}))
+    Ok(json!({"missing": missing}))
 }
 
 fn state(s: &mut Session, _: &Value) -> Result<Value> {
@@ -235,7 +244,11 @@ fn state(s: &mut Session, _: &Value) -> Result<Value> {
     };
     let stale = state.target().is_some_and(|target| s.docs.iter().any(|ds| ds.uid == target.uid && !Arc::ptr_eq(&ds.doc, &target.doc)));
     let template = state.target().map(|target| target.template.name());
-    Ok(json!({"status": status, "error": error, "template": template, "stale": stale, "busy": s.capture.busy()}))
+    let mut answer = json!({"status": status, "error": error, "template": template, "stale": stale, "busy": s.capture.busy()});
+    if let (Some(fields), Value::Object(more)) = (answer.as_object_mut(), super::playground_settings::summary(s)) {
+        fields.extend(more);
+    }
+    Ok(answer)
 }
 
 fn coordinate(event: &Value, key: &str) -> std::result::Result<f64, String> {
@@ -287,13 +300,17 @@ fn valid_event(event: &Value) -> std::result::Result<(), String> {
     }
 }
 
-fn input(s: &mut Session, p: &Value) -> Result<Value> {
+pub(super) fn ensure_ready(s: &mut Session, cmd: &str) -> Result<()> {
     s.playground_sync();
     match s.capture.playground.status() {
-        Status::Ready => {}
-        Status::Opening => return Err(bad(INPUT, "the playground is still opening")),
-        Status::Closed | Status::Failed(_) => return Err(bad(INPUT, NOT_OPEN)),
+        Status::Ready => Ok(()),
+        Status::Opening => Err(bad(cmd, "the playground is still opening")),
+        Status::Closed | Status::Failed(_) => Err(bad(cmd, NOT_OPEN)),
     }
+}
+
+fn input(s: &mut Session, p: &Value) -> Result<Value> {
+    ensure_ready(s, INPUT)?;
     let events = match get(p, "events") {
         Some(Value::Array(events)) if (1..=MAX_EVENTS).contains(&events.len()) => events,
         _ => return Err(bad(INPUT, format!("`events` must be a list of 1 to {MAX_EVENTS} events"))),

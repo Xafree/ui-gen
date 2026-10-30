@@ -1,9 +1,7 @@
-#![cfg_attr(not(test), expect(dead_code, reason = "the playground session of the next task is the first caller"))]
-
 use std::fmt;
 
 use figcraft_color::{Color, Oklch};
-use figcraft_doc::{Collection, Document, Variable, VariableValue};
+use figcraft_doc::{Collection, Document, ModeId, Variable, VariableId, VariableValue};
 
 use super::settings::{Mode, Neutral, Settings};
 use super::targets::{Targets, color_in, targets, value_in};
@@ -72,7 +70,7 @@ fn validate(settings: &Settings) -> Result<(), SettingError> {
     }
 }
 
-fn is_font_name(font: &str) -> bool {
+pub(crate) fn is_font_name(font: &str) -> bool {
     !font.trim().is_empty() && font.chars().count() <= MAX_FONT_CHARS && !font.chars().any(|c| c.is_control() || FORBIDDEN_IN_FONT.contains(&c))
 }
 
@@ -106,8 +104,16 @@ struct Rewriter<'a> {
     roles: Roles,
 }
 
+/// One value the settings rewrite: `variable` in mode `mode` of its collection.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Rewrite {
+    pub variable: VariableId,
+    pub mode: ModeId,
+    pub value: VariableValue,
+}
+
 impl Rewriter<'_> {
-    fn value(&self, v: &Variable, mode: &str) -> Option<String> {
+    fn value(&self, v: &Variable, mode: &str) -> Option<VariableValue> {
         let (settings, found) = (self.settings, &self.found);
         if let Some(accent) = settings.accent.filter(|_| found.accent.contains(&v.id)) {
             let chosen = Oklch::from_color(accent);
@@ -117,34 +123,60 @@ impl Rewriter<'_> {
             return self.recolored(v, mode, (base.tint * MAX_TINT_CHROMA) as f32, base.hue as f32);
         }
         if let Some(font) = settings.font.as_ref().filter(|_| found.font.contains(&v.id)) {
-            return Some(format!("\"{font}\""));
+            return Some(VariableValue::String(font.clone()));
         }
         let preset = settings.radius.filter(|_| found.radius.contains(&v.id))?;
         let VariableValue::Number(x) = value_in(self.doc, self.collection, v, mode)? else { return None };
-        let scaled = preset.scale(x).filter(|s| s.is_finite())?;
-        Some(self.roles.number_css(v, scaled))
+        preset.scale(x).filter(|s| s.is_finite()).map(VariableValue::Number)
     }
 
-    fn recolored(&self, v: &Variable, mode: &str, chroma: f32, hue: f32) -> Option<String> {
+    fn recolored(&self, v: &Variable, mode: &str, chroma: f32, hue: f32) -> Option<VariableValue> {
         let original = color_in(self.doc, self.collection, v, mode)?;
         let lightness = Oklch::from_color(original).l;
-        Some(Oklch { l: lightness, c: chroma, h: hue }.to_color().with_alpha(original.a).to_css())
+        Some(VariableValue::Color(Oklch { l: lightness, c: chroma, h: hue }.to_color().with_alpha(original.a)))
     }
+
+    fn css(&self, v: &Variable, value: &VariableValue) -> Option<String> {
+        match value {
+            VariableValue::Color(c) => Some(c.to_css()),
+            VariableValue::String(font) => Some(format!("\"{font}\"")),
+            VariableValue::Number(x) => Some(self.roles.number_css(v, *x)),
+            VariableValue::Boolean(_) | VariableValue::Alias(_) => None,
+        }
+    }
+}
+
+fn rewriter<'a>(doc: &'a Document, collection: &'a Collection, settings: &'a Settings) -> Result<Rewriter<'a>, SettingError> {
+    validate(settings)?;
+    let found = targets(doc, &collection.id);
+    require_targets(settings, &found)?;
+    Ok(Rewriter { doc, collection, settings, found, roles: Roles::new(doc) })
 }
 
 /// The custom properties `settings` rewrite in `collection`, each mode starting from its own
 /// values. A collection with no dark mode gives the light values to the dark page.
 pub(crate) fn overrides(doc: &Document, collection: &Collection, names: &LitNames, settings: &Settings) -> Result<Overrides, SettingError> {
-    validate(settings)?;
-    let found = targets(doc, &collection.id);
-    require_targets(settings, &found)?;
+    let rewriter = rewriter(doc, collection, settings)?;
     let mut out = Overrides::default();
     let (Some(light), Some(dark)) = (mode_id(collection, Mode::Light), mode_id(collection, Mode::Dark)) else { return Ok(out) };
-    let rewriter = Rewriter { doc, collection, settings, found, roles: Roles::new(doc) };
     for v in doc.variables.variables.iter().filter(|v| v.collection == collection.id) {
         for (mode, list) in [(&light, &mut out.light), (&dark, &mut out.dark)] {
-            if let Some(value) = rewriter.value(v, mode) {
-                list.push((names.name(v), value));
+            if let Some(css) = rewriter.value(v, mode).and_then(|value| rewriter.css(v, &value)) {
+                list.push((names.name(v), css));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// The values `settings` rewrite in every mode of `collection`, for saving them into a theme.
+pub(crate) fn rewrites(doc: &Document, collection: &Collection, settings: &Settings) -> Result<Vec<Rewrite>, SettingError> {
+    let rewriter = rewriter(doc, collection, settings)?;
+    let mut out = Vec::new();
+    for v in doc.variables.variables.iter().filter(|v| v.collection == collection.id) {
+        for mode in &collection.modes {
+            if let Some(value) = rewriter.value(v, &mode.id) {
+                out.push(Rewrite { variable: v.id.clone(), mode: mode.id.clone(), value });
             }
         }
     }

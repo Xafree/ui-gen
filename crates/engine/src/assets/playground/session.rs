@@ -9,14 +9,18 @@ use base64::Engine as _;
 use figcraft_doc::Document;
 use serde_json::{Value, json};
 
-use super::Template;
-use crate::Session;
+use super::{Composed, History, Mode, RadiusShape, Settings, Template, overrides, overrides_css};
 use crate::capture::{CaptureError, CaptureErrorKind, CaptureEvent, CaptureOutcome, JobId};
+use crate::codegen::LitNames;
 use crate::lit_export::ExportPlan;
+use crate::lit_export::{TokenOptions, tokens_css};
+use crate::{Session, bad};
 
 const MAX_FRAME_BYTES: usize = 8 << 20;
 const MAX_FRAME_BASE64: usize = MAX_FRAME_BYTES.div_ceil(3) * 4;
 const OPEN_COMMAND: &str = "playground.open";
+const MAX_TOKENS_BYTES: usize = 512 << 10;
+const MAX_OVERRIDES_BYTES: usize = 256 << 10;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum Status {
@@ -56,11 +60,15 @@ pub(crate) struct Target {
     pub template: Template,
     pub plan: ExportPlan,
     pub window: Window,
+    pub composed: Composed,
+    pub base_theme: String,
+    pub token_prefix: String,
 }
 
 enum Purpose {
     Open { command: &'static str, current: bool },
     SetTemplate,
+    Apply,
     Frame,
     Input,
 }
@@ -72,6 +80,8 @@ pub(crate) struct PlaygroundState {
     jobs: BTreeMap<JobId, Purpose>,
     last_seq: u64,
     latest: Option<Frame>,
+    history: History,
+    shown_theme: String,
 }
 
 impl PlaygroundState {
@@ -89,6 +99,17 @@ impl PlaygroundState {
 
     pub(crate) fn target_mut(&mut self) -> Option<&mut Target> {
         self.target.as_mut()
+    }
+
+    pub(crate) fn history(&self) -> &History {
+        &self.history
+    }
+
+    /// The theme to show for `settings`: the collection it names, else the one the page was opened with.
+    pub(crate) fn theme_of<'a>(&'a self, settings: &Settings) -> Option<&'a figcraft_doc::Collection> {
+        let target = self.target.as_ref()?;
+        let name = settings.theme.as_deref().unwrap_or(&target.base_theme);
+        target.doc.variables.collections.iter().find(|c| c.name == name)
     }
 
     fn fail(&mut self, message: String) {
@@ -157,7 +178,7 @@ pub(crate) fn advance(s: &mut Session, job: JobId, outcome: CaptureOutcome) -> O
             }
             None
         }
-        Purpose::SetTemplate => {
+        Purpose::SetTemplate | Purpose::Apply => {
             if let Err(cause) = outcome {
                 state.fail(cause.message);
             }
@@ -224,6 +245,8 @@ impl Session {
         state.target = Some(target);
         state.last_seq = 0;
         state.latest = None;
+        state.history = History::new();
+        state.shown_theme = state.target.as_ref().map(|target| target.base_theme.clone()).unwrap_or_default();
         state.jobs.insert(job, Purpose::Open { command, current: true });
         Ok(job)
     }
@@ -245,6 +268,55 @@ impl Session {
             .ok_or_else(|| CaptureError { kind: CaptureErrorKind::InvalidRequest, message: "the playground is not open".to_string() })?;
         let job = self.submit_playground(&root, method, params)?;
         self.capture.playground.jobs.insert(job, purpose);
+        Ok(job)
+    }
+}
+
+/// What `playground.apply` carries for some settings, worked out before anything is sent.
+pub(crate) struct Prepared {
+    overrides: String,
+    mode: Mode,
+    shape: RadiusShape,
+    theme: String,
+    tokens: Option<String>,
+}
+
+impl Prepared {
+    pub(crate) fn overrides(&self) -> &str {
+        &self.overrides
+    }
+}
+
+impl PlaygroundState {
+    /// The style sheet and tokens the page needs to show `settings`; a refusal names the setting.
+    pub(crate) fn prepare(&self, command: &str, settings: &Settings) -> crate::Result<Prepared> {
+        let target = self.target.as_ref().ok_or_else(|| bad(command, "the playground is not open"))?;
+        let theme = self.theme_of(settings).ok_or_else(|| bad(command, "unknown theme: no collection of that name in the document"))?;
+        let names = LitNames::new(&target.doc, &target.token_prefix);
+        let found = overrides(&target.doc, theme, &names, settings).map_err(|cause| bad(command, cause.to_string()))?;
+        let css = overrides_css(&found);
+        let tokens = (theme.name != self.shown_theme).then(|| {
+            let options = TokenOptions { prefix: target.token_prefix.clone(), light: None, dark: None };
+            tokens_css(&target.doc, &[theme], &options).text
+        });
+        if css.len() > MAX_OVERRIDES_BYTES || tokens.as_ref().is_some_and(|text| text.len() > MAX_TOKENS_BYTES) {
+            return Err(bad(command, "the theme is too large to show in the playground"));
+        }
+        Ok(Prepared { overrides: css, mode: settings.mode, shape: settings.radius_shape, theme: theme.name.clone(), tokens })
+    }
+}
+
+impl Session {
+    /// Send `prepared` to the page; `history` becomes the playground's only once it is on its way.
+    pub(crate) fn playground_push(&mut self, prepared: Prepared, history: History) -> Result<JobId, CaptureError> {
+        let mut params = json!({"overrides": prepared.overrides, "theme": prepared.mode.id(), "shape": prepared.shape.id()});
+        if let Some(tokens) = prepared.tokens {
+            params["tokens"] = Value::String(tokens);
+        }
+        let job = self.relay_playground("playground.apply", params, Purpose::Apply)?;
+        let state = &mut self.capture.playground;
+        state.history = history;
+        state.shown_theme = prepared.theme;
         Ok(job)
     }
 }

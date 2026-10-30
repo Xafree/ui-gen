@@ -245,7 +245,7 @@ fn info(s: &mut Session, _: &Value) -> Result<Value> {
     Ok(json!({"project": project, "components": components}))
 }
 
-fn update(s: &mut Session, p: &Value) -> Result<Value> {
+pub(super) fn update(s: &mut Session, p: &Value) -> Result<Value> {
     let binding = s.project().cloned().ok_or_else(|| bad(UPDATE, "the current file is not in a library project"))?;
     let fields = p.as_object().ok_or_else(|| bad(UPDATE, "params must be an object"))?;
     if let Some(unknown) = fields.keys().find(|k| !UPDATABLE.contains(&k.as_str())) {

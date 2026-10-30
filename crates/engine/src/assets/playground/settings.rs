@@ -7,6 +7,19 @@ pub enum Mode {
     Dark,
 }
 
+impl Mode {
+    pub fn id(self) -> &'static str {
+        match self {
+            Mode::Light => "light",
+            Mode::Dark => "dark",
+        }
+    }
+
+    pub fn parse(id: &str) -> Option<Self> {
+        [Mode::Light, Mode::Dark].into_iter().find(|mode| mode.id() == id)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadiusPreset {
     Zero,
@@ -18,6 +31,20 @@ pub enum RadiusPreset {
 
 impl RadiusPreset {
     pub const ALL: [RadiusPreset; 5] = [RadiusPreset::Zero, RadiusPreset::Small, RadiusPreset::Medium, RadiusPreset::Large, RadiusPreset::Full];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            RadiusPreset::Zero => "zero",
+            RadiusPreset::Small => "small",
+            RadiusPreset::Medium => "medium",
+            RadiusPreset::Large => "large",
+            RadiusPreset::Full => "full",
+        }
+    }
+
+    pub fn parse(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|preset| preset.id() == id)
+    }
 
     /// The radius this level gives a token of `value` pixels, to the half pixel; None for the
     /// level that leaves the theme's value alone.
@@ -39,6 +66,20 @@ pub enum RadiusShape {
     Round,
     Squircle,
     Bevel,
+}
+
+impl RadiusShape {
+    pub fn id(self) -> &'static str {
+        match self {
+            RadiusShape::Round => "round",
+            RadiusShape::Squircle => "squircle",
+            RadiusShape::Bevel => "bevel",
+        }
+    }
+
+    pub fn parse(id: &str) -> Option<Self> {
+        [RadiusShape::Round, RadiusShape::Squircle, RadiusShape::Bevel].into_iter().find(|shape| shape.id() == id)
+    }
 }
 
 /// A hue (0 to 360) and how much of it the neutrals take (0 to 1).
