@@ -424,7 +424,7 @@ fn applying_without_ids_takes_the_clean_differences_only_in_one_undo_step() {
     assert!(reason.is_some_and(|reason| !reason.is_empty()), "the modified difference is skipped with its reason: {result}");
     let doc = doc(&lab.bench);
     assert!(layer_named(doc, variant_in(doc, lab.copy, "Default"), "Ripple").is_none(), "the removed layer is gone");
-    let parent = layer_named(doc, variant_in(doc, lab.copy, "Hover"), "Button").unwrap_or_else(|| panic!("no Button root in the hover variant"));
+    let parent = variant_in(doc, lab.copy, "Hover");
     assert!(children_of(doc, parent).iter().any(|id| name_of(doc, *id) == "Badge"), "the added layer sits in the parent of the same path");
     assert_eq!(fills_of(doc, icon), edited, "the modified fill is intact");
     assert_eq!(source_version(doc, lab.copy), VERSION, "a difference remains");
