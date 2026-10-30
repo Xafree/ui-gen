@@ -523,6 +523,8 @@ mod tiff_tests;
 #[cfg(test)]
 mod transform_behaviour_tests;
 #[cfg(test)]
+mod uigen_catalog_tests;
+#[cfg(test)]
 mod uigen_import_component_tests;
 #[cfg(test)]
 mod uigen_import_dom_full_tests;
