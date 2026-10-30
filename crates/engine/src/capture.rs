@@ -7,8 +7,9 @@ use std::fmt;
 use serde_json::Value;
 
 use crate::Session;
+use crate::cmd::project_sources;
 use crate::playground::PlaygroundState;
-use crate::uigen_import::{self, PendingImport};
+use crate::uigen_import::{self, Cache, PendingImport};
 
 pub type JobId = u64;
 
@@ -17,7 +18,7 @@ pub enum CaptureJob {
     Install { root: String, package: String, version: String },
     Uninstall { root: String, package: String },
     Inspect { root: String, package: String },
-    Render { root: String, package: String, component: String, props: Value, state: String, theme: String },
+    Render { root: String, package: String, component: String, props: Value, sample_text: Option<String>, state: String, theme: String },
     Playground { root: String, method: String, params: Value },
 }
 
@@ -114,6 +115,7 @@ pub(crate) struct Capture {
     jobs: Vec<JobRecord>,
     pub(crate) imports: Vec<PendingImport>,
     pub(crate) playground: PlaygroundState,
+    pub(crate) catalog: Cache,
 }
 
 impl Capture {
@@ -211,7 +213,13 @@ impl Session {
                 events.extend(uigen_import::advance(self, job, outcome));
                 continue;
             }
-            let outcome = outcome.and_then(|value| crate::cmd::project_sources::apply(self, &command, &package, &root, &value).map(|()| value));
+            let outcome = outcome.and_then(|value| match command.as_str() {
+                uigen_import::LIST_COMMAND => uigen_import::receive(self, &package, &root, &value),
+                _ => project_sources::apply(self, &command, &package, &root, &value).map(|()| value),
+            });
+            if outcome.is_ok() && project_sources::changes_source(&command) {
+                self.capture.catalog.forget(&root, &package);
+            }
             if let Some(record) = self.capture.jobs.get_mut(position) {
                 record.finished = Some(outcome.as_ref().map(|_| ()).map_err(|e| e.message.clone()));
             }
@@ -220,6 +228,11 @@ impl Session {
         events.extend(uigen_import::resume(self));
         self.capture.forget_oldest_finished();
         events
+    }
+
+    /// The jobs of the running import whose first job is `head`; none once it ended.
+    pub fn import_jobs(&self, head: JobId) -> Vec<JobId> {
+        uigen_import::jobs_of(self, head)
     }
 
     /// The jobs submitted to the capture service, oldest first, with the project folder each one works in.

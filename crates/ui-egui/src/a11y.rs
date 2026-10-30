@@ -560,6 +560,7 @@ fn blocked(app: &FigApp) -> bool {
         || u.find.is_some()
         || u.playground.save_open
         || u.playground.code_open
+        || u.import_window.is_some()
         || !app.has_files()
 }
 

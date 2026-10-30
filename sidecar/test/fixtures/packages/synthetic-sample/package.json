@@ -1,0 +1,16 @@
+{
+  "name": "synthetic-sample",
+  "version": "1.0.0",
+  "description": "Synthetic fixture: React components that show, refuse or ignore their children, and a slotted web component",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "customElements": "custom-elements.json",
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  }
+}

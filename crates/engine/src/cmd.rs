@@ -24,7 +24,9 @@ pub mod structure;
 pub mod styles;
 pub mod text;
 pub mod uigen;
+pub mod uigen_catalog;
 pub mod uigen_import;
+pub mod uigen_place;
 pub mod variables;
 pub mod variables_io;
 pub mod view;
@@ -96,6 +98,8 @@ fn registry() -> &'static Registry {
         list.extend(image::specs());
         list.extend(uigen::specs());
         list.extend(uigen_import::specs());
+        list.extend(uigen_catalog::specs());
+        list.extend(uigen_place::specs());
         list.extend(variables::specs());
         list.extend(variables_io::specs());
         list.extend(component::specs());

@@ -9,8 +9,15 @@ use figcraft_engine::capture::JobState;
 use figcraft_engine::playground::Status;
 
 const POLL: Duration = Duration::from_millis(100);
-const CAPTURE_COMMANDS: [&str; 6] =
-    ["project.addSource", "project.setSourceVersion", "project.removeSource", "uigen.importComponent", "playground.open", "playground.refresh"];
+const CAPTURE_COMMANDS: [&str; 7] = [
+    "project.addSource",
+    "project.setSourceVersion",
+    "project.removeSource",
+    "uigen.importComponent",
+    "uigen.listComponents",
+    "playground.open",
+    "playground.refresh",
+];
 
 pub fn needs_service(commands: &[&str]) -> bool {
     commands.iter().any(|command| CAPTURE_COMMANDS.contains(command))

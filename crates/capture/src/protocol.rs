@@ -27,11 +27,13 @@ pub(crate) fn request_of(job: CaptureJob, timeouts: &Timeouts) -> Result<Request
         CaptureJob::Inspect { root, package } => {
             Request { method: "inspect", params: json!({"dir": root, "package": package}), timeout: timeouts.inspect }
         }
-        CaptureJob::Render { root, package, component, props, state, theme } => Request {
-            method: "render",
-            params: json!({"dir": root, "package": package, "component": component, "props": props, "state": state, "theme": theme}),
-            timeout: timeouts.render,
-        },
+        CaptureJob::Render { root, package, component, props, sample_text, state, theme } => {
+            let mut params = json!({"dir": root, "package": package, "component": component, "props": props, "state": state, "theme": theme});
+            if let Some(text) = sample_text {
+                params["sampleText"] = json!(text);
+            }
+            Request { method: "render", params, timeout: timeouts.render }
+        }
         CaptureJob::Playground { root, method, params } => playground_request(&root, &method, params, timeouts)?,
     })
 }

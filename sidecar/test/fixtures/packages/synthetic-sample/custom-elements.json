@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0.0",
+  "modules": [
+    {
+      "kind": "javascript-module",
+      "path": "slotted.js",
+      "declarations": [{ "kind": "class", "name": "XSlotted", "tagName": "x-slotted", "customElement": true }],
+      "exports": [{ "kind": "custom-element-definition", "name": "x-slotted", "declaration": { "name": "XSlotted", "module": "slotted.js" } }]
+    }
+  ]
+}

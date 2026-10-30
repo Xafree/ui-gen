@@ -52,6 +52,7 @@ fn render(service: &mut CaptureService, root: &str, component: &str, props: Valu
             package: PACKAGE.to_string(),
             component: component.to_string(),
             props,
+            sample_text: None,
             state: "default".to_string(),
             theme: "light".to_string(),
         },

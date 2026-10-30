@@ -852,7 +852,7 @@ Two commands bring the output of the capture service into the document; both are
   validation, a `parent` that is neither a frame nor a page and a `full` that isn't a boolean are refused naming
   the cause.
 - `uigen.importComponent {package, component, styleProp?, sizeProp?, styles?, sizes?, states?, themes?, parent?,
-  x?, y?}`: render a component of an installed source library in every style, size, state and theme, and write the
+  x?, y?, stage?, animations?}`: render a component of an installed source library in every style, size, state and theme, and write the
   result as one component set linked to a token theme. It asks the capture service to `inspect` the package and
   returns `{job}` at once; `Session::pump_capture` (every frame in the app, a wait loop in the CLI) then submits
   one `render` per variant and theme and, when all of them are back, writes the import in a single undo step
@@ -896,6 +896,65 @@ Two commands bring the output of the capture service into the document; both are
     in front later; if it was closed the import fails and writes nothing), in `parent` or on the current page of
     that document, at `x`, `y` (default: 80 px right of the page's content and level with its top, or the origin of a `parent` frame). Nothing is added to the file before the last
     render is back: no layer, no collection, no variable, no undo step.
+  - **`stage`** (boolean, default `false`): write the set into the **import page** of the package and version
+    instead of a page of the document. The page is named `- Imported · <package> <version>` (a name starting with a
+    hyphen is never a component, so the page is not exported to Lit and `project.info` does not list it) and carries
+    `plugin_data["uigen.importPage"]` = `{"package", "version"}`, by which it is found again whatever its name. It is
+    added at the end of the file the first time and created in the same undo step as the set; the current page and
+    the selection do not change, and the final event adds `page` (the page's id). Importing the same component again
+    replaces its previous set in that page, at the same place, in one undo step; another component is laid out to the
+    right of what the page holds; a new version of the source has a page of its own. A `stage` that comes with
+    `parent`, `x` or `y`, a `stage` or `animations` that is not a boolean, and an import page name of more than 200
+    characters are refused at once. Without `stage` the set goes where it did before and the result has no `page`.
+  - **`animations`** (boolean, default `true`): `false` leaves out the `ChangeTo` interactions between the states and
+    every `uigen.effect` mark; the layers of a ripple or a spinner are still translated, the rendered states do not
+    change.
+
+Two more commands prepare an import; neither edits the document (no undo step).
+
+- `uigen.listComponents {package, refresh?}`: the components a source exports, with their props, as the capture
+  service reads them from the package's types (`inspect`). `package` must be a source of the project that isn't
+  removed. It returns `{job}` at once; the only event (`CaptureEvent`, command `uigen.listComponents`, that job)
+  carries `{package, version, framework, components: [{name, props: [{name, type, values}]}], notes}`, or the
+  failure `{kind, message}` (the service's own message). `type` is `enum`, `boolean`, `string`, `number` or `other`
+  (any type the service reports that is not one of the first four); `values` lists the values of an enum.
+  The answer is checked and bounded before it is kept: no `components` array is a `Protocol` failure and nothing is
+  kept; at most 1 000 components (the rest is cut and a note says so); a component whose name is empty, over 128
+  characters or holds control characters is left out with a note that names it; at most 64 props per component and
+  64 values per prop; at most 16 notes of 256 characters. It is kept **in the session** (nothing on disk) for the
+  version the source has: a second call returns `{cached: true, package, version, framework, components, notes}` at
+  once, with no job and no event; `refresh: true` asks the service again. `Session::inspected(package)` reads what
+  is kept; a finished `project.addSource`, `project.setSourceVersion` or `project.removeSource` forgets it, and a
+  failed listing keeps nothing (the next call asks the service again). **Refused at once** (`bad`, nothing submitted): outside a library
+  project; a `package` that is missing, invalid or not an active source; a `refresh` that is not a boolean; no
+  capture service (`capture service not available`).
+- `uigen.importWindow {package?}`: asks the interface to open the "Import a component" window
+  (`dialog.importComponent`, with `{package}`, or `null`, as the source it starts on); a programmatic call opens no
+  dialog. Returns `{}`. Refused (`bad`, no request) outside a library project and for a `package` that is not an
+  active source.
+
+Two more commands read the import pages (the pages `- Imported · <package> <version>` that a staged import fills) and
+copy one imported component into the library.
+
+- `uigen.imported {}` (no undo step): `{sections: [{package, version, page, removed, components: [{set, name, variants}]}]}`.
+  One section per source of the project that is not removed, in the order of `uigen.json` (`page` is `null` while
+  nothing is imported from it), then one per import page of an older version or of a removed source (`removed: true`).
+  `components` are the component sets directly on the import page that carry a readable `uigen.source`, in page order;
+  `variants` counts the components of the set. The copies placed in the library are not listed. Refused (`bad`)
+  outside a library project.
+- `uigen.placeImported {set, page?}` (one undo step): copies the imported component set `set` onto the component page
+  `page` (default the current page) and returns `{page, set, name, replaced}`. The copy is independent of the source
+  (new ids, its `ChangeTo` transitions aim at its own variants; variable bindings, `uigen.source` and `uigen.effect`
+  are kept) and the import page is not touched. The page takes the name of the set, or `Name 2`, `Name 3`… when
+  *another* component has it (the former name of the page itself does not count). A page that already holds a
+  component (`component_roots` not empty) hands **all** its layers, reference captures, notes and measures included,
+  and its flows, to a new page inserted right after it that keeps the former name (`Name 2` when the former name is
+  the new one, case apart); `replaced` is then `{page, name}` of that page and the former name, else `null`. The copy
+  goes to the top left of the former content, else to (0, 0), and is selected; an explicit `page` becomes the
+  current page. **Refused** (`bad`, document and undo history unchanged): outside a library project; a `set` that is
+  not a component set directly on an import page (a copy in the library is refused), or has more than 5 000 layers
+  (`figcraft_dom::MAX_NODES`), or is named with a leading hyphen; a `page` that is not a page, is a divider (a name
+  with a leading hyphen) or is an import page.
 
 ### Playground
 

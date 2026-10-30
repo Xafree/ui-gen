@@ -26,9 +26,11 @@ pub(crate) struct Request {
     pub sizes: Option<Vec<String>>,
     pub states: Option<Vec<State>>,
     pub themes: Vec<Theme>,
+    pub animations: bool,
 }
 
 pub(crate) struct Destination {
+    pub stage: bool,
     pub uid: u64,
     pub page: NodeId,
     pub parent: NodeId,
@@ -88,6 +90,11 @@ pub(crate) fn advance(s: &mut Session, job: JobId, outcome: CaptureOutcome) -> O
     Some(conclude(s, &pending, result))
 }
 
+/// The jobs the import started by `head` has submitted so far (its inspect, then its renders).
+pub(crate) fn jobs_of(s: &Session, head: JobId) -> Vec<JobId> {
+    s.capture.imports.iter().find(|pending| pending.head == head).map_or_else(Vec::new, |pending| pending.jobs.clone())
+}
+
 /// Write the imports that were waiting for their tab to be free again.
 pub(crate) fn resume(s: &mut Session) -> Vec<CaptureEvent> {
     let mut events = Vec::new();
@@ -143,6 +150,11 @@ impl PendingImport {
                 let rendered = outcome.map_err(|cause| failure(&step, cause))?;
                 let snapshot =
                     snapshot_of(&rendered).map_err(|cause| CaptureError { kind: CaptureErrorKind::Protocol, message: format!("{step}: {cause}") })?;
+                if let Some(note) = rendered.get("note").and_then(Value::as_str)
+                    && !rendering.warnings.iter().any(|warning| warning == note)
+                {
+                    rendering.warnings.push(note.to_string());
+                }
                 if let Some(slot) = rendering.snapshots.get_mut(index).and_then(|themed| themed.get_mut(theme_index)) {
                     *slot = Some(snapshot);
                 }
@@ -160,6 +172,7 @@ impl PendingImport {
                     package: self.request.package.clone(),
                     component: self.request.component.clone(),
                     props: cell.props.clone(),
+                    sample_text: Some(self.request.component.clone()),
                     state: cell.state.render().to_string(),
                     theme: theme.render().to_string(),
                 };

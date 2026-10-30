@@ -78,11 +78,9 @@ fn is_active_source(binding: &ProjectBinding, package: &str) -> bool {
     binding.config.sources.iter().any(|source| source.package == package && !source.removed)
 }
 
-fn require_active_source(cmd: &str, binding: &ProjectBinding, package: &str) -> Result<()> {
-    if is_active_source(binding, package) {
-        return Ok(());
-    }
-    Err(bad(cmd, format!("package \"{package}\" is not a source of this project")))
+pub(super) fn require_active_source<'a>(cmd: &str, binding: &'a ProjectBinding, package: &str) -> Result<&'a Source> {
+    let source = binding.config.sources.iter().find(|source| source.package == package && !source.removed);
+    source.ok_or_else(|| bad(cmd, format!("package \"{package}\" is not a source of this project")))
 }
 
 pub(super) fn absolute_root(cmd: &str, root: &str) -> Result<String> {
@@ -166,12 +164,16 @@ fn status(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({"jobs": jobs}))
 }
 
+pub(crate) fn changes_source(command: &str) -> bool {
+    matches!(command, ADD | SET_VERSION | REMOVE)
+}
+
 /// Write what the finished job `command` on `package` changed into the `uigen.json` of folder
 /// `root`, read again first, and give every tab of the project the new manifest. A command that
 /// is not a source command changes nothing; a result the service must not be believed on, or a
 /// manifest that can't be written, comes back as the failure of the job.
 pub(crate) fn apply(s: &mut Session, command: &str, package: &str, root: &str, result: &Value) -> std::result::Result<(), CaptureError> {
-    if !matches!(command, ADD | SET_VERSION | REMOVE) {
+    if !changes_source(command) {
         return Ok(());
     }
     let not_saved = |cause: EngineError| {

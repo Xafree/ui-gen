@@ -7,6 +7,7 @@ use std::sync::Arc;
 use figcraft_doc::{Document, NodeId};
 use figcraft_project::{FILE_NAME, MAX_JSON_BYTES, Project, Role};
 
+use crate::uigen_import::is_import_page;
 use crate::{EngineError, Result, Session, file_access};
 
 /// A library project a tab belongs to: its folder and the manifest as the tab last read it.
@@ -97,9 +98,10 @@ pub fn component_roots(doc: &Document, page: NodeId) -> Vec<NodeId> {
 }
 
 /// Whether `page` is a component of a library project: any page whose name doesn't start with a
-/// hyphen (a page that does is a divider, whether it holds layers or not).
+/// hyphen (a page that does is a divider, whether it holds layers or not) and that is no import
+/// page, whatever its name.
 pub fn is_component_page(doc: &Document, page: NodeId) -> bool {
-    doc.node(page).is_some_and(|node| node.is_page() && !node.name.starts_with('-'))
+    doc.node(page).is_some_and(|node| node.is_page() && !node.name.starts_with('-')) && !is_import_page(doc, page)
 }
 
 /// Whether a component of `doc` other than `except` is already named `name`, case apart.
@@ -114,10 +116,15 @@ pub fn component_name_in_use(doc: &Document, name: &str, except: Option<NodeId>)
 
 /// `base` if no component has that name, else `base 2`, `base 3`… the first free one.
 pub fn free_component_name(doc: &Document, base: &str) -> String {
-    if !component_name_in_use(doc, base, None) {
+    free_component_name_except(doc, base, None)
+}
+
+/// [`free_component_name`] where the page `except` doesn't count: it is about to take the name.
+pub fn free_component_name_except(doc: &Document, base: &str, except: Option<NodeId>) -> String {
+    if !component_name_in_use(doc, base, except) {
         return base.to_string();
     }
-    (2_usize..).map(|n| format!("{base} {n}")).find(|name| !component_name_in_use(doc, name, None)).unwrap_or_else(|| base.to_string())
+    (2_usize..).map(|n| format!("{base} {n}")).find(|name| !component_name_in_use(doc, name, except)).unwrap_or_else(|| base.to_string())
 }
 
 /// The components of a library project's file: its pages in order, dividers left out.

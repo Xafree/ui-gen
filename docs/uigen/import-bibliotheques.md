@@ -29,8 +29,9 @@ UI/UX en Lit.
 | Animations | Transitions CSS relues entre états, plus les effets connus (ripple, spinner, pulsation) ; une animation inconnue est signalée, jamais inventée |
 | Outils | Node.js et Chromium embarqués dans UIGEN |
 | Projet | Un dossier : `uigen.json` (réglages, sources, versions), fichiers de design, sources installées dans `.uigen/sources/`, code Lit généré |
-| Partage | Les bibliothèques installées appartiennent au projet et servent à tous ses fichiers |
-| Rangement | Onglet « Composants » (ancien « Assets ») : sections « Importé · <lib> <version> » ; on glisse un composant importé sur le canvas pour le copier dans sa lib |
+| Partage | Les bibliothèques installées appartiennent au projet et servent à tous ses fichiers. **Écart validé par l'utilisateur** : deux fichiers d'un même projet montrent les mêmes sources (une section « Importé · <lib> <version> » chacun), mais chaque fichier garde son propre contenu importé ; un import se refait dans l'autre fichier |
+| Rangement | Onglet « Composants » (ancien « Assets ») : une section « Importé · <lib> <version> » par source du projet, vide tant que rien n'en est importé, puis les anciennes versions et les sources retirées (« source retirée ») ; on glisse un composant importé sur le canvas pour le copier dans sa lib |
+| Page d'import | Un import lancé depuis la fenêtre « Importer un composant » s'écrit dans une page à part, `- Imported · <lib> <version>`, hors de la lib (son nom commence par un tiret : jamais un composant, jamais exportée en Lit) ; c'est la source des glisser. Réimporter le même composant remplace son jeu dans cette page |
 | Comparaison | Onglet « Comparer » : original et version Lit côte à côte, écart en pixels |
 | Mise à jour d'une source | Recapture et liste des différences ; la version recodée ne change que si on applique |
 | Retrait d'une source | Le paquet est désinstallé ; composants importés et captures restent, marqués « source retirée » |
@@ -68,7 +69,9 @@ UI/UX en Lit.
   échoue, alors un message dit ce qui a échoué (installation, rendu, composant introuvable) et rien
   n'est ajouté au fichier.
 - Étant donné un projet partagé entre deux fichiers, quand j'ouvre le second, alors l'onglet
-  Composants montre les mêmes bibliothèques importées.
+  Composants montre les mêmes sources, chacune avec la section « Importé · <lib> <version> » ; le
+  contenu importé, lui, est propre à chaque fichier (écart validé : le contenu ne se partage pas
+  entre fichiers, un import se refait dans le second).
 - Étant donné un composant importé, quand je le glisse de l'onglet Composants sur le canvas de ma
   lib, alors il devient un composant de ma lib, copie indépendante de la source, dont chaque élément
   (cadre, texte, icône, spinner, remplissages, bordures, ombres, auto layout, variantes, propriétés,

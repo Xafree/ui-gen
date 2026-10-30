@@ -496,6 +496,7 @@ fn job_of(kind: usize, root: String) -> CaptureJob {
             package,
             component: "Button".to_string(),
             props: json!({}),
+            sample_text: None,
             state: "default".to_string(),
             theme: "light".to_string(),
         },

@@ -198,7 +198,7 @@ pub(crate) fn request(app: &mut FigApp) {
 /// Bring back the jobs the capture service finished and say how each ended.
 pub(crate) fn pump(app: &mut FigApp) {
     for event in app.session.pump_capture() {
-        if crate::playground_bars::note_event(app, &event) {
+        if crate::playground_bars::note_event(app, &event) || super::import_component::pump_event(app, &event) {
             continue;
         }
         let package = event.package.as_str();

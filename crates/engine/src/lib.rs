@@ -114,6 +114,10 @@ pub use derived::{changed_nodes, normalize};
 pub use doc_state::{DocState, History, HistoryEntry, Interaction, PREVIEW_READ_ONLY, Preedit, TextEdit, VersionPreview};
 pub use error::{EngineError, Result, bad};
 pub use prefs::{Clipboard, MAX_RECENT_ACTIONS, Prefs, UI_SCALE_MAX, UI_SCALE_MIN, UiRequest, clamp_ui_scale};
+pub use uigen_import::{
+    ImportSection, ImportedSet, Inspected, InspectedComponent, InspectedProp, MAX_RENDERS, PropKind, is_import_page, render_count,
+    sections as imported_sections,
+};
 pub use view_state::ViewState;
 
 /// The editing session: open documents, the current tool, clipboard and prefs.
@@ -541,6 +545,8 @@ mod tiff_tests;
 #[cfg(test)]
 mod transform_behaviour_tests;
 #[cfg(test)]
+mod uigen_catalog_tests;
+#[cfg(test)]
 mod uigen_import_component_tests;
 #[cfg(test)]
 mod uigen_import_dom_full_tests;
@@ -553,9 +559,17 @@ mod uigen_import_motion_tests;
 #[cfg(test)]
 mod uigen_import_review_tests;
 #[cfg(test)]
+mod uigen_import_sample_tests;
+#[cfg(test)]
+mod uigen_import_stage_tests;
+#[cfg(test)]
 mod uigen_import_support;
 #[cfg(test)]
 mod uigen_import_tokens_tests;
+#[cfg(test)]
+mod uigen_lot4_review_tests;
+#[cfg(test)]
+mod uigen_place_tests;
 #[cfg(test)]
 mod variable_tests;
 #[cfg(test)]

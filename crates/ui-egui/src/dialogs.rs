@@ -33,6 +33,7 @@ pub use menu_input::MenuInput;
 use menu_input::menu_input_dialog;
 pub mod branch_ui;
 pub mod credits;
+pub mod import_component;
 pub mod import_report;
 pub mod lit_export;
 pub mod missing_fonts;
@@ -176,6 +177,7 @@ pub fn keys(app: &mut FigApp, ctx: &Context) {
         || u.import_report.is_some()
         || u.lit_export.is_some()
         || u.project_settings.is_some()
+        || u.import_window.is_some()
         || u.missing_fonts.is_some()
         || u.playground.save_open
         || u.playground.code_open
@@ -194,6 +196,7 @@ pub fn keys(app: &mut FigApp, ctx: &Context) {
         || u.import_report.take().is_some()
         || u.lit_export.take().is_some()
         || u.project_settings.take().is_some()
+        || u.import_window.take().is_some()
         || u.missing_fonts.take().is_some()
     {
         return;
@@ -223,6 +226,7 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
     crate::import_report::show(app, ctx);
     lit_export::show(app, ctx);
     project_settings::show(app, ctx);
+    import_component::show(app, ctx);
     crate::missing_fonts::show(app, ctx);
     playground_save::show(app, ctx);
     playground_code::show(app, ctx);
