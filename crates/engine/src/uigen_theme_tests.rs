@@ -211,6 +211,10 @@ fn values_without_bindings(doc: &Document) -> Vec<String> {
         .collect()
 }
 
+fn values_outside(doc: &Document, library: &BTreeSet<NodeId>) -> Vec<String> {
+    every_layer(doc).into_iter().filter(|id| !library.contains(id)).filter_map(|id| doc.node(id)).map(|node| format!("{node:?}")).collect()
+}
+
 fn variable_owner(doc: &Document, variable: &str) -> Option<String> {
     doc.variables.variables.iter().find(|candidate| candidate.id == variable).map(|candidate| candidate.collection.clone())
 }
@@ -444,6 +448,7 @@ fn applying_brand_rebinds_the_library_layers_to_same_name_variables_and_changes_
     let before_bindings = bindings_of(doc(&lab.bench), &every_layer(doc(&lab.bench)));
     let serialized_before = serialized_bindings(doc(&lab.bench));
     let values_before = values_without_bindings(doc(&lab.bench));
+    let values_outside_before = values_outside(doc(&lab.bench), &library.iter().copied().collect());
     let variables_before = format!("{:?}", doc(&lab.bench).variables);
     let (expected_bindings, expected_layers) = expected_rebound(doc(&lab.bench), &library, COLLECTION, BRAND);
     assert!(expected_bindings > 0 && expected_layers > 0);
@@ -471,7 +476,8 @@ fn applying_brand_rebinds_the_library_layers_to_same_name_variables_and_changes_
             assert_eq!(before.2, after.2, "layer {:?} field {} must not move", before.0, before.1);
         }
     }
-    assert_eq!(values_without_bindings(doc), values_before, "no fill, radius, size or other value changes");
+    assert_eq!(values_outside(doc, &library_ids), values_outside_before, "the import pages and annotations do not move");
+    assert_ne!(values_without_bindings(doc), values_before, "the library layers take the values of the theme");
     assert_eq!(format!("{:?}", doc.variables), variables_before, "no variable changes");
     assert_eq!(applied(&mut lab.bench), json!(BRAND));
     let saved = read_manifest(&lab.bench);
