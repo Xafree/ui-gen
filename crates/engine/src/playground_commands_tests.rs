@@ -87,7 +87,8 @@ fn expected_css(bench: &Bench, collection: &str, settings: &Settings) -> String 
 fn expected_tokens(bench: &Bench, collection: &str) -> String {
     let doc = bench.session.doc().unwrap();
     let theme = doc.variables.collection(collection).unwrap_or_else(|| panic!("no collection {collection}"));
-    tokens_css(doc, &[theme], &TokenOptions { prefix: PREFIX.to_string(), light: None, dark: None }).text
+    let reached = crate::dev::lit_export::with_aliased(doc, theme);
+    tokens_css(doc, &reached, &TokenOptions { prefix: PREFIX.to_string(), light: None, dark: None }).text
 }
 
 fn applies(bench: &Bench) -> Vec<Value> {
