@@ -78,7 +78,7 @@ Each may be given more than once, as `--flag DIR` or `--flag=DIR`:
   every command that names a file: `file.open`, `file.openRecent` (recent files outside the roots
   are never listed, opened, removed or named: `index` counts the files listed), `file.import`,
   `file.placeImage`, `image.place`, `file.save`, `file.saveAs`, `file.revert`, `file.recover`,
-  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, `project.open`, `project.update` and the source commands (`project.addSource`, `project.setSourceVersion`, `project.removeSource`: the project folder and its `uigen.json`; `uigen.importComponent`: the project's `.uigen/captures` folder), the images and variables JSON read next to an imported REST API
+  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, `project.open`, `project.update`, `uigen.applyTheme` (the project's `uigen.json`) and the source commands (`project.addSource`, `project.setSourceVersion`, `project.removeSource`: the project folder and its `uigen.json`; `uigen.importComponent`: the project's `.uigen/captures` folder), the images and variables JSON read next to an imported REST API
   file, `library.add` and the library files open documents link to, `variable.import` /
   `variable.export`, `codeConnect.import` / `codeConnect.export`, `component.playground {path}`,
   `plugin.import {path}`, a development plugin's module read again from disk,
@@ -955,6 +955,25 @@ copy one imported component into the library.
   not a component set directly on an import page (a copy in the library is refused), or has more than 5 000 layers
   (`figcraft_dom::MAX_NODES`), or is named with a leading hyphen; a `page` that is not a page, is a divider (a name
   with a leading hyphen) or is an import page.
+
+Two more commands list the token themes of the file (its local variable collections) and make the library follow one.
+
+- `uigen.themes {}` (no undo step): `{applied, inSync, themes: [{collection, name, origin, modes, variables, boundLayers,
+  applied, swatches}]}` in file order, library copies left out. `applied` is the `appliedTheme` of `uigen.json` (or
+  `null`), `origin` is `{package, version}` for a collection named `<package> <version>` after a source of the project
+  (else `null`), `boundLayers` counts the layers of the library components (import pages and notes left out) that
+  follow the collection, and `swatches` holds the colour variables, 8 at most, as `{name, light, dark}` in `#RRGGBB`
+  (the modes named Light and Dark, else the first and second). `inSync` is `false` when the collection most library
+  layers follow is not the applied theme, which `edit.undo` alone can cause because `uigen.json` is outside the
+  history. Refused (`bad`) outside a library project.
+- `uigen.applyTheme {theme}` (one undo step): `theme` is the name or id of a local collection. Every variable binding
+  of the library components whose variable is not in that collection moves to the variable of the same name (trimmed,
+  case apart) and type in it; then `appliedTheme` is written to `uigen.json` (its other keys are kept). Returns
+  `{theme, previous, layers, rebound, unmatched, unchanged}`: `unmatched` names the variables with no equivalent, which
+  keep their binding (50 at most). Applying the theme already applied and already followed returns `unchanged: true`
+  and changes nothing. **Refused** (`bad`, document and `uigen.json` unchanged): outside a library project; a `theme`
+  that is empty, not a string, longer than 200 characters or with control characters; an unknown collection or a
+  library copy; a theme where no bound variable has an equivalent.
 
 ### Local libraries
 

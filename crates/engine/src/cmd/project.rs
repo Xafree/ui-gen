@@ -245,6 +245,16 @@ fn info(s: &mut Session, _: &Value) -> Result<Value> {
     Ok(json!({"project": project, "components": components}))
 }
 
+pub(super) fn remember_theme(s: &mut Session, cmd: &str, theme: &str) -> Result<()> {
+    let binding = s.project().cloned().ok_or_else(|| bad(cmd, "the current file is not in a library project"))?;
+    let mut config = project::load(&binding.root).map_err(|e| bad(cmd, e.to_string()))?;
+    config.applied_theme = Some(theme.to_string());
+    config.validate().map_err(|e| bad(cmd, format!("{FILE_NAME}: {e}")))?;
+    project::save(&binding.root, &config)?;
+    s.rebind_project(&binding.root, config);
+    Ok(())
+}
+
 fn update(s: &mut Session, p: &Value) -> Result<Value> {
     let binding = s.project().cloned().ok_or_else(|| bad(UPDATE, "the current file is not in a library project"))?;
     let fields = p.as_object().ok_or_else(|| bad(UPDATE, "params must be an object"))?;
