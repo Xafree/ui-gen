@@ -545,7 +545,7 @@ fn playground_the_reason_is_told_in_french_for_a_theme_without_accent_token() {
     let mut s = studio("no-accent-fr", "fr", Tokens::Rich, Start::Ready, true);
     s.run("playground.set", json!({"theme": "Plain"}));
     assert!(s.disabled(Role::Slider, "Accent"), "the Plain theme has no accent token");
-    assert!(!s.disabled(Role::Slider, "Base hue"), "it has a base token");
+    assert!(!s.disabled(Role::Slider, "Teinte de base"), "it has a base token");
     let at = View::bounds(s.node(Role::Slider, "Accent")).center();
     s.b.v.move_to(at);
     s.b.v.settle(1.0);
