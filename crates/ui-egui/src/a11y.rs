@@ -541,6 +541,7 @@ fn blocked(app: &FigApp) -> bool {
         || u.about
         || u.preferences
         || u.variables.is_some()
+        || u.project_settings.is_some()
         || u.export_preview
         || u.color_profile.is_some()
         || u.present.is_some()

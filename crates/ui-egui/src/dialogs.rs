@@ -37,6 +37,7 @@ pub mod lit_export;
 pub mod missing_fonts;
 pub mod plugins_ui;
 pub mod project_settings;
+mod project_themes;
 pub mod updates_ui;
 pub mod variables_panel;
 

@@ -494,6 +494,16 @@ pub fn text_field(ui: &mut Ui, id: Id, value: &str, width: f32, placeholder: &st
     text_field_in(ui, id, value, rect, placeholder, placeholder, false)
 }
 
+/// Give the keyboard to the text field `id` (it is typed into after a click or Enter).
+pub fn focus_text_field(ui: &Ui, id: Id) {
+    ui.memory_mut(|m| m.request_focus(id.with("click")));
+}
+
+/// Whether the text field `id` has the keyboard.
+pub fn text_field_focused(ctx: &egui::Context, id: Id) -> bool {
+    ctx.memory(|m| m.has_focus(id.with("click")))
+}
+
 /// [`text_field`] without a placeholder, named `name` for screen readers (its label is beside it).
 pub fn text_field_named(ui: &mut Ui, id: Id, value: &str, width: f32, name: &str) -> Option<String> {
     let (rect, _) = ui.allocate_exact_size(vec2(width, FIELD_H), Sense::hover());
