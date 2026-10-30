@@ -110,11 +110,11 @@ fn playground_pointer_over_the_view_is_relayed_in_page_coordinates() {
 fn playground_pointer_outside_the_view_relays_nothing() {
     let mut b = Bench::ready("outside", "en");
     let zone = b.v.zone();
-    assert!(zone.min.x > 20.0, "a panel is left of the view: {zone:?}");
+    assert!(zone.min.y > 20.0, "the bars are above the view: {zone:?}");
     b.v.move_to(zone.center());
     b.v.settle(0.3);
     let relayed = b.calls.input_events().len();
-    let out = pos2(zone.min.x - 12.0, zone.center().y);
+    let out = pos2(zone.center().x, zone.min.y - 12.0);
     let button = |pressed| Event::PointerButton { pos: out, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
     b.v.frame(vec![Event::PointerMoved(out)]);
     b.v.frame(vec![button(true)]);
