@@ -130,17 +130,25 @@ pub fn note_event(app: &mut FigApp, event: &CaptureEvent) -> bool {
     true
 }
 
+fn stamp(app: &FigApp) -> (usize, u64) {
+    (app.session.journal.len(), app.session.docs.get(app.session.active).map_or(0, |doc| doc.revision))
+}
+
 fn snapshot(app: &mut FigApp) -> Snapshot {
-    let revision = app.session.docs.get(app.session.active).map_or(0, |doc| doc.revision);
-    let key = (app.session.journal.len(), revision);
     if let Some((cached, snapshot)) = &app.ui.playground.bars.cache
-        && *cached == key
+        && *cached == stamp(app)
     {
         return snapshot.clone();
     }
     let snapshot = app.session.execute(STATE, &json!({})).map(|state| Snapshot::read(&state)).unwrap_or_default();
-    app.ui.playground.bars.cache = Some(((app.session.journal.len(), revision), snapshot.clone()));
+    app.ui.playground.bars.cache = Some((stamp(app), snapshot.clone()));
     snapshot
+}
+
+/// The themes of the document and the one the settings are written from.
+pub fn theme_choices(app: &mut FigApp) -> (Vec<String>, String) {
+    let snapshot = snapshot(app);
+    (snapshot.themes, snapshot.theme)
 }
 
 /// Draws the bars at the top of the area `ui` covers; the height they take.

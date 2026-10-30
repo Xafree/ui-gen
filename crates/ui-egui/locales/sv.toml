@@ -1906,6 +1906,14 @@ name = "Svenska"
 "Squircle" = "Squircle"
 "Radius shape" = "Radieform"
 "No font token in this theme" = "Inget typsnittstoken i det här temat"
+"Theme name" = "Temats namn"
+"Overwrite the chosen theme" = "Skriv över det valda temat"
+"Give the theme a name" = "Ge temat ett namn"
+"A theme with this name already exists" = "Ett tema med det här namnet finns redan"
+"Copy overrides" = "Kopiera overrides"
+"Copy template" = "Kopiera mall"
+"Theme {name} saved" = "Tema {name} sparat"
+"Only the beginning is shown here: the copy buttons take everything." = "Bara början visas här: kopieringsknapparna tar allt."
 
 [commands]
 

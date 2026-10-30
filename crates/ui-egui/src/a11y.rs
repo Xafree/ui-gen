@@ -558,6 +558,8 @@ fn blocked(app: &FigApp) -> bool {
         || u.present.is_some()
         || u.home
         || u.find.is_some()
+        || u.playground.save_open
+        || u.playground.code_open
         || !app.has_files()
 }
 

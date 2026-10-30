@@ -18,6 +18,8 @@ mod batch_rename;
 mod color_profile;
 mod export;
 mod menu_input;
+mod playground_code;
+mod playground_save;
 
 pub use batch_rename::BatchRenameUi;
 use batch_rename::batch_rename_dialog;
@@ -175,6 +177,8 @@ pub fn keys(app: &mut FigApp, ctx: &Context) {
         || u.lit_export.is_some()
         || u.project_settings.is_some()
         || u.missing_fonts.is_some()
+        || u.playground.save_open
+        || u.playground.code_open
         || u.confirm_close
         || u.export_preview
         || u.shortcuts_panel
@@ -194,7 +198,15 @@ pub fn keys(app: &mut FigApp, ctx: &Context) {
     {
         return;
     }
-    for flag in [&mut u.confirm_close, &mut u.export_preview, &mut u.shortcuts_panel, &mut u.preferences, &mut u.about] {
+    for flag in [
+        &mut u.playground.save_open,
+        &mut u.playground.code_open,
+        &mut u.confirm_close,
+        &mut u.export_preview,
+        &mut u.shortcuts_panel,
+        &mut u.preferences,
+        &mut u.about,
+    ] {
         if std::mem::take(flag) {
             return;
         }
@@ -212,6 +224,8 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
     lit_export::show(app, ctx);
     project_settings::show(app, ctx);
     crate::missing_fonts::show(app, ctx);
+    playground_save::show(app, ctx);
+    playground_code::show(app, ctx);
     let t = Tokens::get(ctx);
     if app.ui.about {
         let mut open = true;

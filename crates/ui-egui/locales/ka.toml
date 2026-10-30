@@ -1891,6 +1891,14 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Squircle" = "სკვირკლი"
 "Radius shape" = "რადიუსის ფორმა"
 "No font token in this theme" = "ამ თემაში შრიფტის ტოკენი არ არის"
+"Theme name" = "თემის სახელი"
+"Overwrite the chosen theme" = "არჩეული თემის გადაწერა"
+"Give the theme a name" = "მიანიჭეთ თემას სახელი"
+"A theme with this name already exists" = "ამ სახელის თემა უკვე არსებობს"
+"Copy overrides" = "გადაფარვების კოპირება"
+"Copy template" = "შაბლონის კოპირება"
+"Theme {name} saved" = "თემა {name} შენახულია"
+"Only the beginning is shown here: the copy buttons take everything." = "აქ მხოლოდ დასაწყისი ჩანს: კოპირების ღილაკები ყველაფერს იღებს."
 
 [commands]
 "align.bottom" = "ქვემოთ სწორება"
