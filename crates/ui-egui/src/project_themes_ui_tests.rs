@@ -206,7 +206,7 @@ fn mentions(shown: &[String], needle: &str) -> bool {
 }
 
 fn y_of(painted: &[Painted], text: &str) -> f32 {
-    painted.iter().find(|(t, _, _)| t.trim() == text).map(|(_, p, _)| p.y).unwrap_or_else(|| panic!("no text {text:?} on screen"))
+    painted.iter().rev().find(|(t, _, _)| t.trim() == text).map(|(_, p, _)| p.y).unwrap_or_else(|| panic!("no text {text:?} on screen"))
 }
 
 fn is_apply_label(label: &str) -> bool {
@@ -487,10 +487,10 @@ fn apply_runs_the_command_once_with_the_row_name_and_the_toast_offers_undo() {
     lab.click_apply(1);
 
     assert_eq!(lab.ran_since(mark, APPLY), vec![json!({"theme": BRAND})], "once, with the name of the clicked row");
-    assert_eq!(lab.applied_in_manifest(), json!(BRAND));
     assert!(lab.ui.app.ui.toast_action.is_some(), "the toast carries an action");
     let nodes = lab.nodes();
     assert_eq!(nodes.iter().filter(|n| n.role() == Role::Button && n.label() == Some("Undo")).count(), 1);
+    assert_eq!(lab.applied_in_manifest(), json!(BRAND));
 
     let painted = lab.painted();
     let shown: Vec<String> = painted.iter().map(|(t, _, _)| t.clone()).collect();
