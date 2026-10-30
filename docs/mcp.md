@@ -933,6 +933,29 @@ Two more commands prepare an import; neither edits the document (no undo step).
   dialog. Returns `{}`. Refused (`bad`, no request) outside a library project and for a `package` that is not an
   active source.
 
+Two more commands read the import pages (the pages `- Imported · <package> <version>` that a staged import fills) and
+copy one imported component into the library.
+
+- `uigen.imported {}` (no undo step): `{sections: [{package, version, page, removed, components: [{set, name, variants}]}]}`.
+  One section per source of the project that is not removed, in the order of `uigen.json` (`page` is `null` while
+  nothing is imported from it), then one per import page of an older version or of a removed source (`removed: true`).
+  `components` are the component sets directly on the import page that carry a readable `uigen.source`, in page order;
+  `variants` counts the components of the set. The copies placed in the library are not listed. Refused (`bad`)
+  outside a library project.
+- `uigen.placeImported {set, page?}` (one undo step): copies the imported component set `set` onto the component page
+  `page` (default the current page) and returns `{page, set, name, replaced}`. The copy is independent of the source
+  (new ids, its `ChangeTo` transitions aim at its own variants; variable bindings, `uigen.source` and `uigen.effect`
+  are kept) and the import page is not touched. The page takes the name of the set, or `Name 2`, `Name 3`… when
+  *another* component has it (the former name of the page itself does not count). A page that already holds a
+  component (`component_roots` not empty) hands **all** its layers, reference captures, notes and measures included,
+  and its flows, to a new page inserted right after it that keeps the former name (`Name 2` when the former name is
+  the new one, case apart); `replaced` is then `{page, name}` of that page and the former name, else `null`. The copy
+  goes to the top left of the former content, else to (0, 0), and is selected; an explicit `page` becomes the
+  current page. **Refused** (`bad`, document and undo history unchanged): outside a library project; a `set` that is
+  not a component set directly on an import page (a copy in the library is refused), or has more than 5 000 layers
+  (`figcraft_dom::MAX_NODES`), or is named with a leading hyphen; a `page` that is not a page, is a divider (a name
+  with a leading hyphen) or is an import page.
+
 ### Local libraries
 
 A `.figcraft` file can be published as a library and used from other files (library files here;

@@ -114,10 +114,15 @@ pub fn component_name_in_use(doc: &Document, name: &str, except: Option<NodeId>)
 
 /// `base` if no component has that name, else `base 2`, `base 3`… the first free one.
 pub fn free_component_name(doc: &Document, base: &str) -> String {
-    if !component_name_in_use(doc, base, None) {
+    free_component_name_except(doc, base, None)
+}
+
+/// [`free_component_name`] where the page `except` doesn't count: it is about to take the name.
+pub fn free_component_name_except(doc: &Document, base: &str, except: Option<NodeId>) -> String {
+    if !component_name_in_use(doc, base, except) {
         return base.to_string();
     }
-    (2_usize..).map(|n| format!("{base} {n}")).find(|name| !component_name_in_use(doc, name, None)).unwrap_or_else(|| base.to_string())
+    (2_usize..).map(|n| format!("{base} {n}")).find(|name| !component_name_in_use(doc, name, except)).unwrap_or_else(|| base.to_string())
 }
 
 /// The components of a library project's file: its pages in order, dividers left out.

@@ -178,7 +178,9 @@ hold yourself and answers `{root, warnings}` directly; `full: true` asks for the
 returns `{job}` (an `inspect` job) and the components of the source come back as the event of that job, which
 `capture.status {job}` shows `done` or `failed`; the answer is kept in the session, so a second call returns
 `{cached: true, …}` with no job. `uigen.importWindow {package?}` only asks the interface for the import window,
-which a programmatic call never opens.
+which a programmatic call never opens. `uigen.imported {}` and `uigen.placeImported {set, page?}`
+([MCP: Component import](mcp.md#component-import)) answer directly, with no job: the first lists the component sets of
+the import pages by source, the second copies one onto a page of the library in one undo step.
 
 ### `engine.commands {}`
 
