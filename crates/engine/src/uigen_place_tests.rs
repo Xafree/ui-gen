@@ -443,6 +443,7 @@ fn on_a_blank_page_the_copy_has_new_ids_the_same_variants_and_links_and_the_page
 #[test]
 fn a_copy_aimed_at_another_page_makes_that_page_the_current_one() {
     let mut lab = lab("place-other-page");
+    rename(&mut lab.bench, lab.start, "Component 1");
     let other = add_page(&mut lab.bench, "Spare");
     go_to(&mut lab.bench, lab.start);
 
