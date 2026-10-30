@@ -30,6 +30,8 @@ mod playground_service_tests;
 #[cfg(test)]
 mod real_import_tests;
 #[cfg(test)]
+mod real_playground_tests;
+#[cfg(test)]
 mod real_tests;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod review_tests;
