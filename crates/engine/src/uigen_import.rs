@@ -22,3 +22,4 @@ pub(crate) use staging::IMPORT_PAGE_KEY;
 pub(crate) use staging::SOURCE_KEY;
 pub(crate) use staging::import_page_name;
 pub use staging::{ImportSection, ImportedSet, is_import_page, sections};
+pub(crate) use staging::{imported_sets, move_source_version, page_of, page_to_recapture, set_of, source_ref};

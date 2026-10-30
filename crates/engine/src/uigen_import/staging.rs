@@ -42,7 +42,7 @@ pub struct ImportSection {
     pub components: Vec<ImportedSet>,
 }
 
-fn imported_sets(doc: &Document, page: NodeId) -> Vec<ImportedSet> {
+pub(crate) fn imported_sets(doc: &Document, page: NodeId) -> Vec<ImportedSet> {
     let Some(node) = doc.node(page) else { return Vec::new() };
     node.children
         .iter()
@@ -62,6 +62,53 @@ fn imported_sets(doc: &Document, page: NodeId) -> Vec<ImportedSet> {
 fn section(doc: &Document, package: &str, version: &str, page: Option<NodeId>, removed: bool) -> ImportSection {
     let components = page.map(|page| imported_sets(doc, page)).unwrap_or_default();
     ImportSection { package: package.to_owned(), version: version.to_owned(), page, removed, components }
+}
+
+pub(crate) struct SourceRef {
+    pub package: String,
+    pub version: String,
+    pub component: String,
+}
+
+/// Where a component set comes from: the `uigen.source` of an imported set or of its copy.
+pub(crate) fn source_ref(doc: &Document, set: NodeId) -> Option<SourceRef> {
+    let value: Value = serde_json::from_str(doc.node(set)?.plugin_data.get(SOURCE_KEY)?).ok()?;
+    let text = |key: &str| value.get(key).and_then(Value::as_str).filter(|text| !text.is_empty()).map(str::to_owned);
+    Some(SourceRef { package: text("package")?, version: text("version")?, component: text("component")? })
+}
+
+/// The copy `set` now comes from `version`: its `uigen.source` keeps everything else.
+pub(crate) fn move_source_version(doc: &mut Document, set: NodeId, version: &str) -> Result<()> {
+    let node = doc.get_mut(set)?;
+    let mut source: Value = node.plugin_data.get(SOURCE_KEY).and_then(|raw| serde_json::from_str(raw).ok()).unwrap_or_else(|| json!({}));
+    if let Some(fields) = source.as_object_mut() {
+        fields.insert("version".to_owned(), json!(version));
+    }
+    node.plugin_data.insert(SOURCE_KEY.to_owned(), source.to_string());
+    Ok(())
+}
+
+/// The import page of this package and version.
+pub(crate) fn page_of(doc: &Document, package: &str, version: &str) -> Option<NodeId> {
+    let wanted = Some((package.to_owned(), version.to_owned()));
+    doc.pages.iter().copied().find(|page| marker(doc, *page) == wanted)
+}
+
+/// The import page whose components an update captures again: the page of the version, else the last
+/// import page of the package that holds components.
+pub(crate) fn page_to_recapture(doc: &Document, package: &str, version: &str) -> Option<NodeId> {
+    let holds_sets = |page: &NodeId| !imported_sets(doc, *page).is_empty();
+    page_of(doc, package, version)
+        .filter(holds_sets)
+        .or_else(|| doc.pages.iter().rev().copied().filter(|page| marker(doc, *page).is_some_and(|(owner, _)| owner == package)).find(holds_sets))
+}
+
+/// The set of this component on an import page.
+pub(crate) fn set_of(doc: &Document, page: NodeId, component: &str) -> Option<NodeId> {
+    imported_sets(doc, page)
+        .into_iter()
+        .find(|imported| source_ref(doc, imported.set).is_some_and(|source| source.component == component))
+        .map(|imported| imported.set)
 }
 
 /// One section per source of the project that is not removed, in the order of the manifest, then one

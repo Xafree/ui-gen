@@ -110,6 +110,7 @@ pub mod project;
 mod session;
 mod uigen_import;
 mod uigen_theme;
+mod uigen_update;
 mod view_state;
 
 pub use derived::{changed_nodes, normalize};
@@ -121,6 +122,7 @@ pub use uigen_import::{
     ThemeReference, is_import_page, reference_of, render_count, sections as imported_sections,
 };
 pub use uigen_theme::{Swatch, ThemeInfo, themes as token_themes};
+pub use uigen_update::{Difference, DifferenceKind, DifferenceState, Located, MAX_DIFFERENCES, SourceDiff, Summary, source_diff};
 pub use view_state::ViewState;
 
 /// The editing session: open documents, the current tool, clipboard and prefs.
@@ -567,6 +569,8 @@ mod uigen_place_tests;
 mod uigen_reference_tests;
 #[cfg(test)]
 mod uigen_theme_tests;
+#[cfg(test)]
+mod uigen_update_tests;
 #[cfg(test)]
 mod variable_tests;
 #[cfg(test)]
