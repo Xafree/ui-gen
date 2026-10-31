@@ -275,6 +275,8 @@ pub fn next_component_name<'a>(template: &str, existing: impl IntoIterator<Item 
 }
 
 #[cfg(test)]
+mod npm_line_tests;
+#[cfg(test)]
 mod npm_tests;
 
 #[cfg(test)]

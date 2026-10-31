@@ -14,6 +14,7 @@ use crate::project::{self, ProjectBinding};
 use crate::{EngineError, Result, Session, bad, spec};
 
 const ADD: &str = "project.addSource";
+const ADD_MANY: &str = "project.addSources";
 const SET_VERSION: &str = "project.setSourceVersion";
 const REMOVE: &str = "project.removeSource";
 const LATEST: &str = "latest";
@@ -31,9 +32,16 @@ pub fn specs() -> Vec<CommandSpec> {
             add
         ),
         spec!(
+            "project.addSources",
+            "Add source libraries",
+            "{line (a string)}  the names of one or several npm registry packages separated by spaces, each \"name\" or \"name@exact-version\", optionally after \"npm install\" or \"npm i\", e.g. \"@scope/a b@1.2.0\": asks the capture service to install them all in one go in the project's .uigen/sources folder and returns {job} at once; uigen.json gets every source only when the install succeeds, none otherwise. A package already a source of the project refuses the line",
+            false,
+            add_many
+        ),
+        spec!(
             "project.setSourceVersion",
             "Change source library version",
-            "{package, version (exact semver or \"latest\")}  asks the capture service to install that version of a source of the project and returns {job}; uigen.json keeps the old version unless the install succeeds",
+            "{package, version (exact semver or \"latest\")} or {packages (an array of package names), version}  asks the capture service to install that version of a source of the project, or of every listed source in one job, and returns {job}; uigen.json keeps the old versions unless the install succeeds, and then changes them all in one write",
             false,
             set_version
         ),
@@ -88,28 +96,29 @@ pub(super) fn absolute_root(cmd: &str, root: &str) -> Result<String> {
     Ok(absolute.to_string_lossy().into_owned())
 }
 
-fn in_flight(s: &Session, root: &str, package: &str) -> bool {
-    s.capture_jobs().iter().any(|job| {
-        job.package == package
-            && matches!(job.state, JobState::Queued | JobState::Running)
-            && [ADD, SET_VERSION, REMOVE].contains(&job.command.as_str())
+fn in_flight<'a>(s: &Session, root: &str, packages: &'a [String]) -> Option<&'a String> {
+    let busy = s.capture_jobs().into_iter().filter(|job| {
+        matches!(job.state, JobState::Queued | JobState::Running)
+            && [ADD, ADD_MANY, SET_VERSION, REMOVE].contains(&job.command.as_str())
             && file_access::same_file(&job.root, root)
-    })
+    });
+    let busy: Vec<String> = busy.flat_map(|job| job.packages).collect();
+    packages.iter().find(|package| busy.contains(package))
 }
 
-fn submit(s: &mut Session, cmd: &str, binding: &ProjectBinding, package: &str, job: CaptureJob) -> Result<Value> {
+fn submit(s: &mut Session, cmd: &str, binding: &ProjectBinding, packages: &[String], job: CaptureJob) -> Result<Value> {
     file_access::allow(Path::new(&binding.root).join(WORK_DIR).join(SOURCES_DIR), Access::Write)?;
     file_access::allow(project::manifest_path(&binding.root), Access::Write)?;
-    if in_flight(s, job.root(), package) {
-        return Err(bad(cmd, format!("a change to package \"{package}\" is already in progress")));
+    if let Some(package) = in_flight(s, job.root(), packages) {
+        return Err(bad(cmd, project::in_progress(package)));
     }
-    let id = s.submit_capture(cmd, package, job).map_err(|e| bad(cmd, e.message))?;
+    let id = s.submit_capture(cmd, &packages.join(", "), job).map_err(|e| bad(cmd, e.message))?;
     Ok(json!({"job": id}))
 }
 
 fn install(s: &mut Session, cmd: &str, binding: &ProjectBinding, package: String, version: String) -> Result<Value> {
     let job = CaptureJob::Install { root: absolute_root(cmd, &binding.root)?, package: package.clone(), version };
-    submit(s, cmd, binding, &package, job)
+    submit(s, cmd, binding, &[package], job)
 }
 
 fn add(s: &mut Session, p: &Value) -> Result<Value> {
@@ -117,17 +126,50 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
     let package = package(ADD, p)?;
     let version = version(ADD, p, Some(LATEST))?;
     if is_active_source(&binding, &package) {
-        return Err(bad(ADD, format!("package \"{package}\" is already a source of this project")));
+        return Err(bad(ADD, project::already_source(&package)));
     }
     install(s, ADD, &binding, package, version)
 }
 
+fn add_many(s: &mut Session, p: &Value) -> Result<Value> {
+    let binding = binding(s, ADD_MANY)?;
+    let line = p.get("line").ok_or_else(|| bad(ADD_MANY, "line is required"))?.as_str().ok_or_else(|| bad(ADD_MANY, "line must be a string"))?;
+    let specs = npm::parse_install_line(line).map_err(|e| bad(ADD_MANY, e.to_string()))?;
+    if let Some(spec) = specs.iter().find(|spec| is_active_source(&binding, &spec.name)) {
+        return Err(bad(ADD_MANY, project::already_source(&spec.name)));
+    }
+    let names: Vec<String> = specs.iter().map(|spec| spec.name.clone()).collect();
+    let job = CaptureJob::InstallMany { root: absolute_root(ADD_MANY, &binding.root)?, packages: specs };
+    submit(s, ADD_MANY, &binding, &names, job)
+}
+
+fn listed_packages(cmd: &str, p: &Value) -> Result<Vec<String>> {
+    let Some(list) = p.get("packages") else { return Ok(vec![package(cmd, p)?]) };
+    let list = list.as_array().filter(|list| !list.is_empty()).ok_or_else(|| bad(cmd, "packages must be a non-empty array"))?;
+    let mut names: Vec<String> = Vec::with_capacity(list.len());
+    for entry in list {
+        let name = package(cmd, &json!({"package": entry}))?;
+        if names.contains(&name) {
+            return Err(bad(cmd, format!("package \"{name}\" is listed twice")));
+        }
+        names.push(name);
+    }
+    Ok(names)
+}
+
 fn set_version(s: &mut Session, p: &Value) -> Result<Value> {
     let binding = binding(s, SET_VERSION)?;
-    let package = package(SET_VERSION, p)?;
+    let mut names = listed_packages(SET_VERSION, p)?;
     let version = version(SET_VERSION, p, None)?;
-    require_active_source(SET_VERSION, &binding, &package)?;
-    install(s, SET_VERSION, &binding, package, version)
+    for name in &names {
+        require_active_source(SET_VERSION, &binding, name)?;
+    }
+    if names.len() == 1 {
+        return install(s, SET_VERSION, &binding, names.remove(0), version);
+    }
+    let specs = names.iter().map(|name| npm::PackageSpec { name: name.clone(), version: version.clone() }).collect();
+    let job = CaptureJob::InstallMany { root: absolute_root(SET_VERSION, &binding.root)?, packages: specs };
+    submit(s, SET_VERSION, &binding, &names, job)
 }
 
 fn remove(s: &mut Session, p: &Value) -> Result<Value> {
@@ -135,7 +177,7 @@ fn remove(s: &mut Session, p: &Value) -> Result<Value> {
     let package = package(REMOVE, p)?;
     require_active_source(REMOVE, &binding, &package)?;
     let job = CaptureJob::Uninstall { root: absolute_root(REMOVE, &binding.root)?, package: package.clone() };
-    submit(s, REMOVE, &binding, &package, job)
+    submit(s, REMOVE, &binding, &[package], job)
 }
 
 fn status(s: &mut Session, p: &Value) -> Result<Value> {
@@ -168,17 +210,18 @@ fn status(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 pub(crate) fn changes_source(command: &str) -> bool {
-    matches!(command, ADD | SET_VERSION | REMOVE)
+    matches!(command, ADD | ADD_MANY | SET_VERSION | REMOVE)
 }
 
-/// Write what the finished job `command` on `package` changed into the `uigen.json` of folder
+/// Write what the finished job `command` on `packages` changed into the `uigen.json` of folder
 /// `root`, read again first, and give every tab of the project the new manifest. A command that
 /// is not a source command changes nothing; a result the service must not be believed on, or a
 /// manifest that can't be written, comes back as the failure of the job.
-pub(crate) fn apply(s: &mut Session, command: &str, package: &str, root: &str, result: &Value) -> std::result::Result<(), CaptureError> {
+pub(crate) fn apply(s: &mut Session, command: &str, packages: &[String], root: &str, result: &Value) -> std::result::Result<(), CaptureError> {
     if !changes_source(command) {
         return Ok(());
     }
+    let package = packages.join(", ");
     let not_saved = |cause: EngineError| {
         let done = if command == REMOVE { "uninstalled" } else { "installed" };
         CaptureError { kind: CaptureErrorKind::Internal, message: format!("{package} was {done} but uigen.json could not be updated: {cause}") }
@@ -189,8 +232,10 @@ pub(crate) fn apply(s: &mut Session, command: &str, package: &str, root: &str, r
             Some(source) => source.removed = true,
             None => return Ok(()),
         }
+    } else if command == ADD_MANY || (command == SET_VERSION && packages.len() > 1) {
+        upsert_all(&mut config, packages, result)?;
     } else {
-        upsert(&mut config, package, result)?;
+        upsert(&mut config, &package, result)?;
     }
     project::save(root, &config).map_err(not_saved)?;
     s.rebind_project(root, config);
@@ -207,6 +252,17 @@ fn optional_text<'a>(result: &'a Value, package: &str, key: &str) -> std::result
         Some(Value::String(text)) => Ok(Some(text)),
         Some(_) => Err(refused(format!("the install of {package} reported a {key} that is not text"))),
     }
+}
+
+fn upsert_all(config: &mut Project, packages: &[String], result: &Value) -> std::result::Result<(), CaptureError> {
+    let reported = result.get("packages").and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
+    if reported.len() != packages.len() {
+        return Err(refused(format!("the install of {} answered for {} packages", packages.join(", "), reported.len())));
+    }
+    for (package, entry) in packages.iter().zip(reported) {
+        upsert(config, package, entry)?;
+    }
+    Ok(())
 }
 
 fn upsert(config: &mut Project, package: &str, result: &Value) -> std::result::Result<(), CaptureError> {

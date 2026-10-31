@@ -90,7 +90,7 @@ impl CaptureBackend for Backend {
             CaptureJob::Install { package, version, .. } => {
                 Ok(json!({"package": package, "version": version, "framework": "react", "license": "MIT"}))
             }
-            CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
+            CaptureJob::InstallMany { .. } | CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
         };
         script.submitted.push(job);
         let id = u64::try_from(script.submitted.len()).unwrap();
@@ -343,22 +343,22 @@ fn the_end_of_another_import_neither_ends_nor_advances_the_import_the_window_fol
     lab.click("Alert");
     lab.click("Import");
     lab.press(Key::Escape);
-    assert!(!lab.shows("Import a component"), "the window is closed");
+    assert!(!lab.shows("02 Components"), "the surface is closed");
 
     lab.open_window();
     lab.wait_for("Chip");
     lab.click("Chip");
     lab.click("Import");
     lab.release(2);
-    lab.release(8);
+    lab.release(10);
 
-    assert!(!lab.shows("Imported Chip"), "Alert ended, Chip did not: {:?}", lab.shown());
+    assert!(!lab.shows("Imported 1 of 1 components"), "Alert ended, Chip did not: {:?}", lab.shown());
     let (done, total) = lab.progress().expect("Chip is still running");
-    assert!(done <= 1 && total == 9, "only the jobs of Chip count: {done} of {total}");
+    assert!(done == 0 && total == 1, "only the component of this run counts: {done} of {total}");
     assert_eq!(lab.toast().as_deref(), Some(IMPORTED_AFTER_ALERT), "the end of Alert falls back to the toast");
 
     lab.release_all();
-    assert!(lab.shows("Imported Chip"), "{:?}", lab.shown());
+    assert!(lab.shows("Imported 1 of 1 components"), "{:?}", lab.shown());
 }
 
 #[test]
@@ -393,7 +393,23 @@ fn only_the_visible_rows_of_a_long_list_are_drawn() {
     lab.open_window();
     lab.wait_for("Widget001");
     let drawn = lab.shown().iter().filter(|text| text.starts_with("Widget")).count();
-    assert!((1..=12).contains(&drawn), "{drawn} rows drawn");
+    assert!((1..=20).contains(&drawn), "{drawn} rows drawn of 300");
+}
+
+#[test]
+fn tabbing_through_a_long_list_scrolls_to_the_row_that_has_the_focus() {
+    let mut lab = Lab::new("tab-scroll", "en");
+    lab.script.lock().unwrap().names = (1..=300).map(|n| format!("Widget{n:03}")).collect();
+    lab.open_window();
+    lab.wait_for("Widget001");
+    let last_drawn = |lab: &mut Lab| lab.shown().iter().filter_map(|text| text.strip_prefix("Widget")?.parse::<usize>().ok()).max().unwrap_or(0);
+    let before = last_drawn(&mut lab);
+    for _ in 0..80 {
+        lab.press(Key::Tab);
+    }
+    let after = last_drawn(&mut lab);
+    assert!(after > before + 30, "the rows came from {before} to {after}");
+    assert!(lab.shown().iter().filter(|text| text.starts_with("Widget")).count() <= 20, "still only the visible rows are drawn");
 }
 
 #[test]
@@ -459,4 +475,44 @@ fn the_drop_hint_is_not_shown_over_an_import_page_or_a_divider() {
     lab.run("page.select", json!({"id": card.0}));
     lab.settle();
     assert_eq!(lab.drop_hints("Chip").len(), 1, "a hint over an ordinary page");
+}
+
+#[test]
+fn the_surface_opens_at_its_top_again_after_a_long_list_was_scrolled() {
+    let mut lab = Lab::new("reopen-top", "en");
+    lab.script.lock().unwrap().names = (1..=300).map(|n| format!("Widget{n:03}")).collect();
+    lab.open_window();
+    lab.wait_for("Widget001");
+    for _ in 0..80 {
+        lab.press(Key::Tab);
+    }
+    assert!(!lab.shows("Widget001"), "the first row scrolled away: {:?}", lab.shown());
+    lab.ui.app.ui.import_window = None;
+    lab.open_window();
+    lab.wait_for("Widget001");
+}
+
+#[test]
+fn the_steps_and_the_first_state_read_as_the_french_mockup() {
+    let mut lab = Lab::new("fr-mockup-words", "fr");
+    lab.open_window();
+    lab.wait_for("Choisis tes composants");
+    assert!(lab.shows("Librairies ✓"), "step one: {:?}", lab.shown());
+    assert!(lab.nodes().iter().any(|node| node.label() == Some("Défaut")), "the first chip is Défaut");
+}
+
+#[test]
+fn show_in_components_leaves_the_source_libraries_page_for_the_components_panel() {
+    let mut b = crate::import_window_ui_tests::Bench::nominal("show-leaves", &["Alert"]);
+    b.open_settings();
+    b.click("Import components");
+    b.wait_until("the row is listed", |b| b.has("Alert"));
+    b.click("Alert");
+    b.click("Import");
+    b.wait_until("the summary offers the panel", |b| b.has("Show in Components"));
+    b.click("Show in Components");
+    b.settle();
+    assert!(!b.window_open(), "the surface closed");
+    assert!(b.ui.app.ui.project_settings.is_none(), "the page closed too: {:?}", b.shown());
+    assert!(matches!(b.ui.app.ui.left_tab, crate::LeftTab::Assets), "the components panel shows");
 }

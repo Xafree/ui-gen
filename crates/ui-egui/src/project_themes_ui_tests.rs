@@ -160,7 +160,7 @@ impl CaptureBackend for Gate {
             CaptureJob::Install { package, version, .. } => {
                 Ok(json!({"package": package, "version": version, "framework": "react", "license": "MIT"}))
             }
-            CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
+            CaptureJob::InstallMany { .. } | CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
         };
         self.submitted += 1;
         self.ready.push((self.submitted, outcome));
@@ -367,6 +367,22 @@ impl Lab {
     }
 
     fn click_apply(&mut self, row: usize) {
+        self.ui.frame(vec![Event::PointerMoved(pos2(700.0, 450.0))]);
+        for _ in 0..6 {
+            let buttons = self.apply_buttons();
+            if buttons.get(row).is_some_and(|at| at.y < 800.0) {
+                break;
+            }
+            let scroll = Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                source: egui::MouseWheelSource::Unknown,
+                delta: egui::vec2(0.0, -300.0),
+                phase: egui::TouchPhase::Move,
+                modifiers: Modifiers::NONE,
+            };
+            self.ui.frame(vec![scroll]);
+            self.settle();
+        }
         let buttons = self.apply_buttons();
         let at = *buttons.get(row).unwrap_or_else(|| panic!("no Apply button at row {row}: {buttons:?}"));
         self.click(at);

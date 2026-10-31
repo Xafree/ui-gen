@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use egui::accesskit::Node;
-use egui::{Pos2, pos2};
+use egui::accesskit::{Node, Role};
+use egui::{Event, Key, Modifiers, Pos2, pos2};
 use figcraft_engine::capture::{CaptureBackend, CaptureError, CaptureErrorKind, CaptureJob, JobId};
 use figcraft_engine::catalog::MENU;
 use serde_json::{Value, json};
@@ -21,6 +21,9 @@ use crate::layers_drag_tests::Ui;
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 
 const MUI: &str = "@mui/material";
+const HEROUI_STYLES: &str = "@heroui/styles";
+const HEROUI_REACT: &str = "@heroui/react";
+const FAMILY_VERSION: &str = "3.2.7";
 
 type Outcome = Result<Value, CaptureError>;
 
@@ -54,6 +57,7 @@ impl Drop for Dir {
 struct Calls {
     submitted: Vec<CaptureJob>,
     ready: Vec<(JobId, Outcome)>,
+    answered: usize,
 }
 
 struct FakeBackend {
@@ -139,10 +143,23 @@ impl Bench {
     fn submitted_shapes(&self) -> Vec<(String, String, Option<String>)> {
         self.submitted()
             .into_iter()
-            .map(|job| match job {
-                CaptureJob::Install { package, version, .. } => ("install".to_string(), package, Some(version)),
-                CaptureJob::Uninstall { package, .. } => ("uninstall".to_string(), package, None),
+            .flat_map(|job| match job {
+                CaptureJob::Install { package, version, .. } => vec![("install".to_string(), package, Some(version))],
+                CaptureJob::InstallMany { packages, .. } => {
+                    packages.into_iter().map(|spec| ("install".to_string(), spec.name, Some(spec.version))).collect()
+                }
+                CaptureJob::Uninstall { package, .. } => vec![("uninstall".to_string(), package, None)],
                 other => panic!("unexpected job {other:?}"),
+            })
+            .collect()
+    }
+
+    fn install_many_jobs(&self) -> Vec<Vec<(String, String)>> {
+        self.submitted()
+            .into_iter()
+            .map(|job| match job {
+                CaptureJob::InstallMany { packages, .. } => packages.into_iter().map(|spec| (spec.name, spec.version)).collect(),
+                other => panic!("expected an InstallMany job, got {other:?}"),
             })
             .collect()
     }
@@ -168,6 +185,27 @@ impl Bench {
         self.ui.frame_output(vec![]).platform_output.accesskit_update.expect("an AccessKit update").nodes.into_iter().map(|(_, n)| n).collect()
     }
 
+    fn text_inputs(&mut self) -> Vec<Node> {
+        self.nodes().into_iter().filter(|n| n.role() == Role::TextInput).collect()
+    }
+
+    fn field_value(&mut self) -> String {
+        let fields = self.text_inputs();
+        fields.first().and_then(|n| n.value()).unwrap_or_default().to_string()
+    }
+
+    fn type_line(&mut self, line: &str) {
+        let fields = self.text_inputs();
+        let field = fields.first().expect("the text field is on screen");
+        let b = field.bounds().expect("the text field has bounds");
+        let at = pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32);
+        self.ui.button(at, true);
+        self.ui.button(at, false);
+        self.settle();
+        self.ui.frame(vec![Event::Text(line.to_string())]);
+        self.settle();
+    }
+
     fn has_label(&mut self, label: &str) -> bool {
         self.nodes().iter().any(|n| n.label().is_some_and(|l| l.trim() == label))
     }
@@ -185,10 +223,87 @@ impl Bench {
         self.ui.button(at, false);
         self.settle();
     }
+
+    fn count_label(&mut self, label: &str) -> usize {
+        self.nodes().iter().filter(|n| n.label().is_some_and(|l| l.trim() == label)).count()
+    }
+
+    fn answer_all(&mut self, version: &str) {
+        for _ in 0..8 {
+            let jobs = self.submitted();
+            let answered = self.calls.lock().unwrap().answered;
+            if answered == jobs.len() {
+                return;
+            }
+            for (index, job) in jobs.iter().enumerate().skip(answered) {
+                let outcome = match job {
+                    CaptureJob::Uninstall { package, .. } => Ok(json!({"package": package})),
+                    CaptureJob::Install { package, .. } => Ok(family_member(package, version)),
+                    CaptureJob::InstallMany { packages, .. } => {
+                        Ok(json!({"packages": packages.iter().map(|spec| family_member(&spec.name, version)).collect::<Vec<Value>>()}))
+                    }
+                    other => panic!("unexpected job {other:?}"),
+                };
+                self.calls.lock().unwrap().ready.push((u64::try_from(index + 1).unwrap(), outcome));
+            }
+            self.calls.lock().unwrap().answered = jobs.len();
+            self.settle();
+        }
+        panic!("the jobs never stopped: {:?}", self.submitted());
+    }
+
+    fn type_version(&mut self, version: &str) {
+        let fields = self.text_inputs();
+        let field = fields.iter().find(|n| n.label().is_some_and(|l| l.trim() == "Version")).expect("the version field is on screen");
+        let b = field.bounds().expect("the version field has bounds");
+        let at = pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32);
+        self.ui.button(at, true);
+        self.ui.button(at, false);
+        self.settle();
+        self.key(Key::End);
+        for _ in 0..8 {
+            self.key(Key::Backspace);
+        }
+        self.ui.frame(vec![Event::Text(version.to_string())]);
+        self.settle();
+        self.key(Key::Enter);
+    }
+
+    fn key(&mut self, key: Key) {
+        let event = |pressed| Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: Modifiers::NONE };
+        self.ui.frame(vec![event(true), event(false)]);
+        self.settle();
+    }
+}
+
+fn react_source(version: &str) -> Value {
+    json!({"package": HEROUI_REACT, "version": version, "framework": "react", "license": "MIT", "removed": false})
+}
+
+fn styles_source(version: &str) -> Value {
+    json!({"package": HEROUI_STYLES, "version": version, "license": "MIT", "removed": false})
+}
+
+fn family_member(package: &str, version: &str) -> Value {
+    if package == HEROUI_STYLES {
+        json!({"package": package, "version": version, "license": "MIT"})
+    } else {
+        json!({"package": package, "version": version, "framework": "react", "license": "MIT"})
+    }
 }
 
 fn installed(package: &str, version: &str) -> Outcome {
     Ok(json!({"package": package, "version": version, "framework": "react", "license": "MIT"}))
+}
+
+fn installed_all(list: &[(&str, &str)]) -> Outcome {
+    let packages: Vec<Value> =
+        list.iter().map(|(package, version)| json!({"package": package, "version": version, "framework": "react", "license": "MIT"})).collect();
+    Ok(json!({"packages": packages}))
+}
+
+fn pairs(list: &[(&str, &str)]) -> Vec<(String, String)> {
+    list.iter().map(|(name, version)| (name.to_string(), version.to_string())).collect()
 }
 
 fn mentions(shown: &[String], needle: &str) -> bool {
@@ -223,7 +338,7 @@ fn the_file_menu_offers_project_settings_which_opens_the_window_for_a_user_only(
 
     b.open_window();
     let shown = b.painted();
-    for text in ["Source libraries", "Add an npm package", "Package", "Version", "Framework", "Close"] {
+    for text in ["Source libraries", "Run", "Library", "Version", "Written for"] {
         assert!(mentions(&shown, text), "{text:?} is on screen: {shown:?}");
     }
     assert!(mentions(&shown, MUI) && mentions(&shown, "7.3.11"), "the listed source is on screen: {shown:?}");
@@ -236,7 +351,7 @@ fn adding_a_package_shows_an_installing_row_without_blocking_then_its_version_fr
     b.open_window();
     assert!(b.state().sources().is_empty());
 
-    project_settings::add_package(&mut b.ui.app, MUI, "latest");
+    project_settings::add_packages(&mut b.ui.app, MUI);
     for _ in 0..30 {
         b.ui.frame(vec![]);
     }
@@ -247,7 +362,7 @@ fn adding_a_package_shows_an_installing_row_without_blocking_then_its_version_fr
     assert!(mentions(&shown, "Installing…") && mentions(&shown, MUI), "the installing row is on screen while the service works: {shown:?}");
     assert_eq!(b.dir.manifest_sources(), json!([]), "uigen.json waits for the success");
 
-    b.finish_last(installed(MUI, "7.3.11"));
+    b.finish_last(installed_all(&[(MUI, "7.3.11")]));
     let row = b.row(MUI).expect("the row stays");
     assert_eq!((row.status.as_str(), row.version.as_str()), ("ready", "7.3.11"));
     let shown = b.painted();
@@ -265,7 +380,7 @@ fn a_failed_install_says_what_failed_and_why_and_adds_nothing() {
     let cause = "npm error 404 Not Found - GET https://registry.invalid/@mui%2fmaterial";
     let mut b = Bench::new("fail", &[]);
     b.open_window();
-    project_settings::add_package(&mut b.ui.app, MUI, "latest");
+    project_settings::add_packages(&mut b.ui.app, MUI);
     b.settle();
     assert_eq!(b.row(MUI).map(|r| r.status.as_str()), Some("installing"));
 
@@ -286,7 +401,7 @@ fn an_invalid_package_name_is_refused_in_the_field_with_the_reason_and_submits_n
     b.open_window();
     assert!(b.state().add_error().is_none());
 
-    project_settings::add_package(&mut b.ui.app, "Not Valid!", "latest");
+    project_settings::add_packages(&mut b.ui.app, "Not Valid!");
     b.settle();
     let reason = b.state().add_error().expect("the field shows why the name is refused").to_string();
     assert!(reason.contains("lowercase registry name"), "{reason:?}");
@@ -365,6 +480,85 @@ fn a_failed_version_change_keeps_the_old_version() {
     assert_eq!(b.dir.manifest_sources()[0]["version"], "7.3.11");
 }
 
+// covers: INST-6
+#[test]
+fn the_window_has_one_text_field_and_an_install_button_and_no_version_field() {
+    let mut b = Bench::new("install-form", &[mui_source("7.3.11")]);
+    b.open_window();
+
+    let fields = b.text_inputs();
+    let labels: Vec<Option<&str>> = fields.iter().map(Node::label).collect();
+    assert_eq!(fields.len(), 1, "{labels:?}");
+    assert_ne!(labels[0].map(str::trim), Some("Version"));
+    assert!(b.has_label("Run"), "the Run button is on screen");
+    let shown = b.painted();
+    assert!(!mentions(&shown, "Add an npm package"), "{shown:?}");
+}
+
+// covers: INST-6
+#[test]
+fn clicking_install_runs_add_sources_with_the_typed_line_and_both_packages_show_as_installing() {
+    let mut b = Bench::new("install-click", &[]);
+    b.open_window();
+
+    b.type_line("npm i @heroui/styles @heroui/react");
+    b.click("Run");
+
+    assert_eq!(b.install_many_jobs(), vec![pairs(&[(HEROUI_STYLES, "latest"), (HEROUI_REACT, "latest")])]);
+    let status = b.ui.app.session.execute("capture.status", &json!({})).unwrap();
+    assert_eq!(status["jobs"].as_array().map(Vec::len), Some(1), "{status}");
+    assert_eq!(status["jobs"][0]["command"], json!("project.addSources"), "{status}");
+    for package in [HEROUI_STYLES, HEROUI_REACT] {
+        assert_eq!(b.row(package).map(|r| r.status.as_str()), Some("installing"), "{package}");
+    }
+    let shown = b.painted();
+    assert!(mentions(&shown, HEROUI_STYLES) && mentions(&shown, HEROUI_REACT) && mentions(&shown, "Installing…"), "{shown:?}");
+    assert_eq!(b.dir.manifest_sources(), json!([]), "uigen.json waits for the success");
+
+    b.finish_last(installed_all(&[(HEROUI_STYLES, "2.0.1"), (HEROUI_REACT, "2.4.0")]));
+    assert_eq!(b.row(HEROUI_STYLES).map(|r| (r.status.as_str(), r.version.as_str())), Some(("ready", "2.0.1")));
+    assert_eq!(b.row(HEROUI_REACT).map(|r| (r.status.as_str(), r.version.as_str())), Some(("ready", "2.4.0")));
+    let sources = b.dir.manifest_sources();
+    assert_eq!(sources.as_array().map(Vec::len), Some(2), "{sources}");
+}
+
+// covers: INST-6
+#[test]
+fn a_refused_line_shows_the_reason_keeps_the_typed_text_and_starts_no_job() {
+    let mut b = Bench::new("install-refused", &[]);
+    b.open_window();
+
+    b.type_line("npm uninstall a");
+    b.click("Run");
+
+    let reason = b.state().add_error().expect("the window shows why the line is refused").to_string();
+    assert!(reason.contains("uninstall"), "{reason:?}");
+    let shown = b.painted();
+    assert!(mentions(&shown, &reason), "the reason is on screen: {shown:?}");
+    assert_eq!(b.field_value(), "npm uninstall a");
+    assert!(b.submitted().is_empty(), "no work was submitted: {:?}", b.submitted());
+    assert!(b.state().sources().is_empty());
+    let status = b.ui.app.session.execute("capture.status", &json!({})).unwrap();
+    assert_eq!(status["jobs"], json!([]));
+    assert_eq!(b.dir.manifest_sources(), json!([]));
+}
+
+// covers: INST-6
+#[test]
+fn add_packages_refuses_a_shell_line_or_an_empty_one_without_starting_a_job() {
+    let mut b = Bench::new("install-direct", &[]);
+    b.open_window();
+
+    for (line, token) in [("a && b", "&&"), ("", "")] {
+        project_settings::add_packages(&mut b.ui.app, line);
+        b.settle();
+        let reason = b.state().add_error().unwrap_or_else(|| panic!("{line:?} is refused with a reason")).to_string();
+        assert!(!reason.trim().is_empty() && reason.contains(token), "{line:?}: {reason:?}");
+    }
+    assert!(b.submitted().is_empty(), "{:?}", b.submitted());
+    assert!(b.state().sources().is_empty());
+}
+
 fn keys_in(src: &str) -> BTreeSet<String> {
     let mut found = BTreeSet::new();
     for call in ["tr(\"", "trf(\"", "trn(\"", "tr_noop(\""] {
@@ -391,10 +585,10 @@ fn keys_in(src: &str) -> BTreeSet<String> {
 
 const FIXED_KEYS: [&str; 12] = [
     "Source libraries",
-    "Add an npm package",
-    "Package",
+    "Run",
+    "Library",
     "Version",
-    "Framework",
+    "Written for",
     "Remove",
     "Change version",
     "Removed source",
@@ -405,10 +599,10 @@ const FIXED_KEYS: [&str; 12] = [
 ];
 
 const FRENCH: [(&str, &str); 9] = [
-    ("Source libraries", "Bibliothèques sources"),
-    ("Add an npm package", "Ajouter un paquet npm"),
-    ("Package", "Paquet"),
-    ("Framework", "Framework"),
+    ("Source libraries", "Librairies sources"),
+    ("Run", "Lancer"),
+    ("Library", "Librairie"),
+    ("Written for", "Écrite pour"),
     ("Remove", "Retirer"),
     ("Change version", "Changer de version"),
     ("Removed source", "Source retirée"),
@@ -458,4 +652,89 @@ fn every_language_translates_the_window_strings_and_the_command_label() {
     for (key, expected) in FRENCH {
         assert_eq!(text_of(fr, key), Some(expected), "fr: {key:?}");
     }
+}
+
+// covers: GROUP-2
+#[test]
+fn two_packages_of_one_family_show_as_one_row_named_after_the_family() {
+    let mut b = Bench::new("family-row", &[styles_source(FAMILY_VERSION), react_source(FAMILY_VERSION)]);
+    b.open_window();
+
+    let shown = b.painted();
+    let exact = |text: &str| shown.iter().filter(|t| *t == text).count();
+    assert_eq!(exact("heroui"), 1, "the row is named after the family: {shown:?}");
+    assert_eq!(exact(FAMILY_VERSION), 1, "one version for the family: {shown:?}");
+    assert_eq!(exact("Ready"), 1, "one state tag: {shown:?}");
+    assert_eq!(exact(HEROUI_STYLES) + exact(HEROUI_REACT), 0, "no row is named after a package: {shown:?}");
+    for label in ["Remove", "Change version", "Browse"] {
+        assert_eq!(b.count_label(label), 1, "{label} is offered once, for the family");
+    }
+}
+
+// covers: GROUP-3
+#[test]
+fn removing_a_family_asks_once_then_uninstalls_both_packages() {
+    let mut b = Bench::new("family-remove", &[styles_source(FAMILY_VERSION), react_source(FAMILY_VERSION)]);
+    b.open_window();
+
+    b.click("Remove");
+    assert!(b.has_label("Confirm removal"), "the click only asks");
+    assert!(b.submitted().is_empty(), "nothing is uninstalled before the confirmation");
+    b.click("Cancel");
+    assert!(b.submitted().is_empty());
+    assert!(b.has_label("Remove"), "cancelling brings the row back");
+
+    b.click("Remove");
+    b.click("Confirm removal");
+    b.answer_all(FAMILY_VERSION);
+    let mut shapes = b.submitted_shapes();
+    shapes.sort();
+    assert_eq!(
+        shapes,
+        vec![("uninstall".to_string(), HEROUI_REACT.to_string(), None), ("uninstall".to_string(), HEROUI_STYLES.to_string(), None)],
+        "both packages are uninstalled, nothing else"
+    );
+    let sources = b.dir.manifest_sources();
+    let removed: Vec<bool> = sources.as_array().unwrap().iter().filter_map(|s| s["removed"].as_bool()).collect();
+    assert_eq!(removed, [true, true], "{sources}");
+}
+
+// covers: GROUP-3
+#[test]
+fn changing_the_version_of_a_family_installs_both_packages_at_that_version_in_one_job() {
+    let mut b = Bench::new("family-version", &[styles_source(FAMILY_VERSION), react_source(FAMILY_VERSION)]);
+    b.open_window();
+
+    b.click("Change version");
+    b.type_version("3.3.0");
+    b.click("Apply");
+    assert_eq!(b.submitted().len(), 1, "one job for the family: {:?}", b.submitted());
+    let mut packages = b.install_many_jobs().remove(0);
+    packages.sort();
+    assert_eq!(packages, pairs(&[(HEROUI_REACT, "3.3.0"), (HEROUI_STYLES, "3.3.0")]));
+    let shown = b.painted();
+    assert!(mentions(&shown, FAMILY_VERSION) && !mentions(&shown, "3.3.0"), "the old version stays while the service works: {shown:?}");
+
+    b.answer_all("3.3.0");
+    let shown = b.painted();
+    assert!(mentions(&shown, "3.3.0") && !mentions(&shown, FAMILY_VERSION), "{shown:?}");
+    let sources = b.dir.manifest_sources();
+    let versions: Vec<&str> = sources.as_array().unwrap().iter().filter_map(|s| s["version"].as_str()).collect();
+    assert_eq!(versions, ["3.3.0", "3.3.0"], "{sources}");
+}
+
+// covers: GROUP-4
+#[test]
+fn the_ready_band_after_installing_a_family_names_the_family() {
+    let mut b = Bench::new("family-ready", &[]);
+    b.open_window();
+
+    b.type_line("npm i @heroui/styles @heroui/react");
+    b.click("Run");
+    b.finish_last(Ok(json!({"packages": [family_member(HEROUI_STYLES, FAMILY_VERSION), family_member(HEROUI_REACT, FAMILY_VERSION)]})));
+
+    let shown = b.painted();
+    assert!(shown.iter().any(|t| t == "heroui is ready"), "the band names the family: {shown:?}");
+    assert!(!shown.iter().any(|t| t.contains(HEROUI_REACT) && t.contains("is ready")), "not a package: {shown:?}");
+    assert_eq!(b.count_label("Choose its components"), 1, "one band, one button");
 }

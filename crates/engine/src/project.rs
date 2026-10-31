@@ -56,6 +56,50 @@ pub fn load(root: &str) -> Result<Project> {
     read_cause(root).map_err(|why| EngineError::Other(format!("{FILE_NAME}: {why}")))
 }
 
+/// Why a command on the sources of a project refused, as a kind the UI can word in its own language.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SourceRefusal {
+    AlreadySource(String),
+    InProgress(String),
+}
+
+const ALREADY_SOURCE: (&str, &str) = ("package \"", "\" is already a source of this project");
+const IN_PROGRESS: (&str, &str) = ("a change to package \"", "\" is already in progress");
+
+pub(crate) fn already_source(package: &str) -> String {
+    format!("{}{package}{}", ALREADY_SOURCE.0, ALREADY_SOURCE.1)
+}
+
+pub(crate) fn in_progress(package: &str) -> String {
+    format!("{}{package}{}", IN_PROGRESS.0, IN_PROGRESS.1)
+}
+
+pub fn source_refusal(message: &str) -> Option<SourceRefusal> {
+    let between = |(start, end): (&str, &str)| message.strip_prefix(start)?.strip_suffix(end).map(str::to_string);
+    between(ALREADY_SOURCE).map(SourceRefusal::AlreadySource).or_else(|| between(IN_PROGRESS).map(SourceRefusal::InProgress))
+}
+
+/// The packages the installed `package` of project folder `root` depends on (`dependencies` and
+/// `peerDependencies`), or none when it is not installed or its manifest can't be read.
+pub fn installed_dependencies(root: &str, package: &str) -> Vec<String> {
+    const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
+    let plain = !package.is_empty() && package.split('/').all(|part| !part.is_empty() && part != "." && part != ".." && !part.contains(['\\', ':']));
+    if !plain {
+        return Vec::new();
+    }
+    let path = Path::new(root).join(".uigen").join("sources").join("node_modules").join(package).join("package.json");
+    let Ok(bytes) = file_access::read_capped(path, MAX_MANIFEST_BYTES) else { return Vec::new() };
+    let Ok(manifest) = serde_json::from_slice::<serde_json::Value>(&bytes) else { return Vec::new() };
+    let mut names: Vec<String> = ["dependencies", "peerDependencies"]
+        .iter()
+        .filter_map(|field| manifest.get(field).and_then(serde_json::Value::as_object))
+        .flat_map(|map| map.keys().cloned())
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 /// Write `project` as the manifest of folder `root`, after validating it.
 pub fn save(root: &str, project: &Project) -> Result<()> {
     project.validate().map_err(|e| EngineError::Other(format!("{FILE_NAME}: {e}")))?;

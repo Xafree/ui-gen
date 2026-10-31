@@ -29,7 +29,7 @@ impl CaptureBackend for Backend {
                 }
                 Ok(result)
             }
-            CaptureJob::Install { .. } | CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => {
+            CaptureJob::Install { .. } | CaptureJob::InstallMany { .. } | CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => {
                 Err(service_failure(CaptureErrorKind::Internal, "unexpected job"))
             }
         };

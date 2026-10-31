@@ -3,6 +3,8 @@
 
 mod assemble;
 mod catalog;
+#[cfg(test)]
+pub(crate) use catalog::validate_for_tests;
 mod motion;
 mod pending;
 mod plan;

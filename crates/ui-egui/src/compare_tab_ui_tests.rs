@@ -224,7 +224,7 @@ impl CaptureBackend for Service {
                 shared.version.clone_from(version);
                 Ok(json!({"package": package, "version": version, "framework": "react", "license": "MIT"}))
             }
-            CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
+            CaptureJob::InstallMany { .. } | CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
         };
         shared.submitted += 1;
         let id = shared.submitted;

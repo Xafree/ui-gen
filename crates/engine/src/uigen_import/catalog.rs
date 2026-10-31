@@ -60,6 +60,7 @@ pub struct InspectedProp {
 pub struct InspectedComponent {
     pub name: String,
     pub props: Vec<InspectedProp>,
+    pub part_of: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -79,7 +80,10 @@ impl Inspected {
             .map(|component| {
                 let props: Vec<Value> =
                     component.props.iter().map(|prop| json!({"name": prop.name, "type": prop.kind.label(), "values": prop.values})).collect();
-                json!({"name": component.name, "props": props})
+                match &component.part_of {
+                    Some(parent) => json!({"name": component.name, "props": props, "partOf": parent}),
+                    None => json!({"name": component.name, "props": props}),
+                }
             })
             .collect();
         json!({"package": self.package, "version": self.version, "framework": self.framework, "components": components, "notes": self.notes})
@@ -166,7 +170,8 @@ fn component_of(listed: &Value, notes: &mut Vec<String>) -> Option<InspectedComp
         .get("props")
         .and_then(Value::as_array)
         .map_or_else(Vec::new, |props| props.iter().take(MAX_PROPS).filter_map(|prop| prop_of(prop, name, notes)).collect());
-    Some(InspectedComponent { name: name.to_string(), props })
+    let part_of = listed.get("partOf").and_then(Value::as_str).filter(|parent| usable_name(parent).is_ok()).map(str::to_string);
+    Some(InspectedComponent { name: name.to_string(), props, part_of })
 }
 
 fn framework_of(result: &Value) -> String {
@@ -191,6 +196,11 @@ fn validate(package: &str, source_version: Option<&str>, result: &Value) -> Resu
     let notes = notes.iter().take(MAX_NOTES).map(|note| clipped(note, MAX_NOTE_CHARS)).collect();
     let version = result.get("version").and_then(Value::as_str).or(source_version).unwrap_or_default().to_string();
     Ok(Inspected { package: package.to_string(), version, framework: framework_of(result), components, notes })
+}
+
+#[cfg(test)]
+pub(crate) fn validate_for_tests(package: &str, result: &Value) -> Inspected {
+    validate(package, None, result).expect("a valid answer")
 }
 
 /// The version of the active source `package` in the project of folder `root`, whichever tab holds it.

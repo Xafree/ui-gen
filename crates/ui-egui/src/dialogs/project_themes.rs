@@ -5,21 +5,21 @@
 use std::fmt;
 use std::sync::Arc;
 
-use egui::{Align, Color32, CornerRadius, Frame, Label, Layout, Margin, RichText, ScrollArea, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
+use egui::{Align, Color32, CornerRadius, Frame, Label, Layout, Margin, RichText, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use figcraft_doc::Document;
 use figcraft_engine::capture::JobState;
 use figcraft_engine::{Swatch, ThemeInfo, file_access, token_themes};
 use figcraft_project::Project;
 use serde_json::{Value, json};
 
-use super::project_settings::{CARD_MARGIN, GAP, INNER_W, note};
+use super::project_settings::note;
 use crate::FigApp;
 use crate::i18n::{tr, trf, trn};
 use crate::theme::{Tokens, doc_c32, regular, semibold};
 
 const APPLY: &str = "uigen.applyTheme";
 const IMPORT: &str = "uigen.importComponent";
-const LIST_HEIGHT: f32 = 340.0;
+const GAP: f32 = 8.0;
 const SWATCH: f32 = 16.0;
 const SWATCH_GAP: f32 = 4.0;
 const FACT_GAP: f32 = 12.0;
@@ -167,8 +167,6 @@ fn applied(app: &FigApp, theme: &str, result: &Value) -> Outcome {
 }
 
 pub(super) fn section(ui: &mut Ui, t: &Tokens, state: &Themes, acts: &mut Vec<ThemeAct>) {
-    ui.label(RichText::new(tr("Token themes")).font(semibold(15.0)).color(t.text));
-    ui.add_space(8.0);
     if state.importing {
         note(ui, tr("An import is running: Apply is available once it has finished."), t.text_secondary);
     }
@@ -181,12 +179,9 @@ pub(super) fn section(ui: &mut Ui, t: &Tokens, state: &Themes, acts: &mut Vec<Th
         }
         return;
     }
-    ScrollArea::vertical().id_salt("project_settings_themes").max_height(LIST_HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
-        for row in &state.rows {
-            card(ui, t, state, row, acts);
-            ui.add_space(6.0);
-        }
-    });
+    for row in &state.rows {
+        card(ui, t, state, row, acts);
+    }
 }
 
 fn messages(ui: &mut Ui, t: &Tokens, state: &Themes, acts: &mut Vec<ThemeAct>) {
@@ -217,13 +212,13 @@ fn messages(ui: &mut Ui, t: &Tokens, state: &Themes, acts: &mut Vec<ThemeAct>) {
 
 fn card(ui: &mut Ui, t: &Tokens, state: &Themes, row: &ThemeInfo, acts: &mut Vec<ThemeAct>) {
     let applied = state.applied.as_deref() == Some(row.name.as_str());
-    Frame::new().stroke(Stroke::new(1.0, t.border)).corner_radius(CornerRadius::same(8)).inner_margin(Margin::same(CARD_MARGIN)).show(ui, |ui| {
-        ui.set_width(INNER_W);
+    Frame::new().fill(t.bg).stroke(Stroke::new(1.0, t.border)).corner_radius(CornerRadius::same(14)).inner_margin(Margin::same(16)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = GAP;
-            ui.add(Label::new(RichText::new(&row.name).font(semibold(12.0)).color(t.text)).truncate());
+            ui.add(Label::new(RichText::new(&row.name).font(semibold(13.5)).color(t.text)).truncate());
             if applied {
-                ui.label(RichText::new(tr("Applied")).font(semibold(11.0)).color(t.accent_text));
+                ui.label(RichText::new(tr("Applied")).font(semibold(12.5)).color(t.accent_text));
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if crate::widgets::button(ui, tr("Apply"), !applied, !state.importing).clicked() {
@@ -246,7 +241,7 @@ fn card(ui: &mut Ui, t: &Tokens, state: &Themes, row: &ThemeInfo, acts: &mut Vec
 
 fn facts(ui: &mut Ui, t: &Tokens, row: &ThemeInfo) {
     let fact = |ui: &mut Ui, text: String| {
-        ui.label(RichText::new(text).font(regular(11.0)).color(t.text_secondary));
+        ui.label(RichText::new(text).font(regular(12.5)).color(t.text_secondary));
     };
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = FACT_GAP;

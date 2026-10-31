@@ -676,6 +676,18 @@ impl Windows {
     }
 }
 
+/// The window (0: the main one, whose state the app holds between frames) whose UI state `holds`.
+pub(crate) fn holding(app: &FigApp, holds: impl Fn(&UiState) -> bool) -> Option<u64> {
+    if holds(&app.ui) {
+        return Some(0);
+    }
+    app.windows.list.iter().find(|w| holds(&w.pane.ui)).map(|w| w.id)
+}
+
+pub(crate) fn all_ids(app: &FigApp) -> Vec<u64> {
+    std::iter::once(0).chain(app.windows.list.iter().map(|w| w.id)).collect()
+}
+
 /// Run `f` as window `id` (0: the main window) outside its frame, with its state swapped in as
 /// while it draws; `None` when there is no such window. For a window that draws nothing now
 /// (minimized, or occluded: behind other windows or on another Space).
