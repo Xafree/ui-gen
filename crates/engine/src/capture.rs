@@ -95,6 +95,7 @@ struct JobRecord {
     package: String,
     root: String,
     finished: Option<Result<(), String>>,
+    chained: bool,
 }
 
 impl CaptureJob {
@@ -143,10 +144,18 @@ impl Capture {
         }
     }
 
+    /// A job a command submitted on its own, such as a render of an import: nobody holds its id, so it goes first.
+    pub(crate) fn mark_chained(&mut self, job: JobId) {
+        if let Some(record) = self.jobs.iter_mut().find(|record| record.id == job) {
+            record.chained = true;
+        }
+    }
+
     fn forget_oldest_finished(&mut self) {
         let finished = self.jobs.iter().filter(|record| record.finished.is_some()).count();
         for _ in MAX_FINISHED_JOBS..finished {
-            if let Some(oldest) = self.jobs.iter().position(|record| record.finished.is_some()) {
+            let chained = self.jobs.iter().position(|record| record.finished.is_some() && record.chained);
+            if let Some(oldest) = chained.or_else(|| self.jobs.iter().position(|record| record.finished.is_some())) {
                 self.jobs.remove(oldest);
             }
         }
@@ -176,7 +185,7 @@ impl Session {
         };
         let root = job.root().to_string();
         let id = backend.submit(job);
-        capture.jobs.push(JobRecord { id, command: command.to_string(), package: package.to_string(), root, finished: None });
+        capture.jobs.push(JobRecord { id, command: command.to_string(), package: package.to_string(), root, finished: None, chained: false });
         Ok(id)
     }
 

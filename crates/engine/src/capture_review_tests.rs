@@ -367,3 +367,41 @@ fn a_source_command_is_refused_when_only_the_sources_folder_may_be_written() {
     assert!(bench.submitted().is_empty(), "{:?}", bench.submitted());
     assert_eq!(bench.manifest_bytes(), before);
 }
+
+fn finished_job(session: &mut Session, chained: bool) -> JobId {
+    let job = CaptureJob::Uninstall { root: "x".to_string(), package: "lit".to_string() };
+    let id = session.submit_capture("capture.test", "lit", job).unwrap();
+    if chained {
+        session.capture.mark_chained(id);
+    }
+    session.capture.finish(id, Ok(()));
+    id
+}
+
+#[test]
+fn the_job_a_caller_holds_outlives_the_renders_of_a_long_import() {
+    let mut session = Session::empty();
+    backend(&mut session);
+    let head = finished_job(&mut session, false);
+    for _ in 0..300 {
+        finished_job(&mut session, true);
+    }
+    session.pump_capture();
+    let kept = session.execute("capture.status", &json!({"job": head})).unwrap();
+    assert_eq!(kept["jobs"][0]["job"], json!(head), "{kept}");
+}
+
+#[test]
+fn a_job_that_is_forgotten_or_never_ran_is_answered_by_name_not_by_an_empty_list() {
+    let mut session = Session::empty();
+    backend(&mut session);
+    let oldest = finished_job(&mut session, false);
+    for _ in 0..300 {
+        finished_job(&mut session, false);
+    }
+    session.pump_capture();
+    for job in [oldest, 987_654] {
+        let text = bad_message(session.execute("capture.status", &json!({"job": job})));
+        assert!(text.contains(&job.to_string()) && text.contains("unknown"), "{text}");
+    }
+}

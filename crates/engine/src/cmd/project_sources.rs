@@ -47,7 +47,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "capture.status",
             "Capture jobs",
-            "{job? (a whole number: only that job)}  the jobs submitted to the capture service: {jobs: [{job, command, package, root (the project folder), state: \"queued\"|\"running\"|\"done\"|\"failed\", error? (the message of a failed job)}]}, oldest first",
+            "{job? (a whole number: only that job)}  the jobs submitted to the capture service: {jobs: [{job, command, package, root (the project folder), state: \"queued\"|\"running\"|\"done\"|\"failed\", error? (the message of a failed job)}]}, oldest first; a `job` that never ran or is forgotten is refused",
             false,
             status
         ),
@@ -143,6 +143,9 @@ fn status(s: &mut Session, p: &Value) -> Result<Value> {
         None => None,
         Some(value) => Some(value.as_u64().ok_or_else(|| bad("capture.status", "job must be a whole number"))?),
     };
+    if let Some(wanted) = only.filter(|wanted| !s.capture_jobs().iter().any(|job| job.job == *wanted)) {
+        return Err(bad("capture.status", format!("job {wanted} is unknown: it never ran, or it ended long ago and is forgotten")));
+    }
     let jobs: Vec<Value> = s
         .capture_jobs()
         .into_iter()
