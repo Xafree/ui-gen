@@ -4,7 +4,7 @@
 use egui::{Key, Modifiers};
 use serde_json::json;
 
-use crate::import_window_ui_tests::{Bench, IMPORT, LIST, OTHER, PACKAGE, mentions};
+use crate::import_window_ui_tests::{Bench, IMPORT, LIST, OTHER, PACKAGE, VERSION, mentions, source};
 
 fn open_pair(tag: &str) -> Bench {
     let mut b = Bench::pair(tag, &["Alert", "Button", "Chip"], &["Button", "Slider"]);
@@ -166,4 +166,40 @@ fn escape_ends_the_version_being_changed_and_the_removal_being_asked_before_the_
     assert!(b.flat().contains("Installed in this project"), "the page stays");
     b.press(Key::Escape, Modifiers::NONE);
     assert!(!b.flat().contains("Installed in this project"), "the next Escape closes it");
+}
+
+fn wide_and_slim(tag: &str) -> Bench {
+    let values = |prefix: &str, count: usize| (0..count).map(|index| format!("{prefix}{index}")).collect::<Vec<_>>();
+    let wide = json!({"name": "Wide", "props": [
+        {"name": "variant", "type": "enum", "values": values("s", 9)},
+        {"name": "size", "type": "enum", "values": values("z", 4)},
+    ]});
+    let slim = json!({"name": "Slim", "props": []});
+    let inspected = json!({"package": PACKAGE, "version": VERSION, "framework": "react", "components": [wide, slim], "notes": []});
+    let mut b = Bench::with(tag, &[source(PACKAGE, VERSION, false)], vec![(PACKAGE.to_string(), Ok(inspected))]);
+    b.open(None);
+    b.wait_until("the rows are listed", |b| b.has("Wide"));
+    b
+}
+
+#[test]
+fn an_oversized_component_is_named_and_does_not_hold_the_others_back() {
+    let mut b = wide_and_slim("oversized-others");
+    b.click("Wide");
+    b.click("Slim");
+    let mark = b.mark();
+    b.click("Import");
+    b.wait_until("the summary is drawn", |b| b.shows("Imported 1 of 2 components"));
+    let calls = b.ran_since(mark, IMPORT);
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert_eq!(calls[0]["component"], json!("Slim"));
+    assert!(b.shows("Wide: More than"), "the failure names it: {:?}", b.shown());
+}
+
+#[test]
+fn an_oversized_component_alone_is_named_in_the_refusal() {
+    let mut b = wide_and_slim("oversized-alone");
+    b.click("Wide");
+    b.click("Import");
+    assert!(b.shows("Wide: More than"), "{:?}", b.shown());
 }

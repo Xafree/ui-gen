@@ -626,15 +626,18 @@ fn plan(app: &FigApp, state: &mut ImportWindow) -> Option<Batch> {
         state.message = Some(tr("Choose at least one value in each group.").to_string());
         return None;
     }
-    if all.iter().any(|(_, component)| renders_of(state, component) > MAX_RENDERS) {
-        state.message = Some(trf("More than {max} renders: choose fewer styles, sizes, states or themes", &[("max", &MAX_RENDERS)]));
+    let total = all.len();
+    let (fits, oversized): (Vec<_>, Vec<_>) = all.iter().partition(|(_, component)| renders_of(state, component) <= MAX_RENDERS);
+    let limit = trf("More than {max} renders: choose fewer styles, sizes, states or themes", &[("max", &MAX_RENDERS)]);
+    let failures: Vec<String> = oversized.iter().map(|(_, component)| format!("{}: {limit}", component.name)).collect();
+    if fits.is_empty() {
+        state.message = Some(failures.join("\n"));
         return None;
     }
     state.message = None;
     let queue: VecDeque<(String, Value)> =
-        all.iter().map(|(package, component)| (component.name.clone(), params_of(state, package, component))).collect();
-    let total = queue.len();
-    Some(Batch { doc, root, queue, current: None, total, done: 0, failures: Vec::new(), stopping: false })
+        fits.iter().map(|(package, component)| (component.name.clone(), params_of(state, package, component))).collect();
+    Some(Batch { doc, root, queue, current: None, total, done: failures.len(), failures, stopping: false })
 }
 
 fn families_in_order(app: &FigApp, state: &ImportWindow, sources: &[Source]) -> Vec<(String, InspectedComponent)> {
