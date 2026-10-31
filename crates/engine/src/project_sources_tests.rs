@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use figcraft_project::npm::PackageSpec;
 use serde_json::{Value, json};
 
 use crate::capture::{CaptureBackend, CaptureError, CaptureErrorKind, CaptureEvent, CaptureJob, JobId};
@@ -469,4 +470,162 @@ fn capture_status_shows_a_failed_job_with_the_service_message() {
     let failed = status_of(&mut bench, job);
     assert_eq!(failed["state"], json!("failed"), "{failed}");
     assert!(failed["error"].as_str().is_some_and(|e| e.contains("npm exited with code 1")), "{failed}");
+}
+
+fn spec(name: &str, version: &str) -> PackageSpec {
+    PackageSpec { name: name.to_string(), version: version.to_string() }
+}
+
+fn installed_all(list: &[(&str, &str, &str, &str)]) -> Outcome {
+    let packages: Vec<Value> = list
+        .iter()
+        .map(|(package, version, framework, license)| json!({"package": package, "version": version, "framework": framework, "license": license}))
+        .collect();
+    Ok(json!({"packages": packages}))
+}
+
+fn source_entry(package: &str, version: &str, framework: &str, license: &str) -> Value {
+    json!({"package": package, "version": version, "framework": framework, "license": license, "removed": false})
+}
+
+fn assert_single_install_many(bench: &Bench, expected: &[PackageSpec]) {
+    let jobs = bench.submitted();
+    assert_eq!(jobs.len(), 1, "{jobs:?}");
+    match &jobs[0] {
+        CaptureJob::InstallMany { root, packages } => {
+            assert!(same_folder(root, &bench.dir.0), "{root}");
+            assert_eq!(packages, expected);
+        }
+        other => panic!("expected an InstallMany job, got {other:?}"),
+    }
+}
+
+// covers: INST-3
+#[test]
+fn add_sources_submits_one_job_for_the_whole_line_and_returns_it() {
+    let mut bench = Bench::new("add-many", &[lit_source("3.3.2", false)]);
+    let before = bench.manifest_bytes();
+
+    let result = bench.run("project.addSources", &json!({"line": "npm i @heroui/react@2.0.0 @heroui/styles"})).unwrap();
+    let job = job_id(&result);
+
+    assert_single_install_many(&bench, &[spec("@heroui/react", "2.0.0"), spec("@heroui/styles", "latest")]);
+    assert_eq!(bench.manifest_bytes(), before, "nothing is written before the install succeeds");
+    let listed = status_of(&mut bench, job);
+    assert_eq!(listed["command"], json!("project.addSources"), "{listed}");
+    assert!(matches!(listed["state"].as_str(), Some("queued" | "running")), "{listed}");
+}
+
+// covers: INST-3
+#[test]
+fn add_sources_refuses_a_line_that_does_not_parse_naming_the_token_and_submits_nothing() {
+    let mut bench = Bench::new("add-many-refused", &[lit_source("3.3.2", false)]);
+    let before = bench.manifest_bytes();
+
+    for (line, token) in
+        [("a --registry=x", "--registry=x"), ("npm uninstall a", "uninstall"), ("a && b", "&&"), ("react Upper", "Upper"), ("file:../x", "file:../x")]
+    {
+        let message = bad_message(bench.run("project.addSources", &json!({"line": line})));
+        assert!(message.contains(token), "{line:?}: {message}");
+    }
+    for params in [json!({}), json!({"line": 5}), json!({"line": null}), json!({"line": ""}), json!({"line": "   "})] {
+        let message = bad_message(bench.run("project.addSources", &params));
+        assert!(!message.trim().is_empty(), "{params}");
+    }
+
+    assert!(bench.submitted().is_empty(), "{:?}", bench.submitted());
+    assert_eq!(bench.manifest_bytes(), before);
+}
+
+// covers: INST-3
+#[test]
+fn add_sources_refuses_a_package_already_active_in_the_project_naming_it_and_submits_nothing() {
+    let mut bench = Bench::new("add-many-active", &[lit_source("3.3.2", false)]);
+    let before = bench.manifest_bytes();
+
+    let message = bad_message(bench.run("project.addSources", &json!({"line": "react lit"})));
+
+    assert!(message.contains("lit"), "{message}");
+    assert!(bench.submitted().is_empty(), "{:?}", bench.submitted());
+    assert_eq!(bench.manifest_bytes(), before);
+}
+
+// covers: INST-3
+#[test]
+fn absurd_parameters_on_add_sources_never_panic_submit_or_write() {
+    let mut bench = Bench::new("add-many-absurd", &[lit_source("3.3.2", false)]);
+    let before = bench.manifest_bytes();
+    let junk = [
+        json!(null),
+        json!([1, 2, 3]),
+        json!("x"),
+        json!(5),
+        json!({"line": null}),
+        json!({"line": ["a", "b"]}),
+        json!({"line": {"a": 1}}),
+        json!({"line": "\u{0}"}),
+        json!({"line": "left-pad\n--registry=http://evil"}),
+        json!({"line": "x".repeat(10_000)}),
+        json!({"line": format!("left-pad@{}", "9".repeat(100))}),
+        json!({"line": "$(touch evil)"}),
+    ];
+    for params in &junk {
+        match bench.run("project.addSources", params) {
+            Err(EngineError::Internal { msg, .. }) => panic!("project.addSources panicked on {params}: {msg}"),
+            Err(EngineError::UnknownCommand(cmd)) => panic!("{cmd} is not registered"),
+            Err(_) => {}
+            Ok(value) => panic!("project.addSources accepted {params}: {value}"),
+        }
+    }
+    assert!(bench.submitted().is_empty(), "{:?}", bench.submitted());
+    assert_eq!(bench.manifest_bytes(), before);
+}
+
+// covers: INST-5
+#[test]
+fn every_package_of_a_successful_line_gets_its_source_in_uigen_json() {
+    let mut bench = Bench::new("add-many-ok", &[lit_source("3.3.2", false)]);
+    let before = bench.manifest_bytes();
+    let result = bench.run("project.addSources", &json!({"line": "@heroui/react @heroui/styles@2.0.1"})).unwrap();
+    assert_eq!(bench.manifest_bytes(), before);
+
+    let events =
+        bench.finish(&result, installed_all(&[("@heroui/react", "2.4.0", "react", "MIT"), ("@heroui/styles", "2.0.1", "unknown", "Apache-2.0")]));
+
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0].command, "project.addSources");
+    assert!(events[0].outcome.is_ok(), "{:?}", events[0].outcome);
+    let expected = json!([
+        lit_source("3.3.2", false),
+        source_entry("@heroui/react", "2.4.0", "react", "MIT"),
+        source_entry("@heroui/styles", "2.0.1", "unknown", "Apache-2.0")
+    ]);
+    assert_eq!(bench.manifest_sources(), expected);
+    assert_eq!(bench.info_sources(), expected);
+}
+
+// covers: INST-5
+#[test]
+fn a_failed_line_adds_no_source_and_the_failure_names_the_packages() {
+    let mut bench = Bench::new("add-many-fails", &[lit_source("3.3.2", false)]);
+    let before = bench.manifest_bytes();
+    let result = bench.run("project.addSources", &json!({"line": "react left-pad"})).unwrap();
+    let job = job_id(&result);
+    let message = "npm could not install react@latest, left-pad@latest: 404 Not Found - GET https://registry.npmjs.org/left-pad";
+
+    let events = bench.finish(&result, failure(CaptureErrorKind::Install, message));
+
+    assert_eq!(events.len(), 1, "{events:?}");
+    match &events[0].outcome {
+        Err(error) => {
+            assert_eq!(error.message, message);
+            assert!(error.message.contains("react") && error.message.contains("left-pad"), "{}", error.message);
+        }
+        Ok(value) => panic!("expected the install failure, got {value}"),
+    }
+    assert_eq!(bench.manifest_bytes(), before);
+    assert_eq!(bench.info_sources(), json!([lit_source("3.3.2", false)]));
+    let failed = status_of(&mut bench, job);
+    assert_eq!(failed["state"], json!("failed"), "{failed}");
+    assert!(failed["error"].as_str().is_some_and(|e| e.contains("react") && e.contains("left-pad")), "{failed}");
 }

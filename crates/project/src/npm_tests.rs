@@ -2,7 +2,7 @@
 
 use serde_json::{Value, json};
 
-use crate::npm::{validate_package_name, validate_version};
+use crate::npm::{PackageSpec, parse_install_line, validate_package_name, validate_version};
 use crate::{Project, ProjectError};
 
 fn assert_invalid(result: Result<(), ProjectError>, input: &str) {
@@ -128,4 +128,81 @@ fn parse_reads_a_valid_lot_1_manifest_back_unchanged() {
     assert_eq!(project.sources[0].version, "7.3.11");
     let reread = Project::parse(&project.to_json().unwrap()).unwrap();
     assert_eq!(reread, project);
+}
+
+fn spec(name: &str, version: &str) -> PackageSpec {
+    PackageSpec { name: name.to_string(), version: version.to_string() }
+}
+
+// covers: INST-1
+#[test]
+fn parse_install_line_reads_names_with_and_without_a_version_and_the_npm_prefixes() {
+    let cases = [
+        ("@heroui/styles @heroui/react", vec![spec("@heroui/styles", "latest"), spec("@heroui/react", "latest")]),
+        ("a@1.2.0 b", vec![spec("a", "1.2.0"), spec("b", "latest")]),
+        ("@heroui/react@2.0.0-rc.1 lit@3.3.2", vec![spec("@heroui/react", "2.0.0-rc.1"), spec("lit", "3.3.2")]),
+        ("npm install a b", vec![spec("a", "latest"), spec("b", "latest")]),
+        ("npm i a b", vec![spec("a", "latest"), spec("b", "latest")]),
+        ("react", vec![spec("react", "latest")]),
+    ];
+    for (line, expected) in cases {
+        assert_eq!(parse_install_line(line).unwrap(), expected, "{line:?}");
+    }
+}
+
+// covers: INST-1
+#[test]
+fn parse_install_line_accepts_any_whitespace_between_and_around_the_tokens() {
+    let expected = vec![spec("a", "1.2.0"), spec("b", "latest")];
+    for line in ["a@1.2.0 b", "  a@1.2.0   b  ", "\ta@1.2.0\tb", "a@1.2.0\nb\n", "\r\n npm \t i \n a@1.2.0 \r\n b "] {
+        assert_eq!(parse_install_line(line).unwrap(), expected, "{line:?}");
+    }
+}
+
+// covers: INST-1
+#[test]
+fn parse_install_line_keeps_the_order_and_collapses_an_exact_duplicate() {
+    assert_eq!(parse_install_line("b a b").unwrap(), vec![spec("b", "latest"), spec("a", "latest")]);
+    assert_eq!(parse_install_line("a@1.2.0 c a@1.2.0").unwrap(), vec![spec("a", "1.2.0"), spec("c", "latest")]);
+}
+
+// covers: INST-2
+#[test]
+fn parse_install_line_refuses_what_is_not_a_list_of_registry_packages_and_names_the_token() {
+    let cases = [
+        ("a --registry=x", "--registry=x"),
+        ("-g a", "-g"),
+        ("npm install a --save-dev", "--save-dev"),
+        ("npm uninstall a", "uninstall"),
+        ("yarn add a", "yarn"),
+        ("a && b", "&&"),
+        ("a; b", "a;"),
+        ("a | b", "|"),
+        ("$(x)", "$(x)"),
+        ("Upper", "Upper"),
+        ("a b@^1.0.0", "^1.0.0"),
+        ("a@1.0", "1.0"),
+        ("https://example.com/x.tgz", "https://example.com/x.tgz"),
+        ("git+https://example.com/x.git", "git+https://example.com/x.git"),
+        ("github:user/repo", "github:user/repo"),
+        ("file:../x", "file:../x"),
+        ("../x", "../x"),
+    ];
+    for (line, token) in cases {
+        match parse_install_line(line) {
+            Err(error) => assert!(error.to_string().contains(token), "{line:?} -> {error}"),
+            Ok(parsed) => panic!("{line:?} was accepted: {parsed:?}"),
+        }
+    }
+}
+
+// covers: INST-2
+#[test]
+fn parse_install_line_refuses_an_empty_line_with_a_reason() {
+    for line in ["", "   ", "\t\n"] {
+        match parse_install_line(line) {
+            Err(error) => assert!(!error.to_string().trim().is_empty(), "{line:?}"),
+            Ok(parsed) => panic!("{line:?} was accepted: {parsed:?}"),
+        }
+    }
 }
