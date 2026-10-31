@@ -194,6 +194,9 @@ impl<'d> Exporter<'d> {
         let grain = |size: f64, size_y: Option<f64>| xy(size, size_y.unwrap_or(size));
         match &x.kind {
             EffectKind::DropShadow(sh) | EffectKind::InnerShadow(sh) => {
+                if sh.from_outline {
+                    self.warn("shadows cast by a layer's box were written as ordinary shadows, hidden behind the layer");
+                }
                 let ty = if matches!(x.kind, EffectKind::DropShadow(_)) { "DROP_SHADOW" } else { "INNER_SHADOW" };
                 f.extend([
                     ("type", e(ty)),
@@ -202,7 +205,7 @@ impl<'d> Exporter<'d> {
                     ("radius", fl(sh.radius)),
                     ("spread", fl(sh.spread)),
                     ("blendMode", e(blend_name(sh.blend))),
-                    ("showShadowBehindNode", b(sh.show_behind)),
+                    ("showShadowBehindNode", b(sh.show_behind && !sh.from_outline)),
                 ]);
             }
             EffectKind::LayerBlur(bl) => blur(&mut f, "FOREGROUND_BLUR", bl),

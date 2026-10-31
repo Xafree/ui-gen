@@ -26,6 +26,31 @@ fn create_and_world_transform() {
 }
 
 #[test]
+fn a_component_set_refuses_a_new_layer_that_is_no_component() {
+    let mut d = Document::new("x");
+    let p = page(&d);
+    let set = d.create(p, NodeKind::ComponentSet { description: String::new() }, "Set", 0.0, 0.0, 100.0, 100.0).unwrap();
+    assert!(matches!(d.create(set, NodeKind::Frame, "F", 0.0, 0.0, 10.0, 10.0), Err(DocError::Invalid(_))));
+    assert!(d.node(set).unwrap().children.is_empty());
+    let variant = d.create(set, NodeKind::Component { description: String::new(), props: Default::default() }, "V", 0.0, 0.0, 10.0, 10.0).unwrap();
+    assert_eq!(d.node(set).unwrap().children, [variant]);
+}
+
+#[test]
+fn a_component_set_takes_only_components() {
+    let mut d = Document::new("x");
+    let p = page(&d);
+    let set = d.create(p, NodeKind::ComponentSet { description: String::new() }, "Set", 0.0, 0.0, 100.0, 100.0).unwrap();
+    let frame = d.create(p, NodeKind::Frame, "F", 0.0, 0.0, 10.0, 10.0).unwrap();
+    let variant = d.create(p, NodeKind::Component { description: String::new(), props: Default::default() }, "V", 0.0, 0.0, 10.0, 10.0).unwrap();
+
+    assert!(matches!(d.reparent(frame, set, None), Err(DocError::Invalid(_))));
+    assert_eq!(d.node(frame).unwrap().parent, Some(p), "a refused layer stays where it was");
+    d.reparent(variant, set, None).unwrap();
+    assert_eq!(d.node(set).unwrap().children, [variant]);
+}
+
+#[test]
 fn reparent_keeps_world_position_and_rejects_cycles() {
     let mut d = Document::new("x");
     let p = page(&d);

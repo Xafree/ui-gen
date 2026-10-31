@@ -509,11 +509,23 @@ pub struct Shadow {
     /// Drop shadows only: show behind transparent areas of the layer.
     #[serde(alias = "showBehind")]
     pub show_behind: bool,
+    /// Drop shadows only: cast by the layer's outline alone, whatever it paints, and always hidden
+    /// inside that outline, like a CSS `box-shadow`.
+    #[serde(alias = "fromOutline", skip_serializing_if = "std::ops::Not::not")]
+    pub from_outline: bool,
 }
 
 impl Default for Shadow {
     fn default() -> Self {
-        Self { color: Color::new(0.0, 0.0, 0.0, 0.25), offset: (0.0, 4.0), radius: 4.0, spread: 0.0, blend: BlendMode::Normal, show_behind: false }
+        Self {
+            color: Color::new(0.0, 0.0, 0.0, 0.25),
+            offset: (0.0, 4.0),
+            radius: 4.0,
+            spread: 0.0,
+            blend: BlendMode::Normal,
+            show_behind: false,
+            from_outline: false,
+        }
     }
 }
 

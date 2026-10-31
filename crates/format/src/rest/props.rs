@@ -234,6 +234,7 @@ fn effect(cx: &mut Ctx, e: &Value) -> Option<Effect> {
         spread: num(e, "spread").unwrap_or(0.0).clamp(-MAX_SIZE, MAX_SIZE),
         blend: paint_blend(e),
         show_behind: flag(e, "showShadowBehindNode").unwrap_or(false),
+        from_outline: false,
     };
     let kind = match text(e, "type")? {
         "DROP_SHADOW" => EffectKind::DropShadow(shadow()),

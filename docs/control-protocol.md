@@ -198,7 +198,7 @@ token themes of the file, the second makes the library components follow one in 
 `uigen.compare {set?, theme?, variants?}`, `uigen.sourceDiff {copy}`, `uigen.applyDifferences {copy, ids?}` and
 `panel.compare {}` ([MCP: Component import](mcp.md#component-import)) answer directly as well: the first measures an imported
 set against the images its import kept (read only inside `.uigen/captures`), the third changes the copy in one undo step,
-the last only asks the interface to open the Compare tab. `uigen.updateSource {package, components?}` is a capture job
+the last only asks the interface to open the Compare tab. `uigen.updateSource {package, components?, roleNames?}` is a capture job
 like `uigen.importComponent`: it returns `{jobs, components}` at once, and each job ends with its own event, which
 `capture.status {job}` shows `done` or `failed`.
 

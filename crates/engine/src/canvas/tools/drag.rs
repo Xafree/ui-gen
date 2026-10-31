@@ -228,7 +228,8 @@ impl Session {
                         && !home.is_some_and(|h| crate::drop::keeps_layers(doc, h));
                     let target = if flow { crate::drop::drag_parent(doc, page, p, &moving) } else { home.unwrap_or(page) };
                     let mode = doc.node(target).and_then(|n| n.layout.as_ref()).map(|l| l.mode);
-                    if let (true, Some(mode)) = (flow, mode) {
+                    let takes_them = moving.iter().all(|m| doc.node(*m).is_some_and(|n| n.parent == Some(target)) || doc.may_hold(target, *m));
+                    if let (true, Some(mode)) = (flow && takes_them, mode) {
                         // Into (or within) an auto layout frame: the layers take the slot (a grid: the
                         // cell) under the pointer, as the frame shows it now. A frame other than the
                         // one they come from is outlined too.

@@ -586,3 +586,25 @@ fn justified_lines_dont_widen_zero_width_spaces() {
         }
     }
 }
+
+#[test]
+fn a_hug_nudge_stays_within_a_pixel_whatever_the_file_says() {
+    let mut wild = TextData::new(String::new());
+    wild.set_nudges(0.0, 1_000.0);
+    assert_eq!(hug_width(&wild, 43.2), 44.0);
+    wild.set_nudges(0.0, -1_000.0);
+    assert_eq!(hug_width(&wild, 43.2), 42.0);
+}
+
+#[test]
+fn a_nudged_text_hugs_the_width_it_was_given_and_keeps_following_its_content() {
+    let plain = TextData::new(String::new());
+    assert_eq!(hug_width(&plain, 43.2), 44.0);
+    let mut nudged = plain;
+    nudged.set_nudges(0.0, -0.2);
+    assert_eq!(hug_width(&nudged, 43.2), 43.0);
+    assert_eq!(hug_width(&nudged, 50.9), 51.0);
+    assert_eq!(hug_width(&nudged, 0.1), 1.0);
+    nudged.style.font_size += 1.0;
+    assert_eq!(hug_width(&nudged, 43.2), 44.0, "a nudge does not outlive the metrics it was measured on");
+}

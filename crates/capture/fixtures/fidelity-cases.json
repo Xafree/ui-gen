@@ -1,0 +1,13 @@
+[
+  { "package": "@heroui/react", "component": "Button", "styles": ["primary", "outline", "ghost"], "sizes": ["sm", "md"], "states": ["Default", "Hover", "Focus", "Pressed", "Disabled"] },
+  { "package": "@heroui/react", "component": "Card", "styles": ["default", "secondary"], "sizes": [], "states": ["Default", "Hover"] },
+  { "package": "@heroui/react", "component": "Input", "styles": ["primary", "secondary"], "sizes": [], "states": ["Default", "Hover", "Focus", "Disabled"] },
+  { "package": "@heroui/react", "component": "Switch", "styles": [], "sizes": ["md"], "states": ["Default", "Hover", "Focus", "Disabled"] },
+  { "package": "@heroui/react", "component": "Checkbox", "styles": ["primary"], "sizes": [], "states": ["Default", "Hover", "Focus", "Disabled"] },
+  { "package": "@heroui/react", "component": "Tabs", "styles": [], "sizes": [], "states": ["Default"] },
+  { "package": "@mui/material", "component": "Button", "styles": ["contained", "outlined", "text"], "sizes": ["small", "medium"], "states": ["Default", "Hover", "Focus", "Pressed", "Disabled"] },
+  { "package": "@mui/material", "component": "Chip", "styles": ["filled", "outlined"], "sizes": ["medium"], "states": ["Default", "Hover", "Focus"] },
+  { "package": "@mui/material", "component": "Paper", "styles": ["elevation", "outlined"], "sizes": [], "states": ["Default"] },
+  { "package": "@mui/material", "component": "Switch", "styles": [], "sizes": ["medium"], "states": ["Default", "Hover", "Disabled"] },
+  { "package": "@mui/material", "component": "TextField", "styles": ["outlined", "filled"], "sizes": ["medium"], "states": ["Default", "Focus"] }
+]

@@ -55,6 +55,22 @@ describe('text fidelity in the snapshot', () => {
   });
 
   // covers: P1
+  it('records the baseline the browser drew the text on', async () => {
+    await page.goto(fixtureUrl('fonts.html'));
+    const snapshot = await captureSnapshot(page, '#root', { package: 'synthetic' });
+    const measured = await page.evaluate(() => {
+      const root = document.querySelector('#root');
+      const probe = document.createElement('span');
+      probe.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline';
+      root.prepend(probe);
+      return probe.getBoundingClientRect().bottom + window.scrollY;
+    });
+
+    const text = snapshot.root.children.find((child) => child.type === 'text');
+    assert.ok(Math.abs(text.baseline - measured) < 0.01, `baseline is ${measured}, got ${text.baseline}`);
+  });
+
+  // covers: P1
   it('records platformFont and lineBox on texts only, not on elements or svg', async () => {
     await page.goto(fixtureUrl('button.html'));
     const snapshot = await captureSnapshot(page, '#root', { package: 'synthetic' });

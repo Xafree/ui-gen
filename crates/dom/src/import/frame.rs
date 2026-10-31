@@ -6,7 +6,7 @@ use figcraft_doc::{Effect, EffectKind, Node, NodeId, NodeKind, Shadow, StrokeAli
 
 use super::css::{Style, font_size_px, get, keyword, length, number_or_percent, read, words};
 use super::shadow::shadows;
-use super::{Placement, Report, Warnings, capped};
+use super::{Placement, Report, Warnings, capped, effects, paints};
 use crate::model::Element;
 
 const SIDES: [&str; 4] = ["Top", "Right", "Bottom", "Left"];
@@ -34,11 +34,12 @@ pub(super) fn build(id: NodeId, element: &Element, placement: &Placement, warnin
     if let Some(opacity) = read(style, "opacity", &mut report, number_or_percent) {
         node.opacity = opacity.clamp(0.0, 1.0) as f32;
     }
+    effects::apply(&mut node, style, em_px, &mut report);
     node
 }
 
 fn effect((inset, shadow): (bool, Shadow)) -> Effect {
-    let kind = if inset { EffectKind::InnerShadow(shadow) } else { EffectKind::DropShadow(shadow) };
+    let kind = if inset { EffectKind::InnerShadow(shadow) } else { EffectKind::DropShadow(Shadow { from_outline: true, ..shadow }) };
     Effect { kind, visible: true }
 }
 
@@ -46,12 +47,11 @@ fn background(node: &mut Node, style: &Style, report: &mut Report) {
     if let Some(color) = read(style, "backgroundColor", report, Color::parse_css).filter(|color| color.a > 0.0) {
         node.fills = vec![Paint::solid(color)];
     }
-    if let Some(image) = get(style, "backgroundImage").filter(|image| !image.eq_ignore_ascii_case("none")) {
-        report.unreadable("backgroundImage", image);
-    }
+    let size = (node.width, node.height);
+    node.fills.extend(paints::background_images(style, size, report));
 }
 
-/// A stroke has one colour: a side of another colour is left out and reported.
+/// A stroke has one colour: a side of another colour is left out and reported. Only a uniform border can dash.
 fn border(node: &mut Node, style: &Style, em_px: f64, report: &mut Report) {
     let mut color: Option<Color> = None;
     let mut widths = [0.0; 4];
@@ -69,17 +69,29 @@ fn border(node: &mut Node, style: &Style, em_px: f64, report: &mut Report) {
     node.stroke.align = StrokeAlign::Inside;
     node.stroke.weight = widths.into_iter().fold(0.0, f64::max);
     node.stroke.sides = (!widths.iter().all(|width| *width == first)).then_some(widths);
+    let kinds = SIDES.map(|side| keyword(style, &format!("border{side}Style")));
+    let uniform = node.stroke.sides.is_none() && kinds.iter().all(|kind| *kind == kinds[0]);
+    node.stroke.dashes = match kinds[0].as_deref().filter(|_| uniform) {
+        Some("dashed") => vec![first * 2.0, first * 2.0],
+        Some("dotted") => vec![first, first],
+        _ => Vec::new(),
+    };
+    if !uniform {
+        let dashed_sides =
+            SIDES.iter().zip(&kinds).zip(widths).filter(|((_, kind), width)| *width > 0.0 && matches!(kind.as_deref(), Some("dashed" | "dotted")));
+        for ((side, _), _) in dashed_sides {
+            let key = format!("border{side}Style");
+            report.unreadable(&key, get(style, &key).unwrap_or_default());
+        }
+    }
 }
 
 fn border_side(style: &Style, side: &str, em_px: f64, report: &mut Report) -> Option<(f64, Color)> {
     let key = |part: &str| format!("border{side}{part}");
     match keyword(style, &key("Style")).as_deref() {
         None | Some("none" | "hidden") => return None,
-        Some("solid") => {}
-        Some(_) => {
-            report.unreadable(&key("Style"), get(style, &key("Style")).unwrap_or_default());
-            return None;
-        }
+        Some("solid" | "dashed" | "dotted") => {}
+        Some(_) => report.unreadable(&key("Style"), get(style, &key("Style")).unwrap_or_default()),
     }
     let width = read(style, &key("Width"), report, |value| length(value, em_px, None).filter(|width| *width >= 0.0))?;
     let color = read(style, &key("Color"), report, Color::parse_css)?;

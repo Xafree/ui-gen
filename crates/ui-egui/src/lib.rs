@@ -480,6 +480,8 @@ pub struct UiState {
     /// layer row or a press on the canvas).
     pub pages_focus: Option<u64>,
     pub layers_seen_sel: Vec<NodeId>,
+    /// The selection moved with the arrow keys: the rows stay as they are, so the walk goes on.
+    pub layers_walking: bool,
     pub dark: bool,
     pub follow_system: bool,
     pub tool_flyout: Option<&'static str>,
@@ -659,6 +661,7 @@ impl Default for UiState {
             layers_focus: false,
             pages_focus: None,
             layers_seen_sel: Vec::new(),
+            layers_walking: false,
             dark: false,
             follow_system: false,
             tool_flyout: None,

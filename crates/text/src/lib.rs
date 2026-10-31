@@ -127,6 +127,15 @@ pub fn layout_node(n: &Node) -> Option<(std::sync::Arc<TextLayout>, f64)> {
     Some((l, dy))
 }
 
+const MAX_HUG_NUDGE: f64 = 1.0;
+
+fn hug_width(text: &figcraft_doc::TextData, width: f64) -> f64 {
+    let nudge = text.held_hug_nudge();
+    let whole =
+        if nudge == 0.0 || !nudge.is_finite() { width.ceil() } else { (width + f64::from(nudge).clamp(-MAX_HUG_NUDGE, MAX_HUG_NUDGE)).round() };
+    whole.max(1.0)
+}
+
 /// The box size a text node should have after its content or style changed, per its resize mode.
 pub fn auto_size(n: &Node) -> Option<(f64, f64)> {
     let NodeKind::Text(t) = &n.kind else { return None };
@@ -136,7 +145,7 @@ pub fn auto_size(n: &Node) -> Option<(f64, f64)> {
     match t.auto_resize {
         TextAutoResize::WidthAndHeight => {
             let l = layout_cached(t, None, None);
-            Some((l.width.ceil().max(1.0), l.height.max(1.0)))
+            Some((hug_width(t, l.width), l.height.max(1.0)))
         }
         TextAutoResize::Height => {
             let l = layout_cached(t, Some(n.width), None);

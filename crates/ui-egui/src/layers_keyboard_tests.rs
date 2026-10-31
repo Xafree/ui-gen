@@ -195,3 +195,38 @@ impl crate::FigApp {
         self.session.doc().unwrap().node(id).unwrap().transform.translation().x
     }
 }
+
+/// Two frames with a group inside, the group holding a rectangle.
+fn nested() -> (Ui, [NodeId; 3]) {
+    let mut s = Session::new();
+    let frame = |s: &mut Session, x: i32| id(s.execute("frame.create", &json!({"x": x, "y": 0, "width": 100, "height": 100})).unwrap());
+    let (first, second) = (frame(&mut s, 0), frame(&mut s, 200));
+    let inner = id(s.execute("shape.rectangle", &json!({"x": 10, "y": 10, "width": 20, "height": 20, "parent": first})).unwrap());
+    let group = id(s.execute("object.group", &json!({"ids": [inner]})).unwrap());
+    s.execute("select.set", &json!({"ids": []})).unwrap();
+    let mut u = Ui::new(s);
+    settle(&mut u);
+    (u, [first, second, group])
+}
+
+#[test]
+fn a_selection_of_several_layers_opens_none_of_them() {
+    let (mut u, [first, second, _]) = nested();
+    u.app.run("select.set", json!({"ids": [first, second]}));
+    settle(&mut u);
+    assert!(!u.app.ui.expanded.contains(&first) && !u.app.ui.expanded.contains(&second));
+    u.app.run("select.set", json!({"ids": [first]}));
+    settle(&mut u);
+    assert!(u.app.ui.expanded.contains(&first), "one layer selected opens");
+}
+
+#[test]
+fn walking_into_a_layer_with_the_arrows_does_not_open_it() {
+    let (mut u, [first, _, group]) = nested();
+    u.app.run("select.set", json!({"ids": [first]}));
+    settle(&mut u);
+    assert!(crate::layers::key_nav(&mut u.app, Key::ArrowRight, false));
+    settle(&mut u);
+    assert_eq!(u.app.session.ds().unwrap().selection, [group]);
+    assert!(!u.app.ui.expanded.contains(&group));
+}

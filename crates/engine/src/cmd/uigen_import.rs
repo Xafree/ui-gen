@@ -2,6 +2,7 @@
 //! answers with the job at once. The variants are rendered and written when `Session::pump_capture`
 //! brings the results back (`crate::uigen_import`).
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use figcraft_project::{Source, WORK_DIR, npm};
@@ -16,6 +17,7 @@ use crate::{Result, Session, bad, spec};
 
 const IMPORT: &str = uigen_import::COMMAND;
 const CAPTURES_DIR: &str = "captures";
+const MAX_ROLE_NAME_CHARS: usize = 40;
 const MAX_NAME_CHARS: usize = 128;
 const MAX_LIST: usize = 256;
 const MAX_PAGE_NAME_CHARS: usize = 200;
@@ -25,7 +27,7 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![spec!(
         IMPORT,
         "Import component",
-        "{package (a source of the library project), component, styleProp? (default \"variant\"), sizeProp? (default \"size\"), styles? [values of styleProp], sizes? [values of sizeProp], states? [Default|Hover|Focus|Pressed|Disabled|Loading], themes? [light|dark] (default both), parent? (a frame or page id; default the current page), x?, y?, stage? (default false: write into the import page \"- Imported · <package> <version>\" instead of the current page; not with parent, x or y), animations? (default true: false leaves out the transitions between states and the ripple and spinner marks)}  asks the capture service to render the component in every style, size, state and theme and returns {job} at once; when all the renders are back they become one component set (Style=…, Size=…, State=… variants) in one undo step, with the variable collection \"<package> <version>\". The job's final event carries {set, collection, variants, warnings}, and {page} with stage; one render that fails stops the import and nothing is added",
+        "{package (a source of the library project), component, styleProp? (default \"variant\"), sizeProp? (default \"size\"), styles? [values of styleProp], sizes? [values of sizeProp], states? [Default|Hover|Focus|Pressed|Disabled|Loading], themes? [light|dark] (default both), parent? (a frame or page id; default the current page), x?, y?, stage? (default false: write into the import page \"- Imported · <package> <version>\" instead of the current page; not with parent, x or y), roleNames? ({English role: name in the interface language} for the layer names), animations? (default true: false leaves out the transitions between states and the ripple and spinner marks)}  asks the capture service to render the component in every style, size, state and theme and returns {job} at once; when all the renders are back they become one component set (Style=…, Size=…, State=… variants) in one undo step, with the variable collection \"<package> <version>\". The job's final event carries {set, collection, variants, warnings}, and {page} with stage; one render that fails stops the import and nothing is added",
         true,
         import_component
     )]
@@ -144,6 +146,18 @@ fn source_of(s: &Session, p: &Value) -> Result<(String, Source, String)> {
     Ok((absolute_root(IMPORT, &binding.root)?, source.clone(), binding.root.clone()))
 }
 
+/// The layer names in the language of the interface; only the known roles are read, each capped.
+fn role_names(p: &Value) -> BTreeMap<String, String> {
+    let Some(given) = p.get("roleNames").and_then(Value::as_object) else { return BTreeMap::new() };
+    figcraft_dom::ROLE_NAMES
+        .iter()
+        .filter_map(|role| {
+            let name = given.get(*role)?.as_str().filter(|name| !name.trim().is_empty())?;
+            Some(((*role).to_owned(), name.chars().take(MAX_ROLE_NAME_CHARS).collect()))
+        })
+        .collect()
+}
+
 pub(super) fn import_component(s: &mut Session, p: &Value) -> Result<Value> {
     let (root, source, project_root) = source_of(s, p)?;
     let stage = staged(p, &source)?;
@@ -166,6 +180,7 @@ pub(super) fn import_component(s: &mut Session, p: &Value) -> Result<Value> {
         states: states(p)?,
         themes: themes(p)?,
         animations,
+        role_names: role_names(p),
     };
     let renders = render_count(
         request.styles.as_ref().map_or(0, Vec::len),

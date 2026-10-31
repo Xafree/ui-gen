@@ -1,8 +1,8 @@
 //! The faces the text runs of a snapshot are drawn in, in the order the import makes their layers.
 
-use super::capped;
 use super::css::{DEFAULT_FONT_SIZE, Style, get, is_hidden, length};
 use super::text::{first_family, font_weight};
+use super::{baseline, capped};
 use crate::model::{DomBox, DomNode, Snapshot, TextRun};
 
 const REGULAR: u16 = 400;
@@ -35,7 +35,7 @@ fn face_of(run: &TextRun) -> TextFace {
     let style: &Style = &run.style;
     let family = get(style, "platformFont").map(capped).or_else(|| get(style, "fontFamily").and_then(first_family)).unwrap_or_default();
     let size = get(style, "fontSize").and_then(|value| length(value, DEFAULT_FONT_SIZE, None)).filter(|px| *px > 0.0).unwrap_or(DEFAULT_FONT_SIZE);
-    TextFace { text_box: run.r#box, line_box: run.line_box, family, size, weight: weight_drawn(style) }
+    TextFace { text_box: run.r#box, line_box: baseline::line_box(run), family, size, weight: weight_drawn(style) }
 }
 
 const WEIGHT_NAMES: [(&str, u16); 12] = [

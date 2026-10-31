@@ -1,9 +1,10 @@
 //! What changed between the capture a copy comes from (the base) and the current one (the latest), and
-//! where the copy stands against it. Variants match by name, layers by their path of names.
+//! where the copy stands against it. Variants match by name, layers by their path of stable names: a name shown in the language of the interface says nothing.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use figcraft_doc::{Document, NodeId, NodeKind};
+use figcraft_dom::stable_name;
 
 use crate::devcompare::{PropChange, design_changes};
 use crate::uigen_import::{is_import_page, page_of, set_of, source_ref};
@@ -13,6 +14,7 @@ const COMMAND: &str = "uigen.sourceDiff";
 const SEPARATOR: &str = " / ";
 const LAYER: &str = "layer";
 const ROOT: &str = "";
+const NAME_PROPERTY: &str = "name";
 
 pub const MAX_DIFFERENCES: usize = 2000;
 
@@ -55,6 +57,7 @@ pub struct Difference {
     pub id: String,
     pub variant: String,
     pub path: String,
+    pub label: String,
     pub kind: DifferenceKind,
     pub field: String,
     pub state: DifferenceState,
@@ -170,6 +173,7 @@ impl Field {
 pub(super) struct Layers {
     pub order: Vec<String>,
     pub by_path: BTreeMap<String, NodeId>,
+    pub labels: BTreeMap<String, String>,
     pub shadowed: usize,
 }
 
@@ -193,24 +197,30 @@ pub(super) fn variant_ids(doc: &Document, set: NodeId) -> Vec<(String, NodeId)> 
     found
 }
 
+fn joined(parent: Option<&str>, name: &str) -> String {
+    let name = escaped(name);
+    parent.map_or_else(|| name.clone(), |parent| format!("{parent}{SEPARATOR}{name}"))
+}
+
 /// The variant itself (the empty path) and the layers under it in tree order, by path. The first of two siblings with one name keeps the path.
 pub(super) fn layers(doc: &Document, variant: NodeId) -> Layers {
-    let mut found = Layers { order: Vec::new(), by_path: BTreeMap::new(), shadowed: 0 };
+    let mut found = Layers { order: Vec::new(), by_path: BTreeMap::new(), labels: BTreeMap::new(), shadowed: 0 };
     let Some(root) = doc.node(variant) else { return found };
     found.by_path.insert(ROOT.to_owned(), variant);
     found.order.push(ROOT.to_owned());
-    let mut stack: Vec<(NodeId, Option<String>)> = root.children.iter().rev().map(|child| (*child, None)).collect();
+    let mut stack: Vec<(NodeId, Option<(String, String)>)> = root.children.iter().rev().map(|child| (*child, None)).collect();
     while let Some((id, parent)) = stack.pop() {
         let Some(node) = doc.node(id) else { continue };
-        let name = escaped(&node.name);
-        let path = parent.map_or_else(|| name.clone(), |parent| format!("{parent}{SEPARATOR}{name}"));
+        let path = joined(parent.as_ref().map(|(path, _)| path.as_str()), stable_name(node));
+        let label = joined(parent.as_ref().map(|(_, label)| label.as_str()), &node.name);
         if found.by_path.contains_key(&path) {
             found.shadowed += 1;
             continue;
         }
         found.by_path.insert(path.clone(), id);
+        found.labels.insert(path.clone(), label.clone());
         found.order.push(path.clone());
-        stack.extend(node.children.iter().rev().map(|child| (*child, Some(path.clone()))));
+        stack.extend(node.children.iter().rev().map(|child| (*child, Some((path.clone(), label.clone())))));
     }
     found
 }
@@ -243,12 +253,13 @@ fn holds_parent(layers: &Layers, path: &str) -> bool {
 }
 
 fn fields_between(doc: &Document, from: NodeId, to: NodeId) -> BTreeSet<Field> {
-    design_changes(doc, from, doc, to).iter().map(Field::of).collect()
+    design_changes(doc, from, doc, to).iter().filter(|change| change.property != NAME_PROPERTY).map(Field::of).collect()
 }
 
 struct Raw {
     variant: String,
     path: String,
+    label: String,
     kind: DifferenceKind,
     field: &'static str,
 }
@@ -267,7 +278,10 @@ fn raw_diff(doc: &Document, from: &Tree, to: &Tree, notes: &mut Vec<String>) -> 
             continue;
         };
         shadowed += before.shadowed + after.shadowed;
-        let raw = |path: &String, kind, field| Raw { variant: variant.clone(), path: path.clone(), kind, field };
+        let raw = |path: &String, kind, field| {
+            let label = after.labels.get(path).or_else(|| before.labels.get(path)).cloned().unwrap_or_default();
+            Raw { variant: variant.clone(), path: path.clone(), label, kind, field }
+        };
         for path in &after.order {
             match (before.by_path.get(path), after.by_path.get(path)) {
                 (None, _) if holds_parent(before, path) => found.push(raw(path, DifferenceKind::Added, LAYER)),
@@ -326,6 +340,7 @@ fn difference_of(raw: Raw, state: DifferenceState) -> Difference {
         id: format!("{}|{}|{}", raw.variant, raw.path, raw.field),
         variant: raw.variant,
         path: raw.path,
+        label: raw.label,
         kind: raw.kind,
         field: raw.field.to_owned(),
         state,

@@ -169,7 +169,12 @@ pub fn drop_parent(doc: &Document, page: NodeId, p: Point, exclude: &[NodeId]) -
         }
         let auto_layout = n.layout.is_some();
         let deeper = n.children.iter().rev().find_map(|c| rec(doc, *c, p, exclude, in_al || auto_layout, kids_locked, depth + 1));
-        deeper.or((!kids_locked && (auto_layout || !in_al || crate::components::is_slot(doc, id))).then_some(id))
+        let refuses = matches!(n.kind, NodeKind::ComponentSet { .. }) && !only_components(doc, exclude);
+        deeper.or((!kids_locked && !refuses && (auto_layout || !in_al || crate::components::is_slot(doc, id))).then_some(id))
+    }
+    /// A set takes moved variants; what is not moving yet (`exclude` empty) is a new layer.
+    fn only_components(doc: &Document, moved: &[NodeId]) -> bool {
+        !moved.is_empty() && moved.iter().all(|m| doc.node(*m).is_some_and(|n| matches!(n.kind, NodeKind::Component { .. })))
     }
     let hit = doc.node(page)?.children.iter().rev().find_map(|c| rec(doc, *c, p, exclude, false, false, 0));
     // Sections go on the page or in sections: a frame under the pointer gives way to the section

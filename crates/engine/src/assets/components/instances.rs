@@ -159,6 +159,8 @@ pub(crate) fn copy_group(from: &Node, to: &mut Node, g: &str) {
                 b.hanging_list = a.hanging_list;
                 b.max_lines = a.max_lines;
                 b.features = a.features.clone();
+                b.nudges = a.nudges.clone();
+                b.browser_gamma = a.browser_gamma;
             }
             to.styles.text = from.styles.text.clone();
         }

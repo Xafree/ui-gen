@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { closeBrowser } from '../browser.mjs';
 import { startBudget } from '../deadline.mjs';
 import { checkExportNames, inspect } from '../inspect.mjs';
-import { render } from '../render.mjs';
+import { render, retryBudgetMs } from '../render.mjs';
 import { ServiceError } from '../protocol.mjs';
 import { makeSourcesProject } from './helpers/review-project.mjs';
 
@@ -114,5 +114,17 @@ describe('render budget', () => {
 
     const result = await render(renderParams(project.dir, 'fine-ui', 'Fine'));
     assert.equal(result.snapshot.version, 1);
+  });
+});
+
+describe('the retry of a refused sample text', () => {
+  const CALLER_TIMEOUT_MS = 30_000;
+
+  it('shares one cap with the first attempt, under the timeout of the caller', () => {
+    for (const spent of [0, 1_000, 10_000, 24_999]) {
+      const budget = retryBudgetMs(spent);
+      assert.ok(budget > 0, `no time left after ${spent}`);
+      assert.ok(spent + budget < CALLER_TIMEOUT_MS, `${spent} + ${budget}`);
+    }
   });
 });

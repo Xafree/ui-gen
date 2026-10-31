@@ -76,6 +76,20 @@ describe('library stylesheets in component renders', () => {
     assert.equal(card.style.borderTopLeftRadius, '12px');
   });
 
+  it('measures a lone rendered element on its own box, without the bootstrap div', async () => {
+    const { dir } = await project({
+      'plain-css-lib': {
+        'package.json': manifestOf('plain-css-lib', { style: './dist/index.css' }),
+        'index.js': CARD_SOURCE,
+        'dist/index.css': cardCss('#336699', '12px'),
+      },
+    });
+
+    const { snapshot } = await renderOf(dir, 'plain-css-lib', 'Card');
+
+    assert.equal(snapshot.root, cardOf(snapshot), 'the card is the root of the snapshot');
+  });
+
   // covers: STY-2
   it('applies the stylesheet of a sibling styles package the library depends on', async () => {
     const { dir } = await project({
