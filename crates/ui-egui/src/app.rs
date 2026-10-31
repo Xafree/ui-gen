@@ -265,6 +265,7 @@ impl FigApp {
             return;
         }
         if self.ui.project_settings.is_some() {
+            dialogs::project_settings::show(self, ui);
             dialogs::keys(self, &ctx);
             dialogs::show(self, &ctx);
             updates_ui::show(self, &ctx);

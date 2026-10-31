@@ -3,37 +3,25 @@
 //! capture service works in the background, so the rows follow the capture jobs of the project and its
 //! sources and no frame waits. Programmatic `project.settings` calls never open it.
 
-use egui::{Align, Context, CornerRadius, Label, Layout, Margin, RichText, ScrollArea, Stroke, Ui, vec2};
+use egui::{Label, RichText, Ui};
 use figcraft_engine::capture::JobState;
 use figcraft_engine::{EngineError, file_access};
 use figcraft_project::ProjectError;
 use figcraft_project::npm;
 use serde_json::json;
 
+mod page;
+
 use super::project_themes::{self, ThemeAct, Themes};
-use super::window;
 use crate::FigApp;
-use crate::i18n::{tr, tr_noop, trf};
-use crate::theme::{Tokens, regular, semibold};
+use crate::i18n::{tr_noop, trf};
+use crate::theme::{Tokens, regular};
 
 const ADD: &str = "project.addSource";
 const ADD_MANY: &str = "project.addSources";
 const SET_VERSION: &str = "project.setSourceVersion";
 const REMOVE: &str = "project.removeSource";
 const IMPORT: &str = "uigen.importComponent";
-
-const PACKAGE_W: f32 = 180.0;
-const VERSION_W: f32 = 90.0;
-const FRAMEWORK_W: f32 = 100.0;
-const LICENSE_W: f32 = 70.0;
-const ACTIONS_W: f32 = 220.0;
-pub(super) const GAP: f32 = 8.0;
-pub(super) const CARD_MARGIN: i8 = 10;
-const CELL_H: f32 = 28.0;
-const LIST_HEIGHT: f32 = 320.0;
-pub(super) const INNER_W: f32 = PACKAGE_W + VERSION_W + FRAMEWORK_W + LICENSE_W + ACTIONS_W + 4.0 * GAP;
-const WIDTH: f32 = INNER_W + 2.0 * (CARD_MARGIN as f32 + 1.0);
-const ADD_PACKAGE_W: f32 = 360.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Work {
@@ -59,6 +47,20 @@ struct Failure {
     message: String,
 }
 
+#[derive(Clone, Debug)]
+enum RunState {
+    Running,
+    Done,
+    Failed(String),
+}
+
+#[derive(Clone, Debug)]
+struct LastRun {
+    command: String,
+    packages: Vec<String>,
+    state: RunState,
+}
+
 struct Job {
     command: String,
     packages: Vec<String>,
@@ -70,7 +72,9 @@ struct Job {
 pub struct ProjectSettings {
     sources: Vec<SourceRow>,
     failures: Vec<Failure>,
+    project_name: String,
     package_input: String,
+    last_run: Option<LastRun>,
     add_error: Option<String>,
     pending_removal: Option<String>,
     changing: Option<(String, String)>,
@@ -80,8 +84,8 @@ pub struct ProjectSettings {
 }
 
 enum Act {
-    Package(String),
     Add,
+    Browse(Option<String>),
     AskRemoval(String),
     CancelRemoval,
     ConfirmRemoval(String),
@@ -157,6 +161,32 @@ impl ProjectSettings {
             if job.state == "failed" {
                 failures.push(Failure { packages: job.packages.clone(), command: job.command.clone(), message: job.error.clone() });
             }
+        }
+        self.project_name = binding.config.name.clone();
+        if let Some(run) = self.last_run.as_mut()
+            && let Some(job) = jobs
+                .iter()
+                .rev()
+                .find(|j| j.command == ADD && j.packages.len() == run.packages.len() && run.packages.iter().all(|p| j.packages.contains(p)))
+        {
+            run.state = match job.state.as_str() {
+                "failed" => RunState::Failed(job.error.clone()),
+                "done" => RunState::Done,
+                _ => RunState::Running,
+            };
+        }
+        self.project_name = binding.config.name.clone();
+        if let Some(run) = self.last_run.as_mut()
+            && let Some(job) = jobs
+                .iter()
+                .rev()
+                .find(|j| j.command == ADD && j.packages.len() == run.packages.len() && run.packages.iter().all(|p| j.packages.contains(p)))
+        {
+            run.state = match job.state.as_str() {
+                "failed" => RunState::Failed(job.error.clone()),
+                "done" => RunState::Done,
+                _ => RunState::Running,
+            };
         }
         self.sources = rows;
         self.failures = failures;
@@ -261,17 +291,28 @@ fn refusal_text(error: &ProjectError) -> String {
 /// Install the packages typed on `line` (`name`, `name@1.2.0`, after an optional `npm install`) as
 /// sources of the project in one go. A refused line starts nothing and keeps what was typed.
 pub fn add_packages(app: &mut FigApp, line: &str) {
-    let refusal = match npm::parse_install_line(line) {
-        Err(error) => Some(refusal_text(&error)),
+    let parsed = npm::parse_install_line(line);
+    let refusal = match &parsed {
+        Err(error) => Some(refusal_text(error)),
         Ok(_) => match app.session.execute(ADD_MANY, &json!({"line": line})) {
             Ok(_) => None,
             Err(EngineError::BadParams { msg, .. }) => Some(msg),
             Err(other) => Some(other.to_string()),
         },
     };
+    let run = parsed.ok().filter(|_| refusal.is_none()).map(|specs| LastRun {
+        command: specs.iter().fold("npm install".to_string(), |line, spec| {
+            if spec.version == "latest" { format!("{line} {}", spec.name) } else { format!("{line} {}@{}", spec.name, spec.version) }
+        }),
+        packages: specs.into_iter().map(|spec| spec.name).collect(),
+        state: RunState::Running,
+    });
     edit(app, |state| {
         if refusal.is_none() {
             state.package_input.clear();
+        }
+        if run.is_some() {
+            state.last_run = run;
         }
         state.add_error = refusal;
     });
@@ -297,7 +338,7 @@ fn remove_package(app: &mut FigApp, package: &str) {
 
 fn perform(app: &mut FigApp, act: Act) {
     match act {
-        Act::Package(text) => edit(app, |s| s.package_input = text),
+        Act::Browse(package) => super::import_component::request(app, package.as_deref()),
         Act::Add => {
             let Some(state) = app.ui.project_settings.as_ref() else { return };
             let line = state.package_input.clone();
@@ -340,24 +381,20 @@ fn package_field() -> egui::Id {
     egui::Id::unique(("project_settings", "package"))
 }
 
-pub fn show(app: &mut FigApp, ctx: &Context) {
+pub fn show(app: &mut FigApp, ui: &mut Ui) {
     let Some(mut state) = app.ui.project_settings.take() else { return };
     if !state.refresh(app) {
         return;
     }
-    let t = Tokens::get(ctx);
+    let ctx = ui.ctx().clone();
+    let t = Tokens::get(&ctx);
     let can_install = !cfg!(target_arch = "wasm32");
-    let mut open = true;
-    let mut acts = Vec::new();
     let focus_first = state.focus_first;
-    window(tr("Project settings"), ctx).open(&mut open).show(ctx, |ui| {
-        ui.set_width(WIDTH);
-        acts = body(ui, &t, &state, can_install, focus_first);
+    let mut acts = Vec::new();
+    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.bg)).show(ui, |ui| {
+        acts = page::show(ui, &t, &mut state, can_install, focus_first);
     });
-    if !open {
-        return;
-    }
-    state.focus_first &= !crate::widgets::text_field_focused(ctx, package_field());
+    state.focus_first &= !ctx.memory(|m| m.has_focus(package_field()));
     app.ui.project_settings = Some(state);
     for act in acts {
         perform(app, act);
@@ -365,187 +402,5 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
 }
 
 pub(super) fn note(ui: &mut Ui, text: &str, color: egui::Color32) {
-    ui.add(Label::new(RichText::new(text).color(color).font(regular(11.0))).wrap());
-}
-
-fn body(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, can_install: bool, focus_first: bool) -> Vec<Act> {
-    let mut acts = Vec::new();
-    ui.label(RichText::new(tr("Source libraries")).font(semibold(15.0)).color(t.text));
-    if !can_install {
-        note(ui, tr("Installing packages is only available in the desktop app"), t.text_secondary);
-    }
-    ui.add_space(8.0);
-    add_row(ui, state, can_install, focus_first, &mut acts);
-    if let Some(error) = state.add_error() {
-        note(ui, error, t.danger);
-    }
-    ui.add_space(12.0);
-    table(ui, t, state, can_install, &mut acts);
-    ui.add_space(12.0);
-    if can_install {
-        let mut themes = Vec::new();
-        project_themes::section(ui, t, &state.themes, &mut themes);
-        acts.extend(themes.into_iter().map(Act::Themes));
-        ui.add_space(12.0);
-    }
-    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-        if crate::widgets::button(ui, tr("Close"), false, true).clicked() {
-            acts.push(Act::Close);
-        }
-    });
-    acts
-}
-
-fn add_row(ui: &mut Ui, state: &ProjectSettings, can_install: bool, focus_first: bool, acts: &mut Vec<Act>) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = GAP;
-        let package = package_field();
-        if focus_first {
-            crate::widgets::focus_text_field(ui, package);
-        }
-        if let Some(text) = crate::widgets::text_field(ui, package, &state.package_input, ADD_PACKAGE_W, tr("Package")) {
-            acts.push(Act::Package(text));
-        }
-        if crate::widgets::button(ui, tr("Run"), true, can_install).clicked() {
-            acts.push(Act::Add);
-        }
-    });
-}
-
-fn cell(ui: &mut Ui, width: f32, add: impl FnOnce(&mut Ui)) {
-    ui.allocate_ui_with_layout(vec2(width, CELL_H), Layout::left_to_right(Align::Center), |ui| {
-        ui.set_min_size(vec2(width, CELL_H));
-        ui.set_max_width(width);
-        add(ui);
-    });
-}
-
-fn text_cell(ui: &mut Ui, width: f32, text: RichText) {
-    cell(ui, width, |ui| {
-        ui.add(Label::new(text).truncate());
-    });
-}
-
-fn table(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, can_install: bool, acts: &mut Vec<Act>) {
-    let orphans: Vec<String> = state
-        .failures
-        .iter()
-        .filter(|f| !f.packages.iter().any(|p| state.sources.iter().any(|r| r.package == *p)))
-        .map(|f| failure_text(&f.command, &f.packages.join(", "), &f.message))
-        .collect();
-    if state.sources.is_empty() && orphans.is_empty() {
-        note(ui, tr("No source library yet"), t.text_secondary);
-        return;
-    }
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = GAP;
-        ui.add_space(f32::from(CARD_MARGIN) + 1.0);
-        for (width, title) in [(PACKAGE_W, tr("Package")), (VERSION_W, tr("Version")), (FRAMEWORK_W, tr("Framework")), (LICENSE_W, tr("License"))] {
-            text_cell(ui, width, RichText::new(title).color(t.text_tertiary).font(regular(11.0)));
-        }
-    });
-    ScrollArea::vertical().id_salt("project_settings_sources").max_height(LIST_HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
-        for row in &state.sources {
-            card(ui, t, state, row, can_install, acts);
-            ui.add_space(6.0);
-        }
-        for message in &orphans {
-            note(ui, message, t.danger);
-        }
-    });
-}
-
-fn card(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &SourceRow, can_install: bool, acts: &mut Vec<Act>) {
-    let removed = row.status == "removed";
-    let ink = if removed { t.text_tertiary } else { t.text };
-    let secondary = if removed { t.text_tertiary } else { t.text_secondary };
-    egui::Frame::new().stroke(Stroke::new(1.0, t.border)).corner_radius(CornerRadius::same(8)).inner_margin(Margin::same(CARD_MARGIN)).show(
-        ui,
-        |ui| {
-            ui.set_width(INNER_W);
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = GAP;
-                text_cell(ui, PACKAGE_W, RichText::new(&row.package).monospace().size(11.0).color(ink));
-                version_cell(ui, t, row, removed);
-                text_cell(ui, FRAMEWORK_W, RichText::new(or_dash(&row.framework)).color(secondary).font(regular(11.0)));
-                text_cell(ui, LICENSE_W, RichText::new(or_dash(&row.license)).color(secondary).font(regular(11.0)));
-                cell(ui, ACTIONS_W, |ui| actions(ui, t, state, row, can_install, acts));
-            });
-            if let Some(message) = state.failure(&row.package) {
-                note(ui, &message, t.danger);
-            }
-            if state.changing.as_ref().is_some_and(|(package, _)| *package == row.package)
-                && let Some(error) = &state.change_error
-            {
-                note(ui, error, t.danger);
-            }
-        },
-    );
-}
-
-fn or_dash(text: &str) -> &str {
-    if text.is_empty() { "—" } else { text }
-}
-
-fn version_cell(ui: &mut Ui, t: &Tokens, row: &SourceRow, removed: bool) {
-    if row.status == "installing" {
-        text_cell(ui, VERSION_W, RichText::new(tr("Installing…")).color(t.text_secondary).font(regular(11.0)));
-    } else if removed {
-        text_cell(ui, VERSION_W, RichText::new(&row.version).monospace().size(11.0).color(t.text_tertiary));
-    } else {
-        cell(ui, VERSION_W, |ui| {
-            egui::Frame::new().fill(t.field).corner_radius(CornerRadius::same(5)).inner_margin(Margin::symmetric(8, 4)).show(ui, |ui| {
-                ui.add(Label::new(RichText::new(&row.version).monospace().size(11.0).color(t.text)).truncate());
-            });
-        });
-    }
-}
-
-fn actions(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &SourceRow, can_install: bool, acts: &mut Vec<Act>) {
-    ui.spacing_mut().item_spacing.x = GAP;
-    let dim = |text: &str| RichText::new(text.to_string()).color(t.text_tertiary).font(regular(11.0));
-    if row.status == "removed" {
-        ui.label(dim(tr("Removed source")));
-        return;
-    }
-    if row.status == "installing" {
-        return;
-    }
-    match row.work {
-        Work::Installing => {
-            ui.label(dim(tr("Installing…")));
-            return;
-        }
-        Work::Removing => {
-            ui.label(dim(tr("Removing…")));
-            return;
-        }
-        Work::Idle => {}
-    }
-    if state.pending_removal() == Some(row.package.as_str()) {
-        if crate::widgets::button(ui, tr("Confirm removal"), true, can_install).clicked() {
-            acts.push(Act::ConfirmRemoval(row.package.clone()));
-        }
-        if crate::widgets::button(ui, tr("Cancel"), false, true).clicked() {
-            acts.push(Act::CancelRemoval);
-        }
-    } else if let Some((_, draft)) = state.changing.as_ref().filter(|(package, _)| *package == row.package) {
-        let field = egui::Id::unique(("project_settings_change", row.package.as_str()));
-        if let Some(text) = crate::widgets::text_field(ui, field, draft, VERSION_W, tr("Version")) {
-            acts.push(Act::Draft(text));
-        }
-        if crate::widgets::button(ui, tr("Apply"), true, can_install).clicked() {
-            acts.push(Act::Apply(row.package.clone()));
-        }
-        if crate::widgets::button(ui, tr("Cancel"), false, true).clicked() {
-            acts.push(Act::CancelChange);
-        }
-    } else {
-        if crate::widgets::button(ui, tr("Change version"), false, can_install).clicked() {
-            acts.push(Act::Change(row.package.clone()));
-        }
-        if crate::widgets::button(ui, tr("Remove"), false, can_install).clicked() {
-            acts.push(Act::AskRemoval(row.package.clone()));
-        }
-    }
+    ui.add(Label::new(RichText::new(text).color(color).font(regular(12.5))).wrap());
 }

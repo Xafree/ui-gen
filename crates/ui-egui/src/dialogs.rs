@@ -197,8 +197,8 @@ pub fn keys(app: &mut FigApp, ctx: &Context) {
         || u.batch_rename.take().is_some()
         || u.import_report.take().is_some()
         || u.lit_export.take().is_some()
-        || u.project_settings.take().is_some()
         || u.import_window.take().is_some()
+        || u.project_settings.take().is_some()
         || u.missing_fonts.take().is_some()
         || u.tab_close.take().is_some()
     {
@@ -228,7 +228,6 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
     crate::pending_open::pending_opens(app, ctx);
     crate::import_report::show(app, ctx);
     lit_export::show(app, ctx);
-    project_settings::show(app, ctx);
     import_component::show(app, ctx);
     crate::missing_fonts::show(app, ctx);
     playground_save::show(app, ctx);
