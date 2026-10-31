@@ -203,6 +203,19 @@ fn the_plus_of_the_library_title_opens_the_source_libraries_page() {
 }
 
 #[test]
+fn the_search_and_libraries_of_the_title_stay_reachable_by_name() {
+    let (mut u, _dir) = project_ui("reach", heroui());
+    let nodes = tree(&mut u);
+    let search = centre(&nodes, Role::Button, "Search assets");
+    let libraries = centre(&nodes, Role::Button, "Libraries");
+    click(&mut u, search);
+    assert!(u.app.ui.library_panel.search, "the search row opens");
+    click(&mut u, libraries);
+    assert!(u.app.ui.libraries, "the libraries view opens");
+    assert!(has(&texts(&mut u), "Libraries in this file"), "with its list");
+}
+
+#[test]
 fn dragging_a_local_component_row_to_the_canvas_creates_an_instance() {
     let (mut u, _dir) = project_ui("drag", heroui());
     let made = u.app.session.execute("shape.rectangle", &json!({"x": 0, "y": 0, "width": 40, "height": 40})).unwrap();

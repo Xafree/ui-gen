@@ -24,8 +24,9 @@ pub(crate) const ROW: f32 = 26.0;
 pub(crate) const TITLE: f32 = 28.0;
 pub(crate) const SECTION_PAD: f32 = 10.0;
 pub(crate) const RADIUS: u8 = 6;
-pub(crate) const SIDE: f32 = 8.0;
-pub(crate) const INNER: f32 = 14.0;
+// One less than the mockup: the panel's frame already insets its contents by a pixel.
+pub(crate) const SIDE: f32 = 7.0;
+pub(crate) const INNER: f32 = 13.0;
 pub(crate) const ICON: f32 = 14.0;
 pub(crate) const ICON_GAP: f32 = 6.0;
 
@@ -101,6 +102,25 @@ pub(super) fn family_rows(families: &[Family], blocks: &[Block], searching: bool
         rows.push(FamilyRow { key: format!("removed/{}", block.key), label, package: block.package.clone(), removed: true, tiles });
     }
     rows
+}
+
+/// The mark of a component in a library tab: four outlined diamonds, on a 24 unit grid.
+pub(crate) fn paint_component_mark(painter: &egui::Painter, rect: Rect, colour: egui::Color32) {
+    let unit = rect.width() / 24.0;
+    let stroke = egui::Stroke::new((1.7 * unit).max(1.0), colour);
+    for (x, y) in [(12.0, 7.0), (12.0, 17.0), (7.0, 12.0), (17.0, 12.0)] {
+        let at = |dx: f32, dy: f32| rect.min + vec2((x + dx) * unit, (y + dy) * unit);
+        painter.add(egui::Shape::closed_line(vec![at(0.0, -4.0), at(4.0, 0.0), at(0.0, 4.0), at(-4.0, 0.0)], stroke));
+    }
+}
+
+/// The mark of the Variables entry of the rail in a library tab: four outlined dots, on a 24 unit grid.
+pub(crate) fn paint_variables_mark(painter: &egui::Painter, rect: Rect, colour: egui::Color32) {
+    let unit = rect.width() / 24.0;
+    let stroke = egui::Stroke::new((1.7 * unit).max(1.0), colour);
+    for (x, y) in [(8.0, 8.0), (16.0, 8.0), (8.0, 16.0), (16.0, 16.0)] {
+        painter.circle_stroke(rect.min + vec2(x * unit, y * unit), 3.0 * unit, stroke);
+    }
 }
 
 fn paint_chevron(ui: &Ui, x: f32, y: f32, open: bool, colour: egui::Color32) {
@@ -195,7 +215,7 @@ impl List<'_> {
         a11y::ring_around(ui, bg, &resp);
         let x = rect.min.x + indent(2);
         let icon_rect = Rect::from_center_size(pos2(x + ICON / 2.0, rect.center().y), vec2(ICON, ICON));
-        icons::paint(ui.painter(), icon_rect, if item.set { Icon::ComponentSet } else { Icon::Component }, t.component);
+        paint_component_mark(ui.painter(), icon_rect, t.component);
         let left = x + ICON + ICON_GAP;
         let own_hidden = *src == Source::Local && item.hidden;
         let colour = if own_hidden { t.text_secondary } else { t.text };

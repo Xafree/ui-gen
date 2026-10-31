@@ -117,13 +117,14 @@ pub fn rail(app: &mut FigApp, ui: &mut Ui) {
                 ui.painter().rect_filled(item, CornerRadius::same(8), t.hover);
             }
             a11y::ring_around(ui, item, &resp);
-            icons::paint(
-                ui.painter(),
-                Rect::from_center_size(pos2(r.center().x, y + 15.0), vec2(18.0, 18.0)),
-                icon,
-                if active { t.accent } else { t.text_secondary },
-            );
-            let shown = crate::widgets::elide_font(ui, label, (r.width() - 6.0).max(0.0), regular(11.0));
+            let icon_rect = Rect::from_center_size(pos2(r.center().x, y + 15.0), vec2(18.0, 18.0));
+            let icon_col = if active { t.accent } else { t.text_secondary };
+            if icon == Icon::Styles {
+                lt::paint_variables_mark(ui.painter(), icon_rect, icon_col);
+            } else {
+                icons::paint(ui.painter(), icon_rect, icon, icon_col);
+            }
+            let shown = crate::widgets::elide_font(ui, label, r.width().max(0.0), regular(11.0));
             ui.painter().text(
                 pos2(r.center().x, y + 34.7),
                 Align2::CENTER_CENTER,
@@ -212,12 +213,12 @@ pub fn left_panel(app: &mut FigApp, ui: &mut Ui) {
 /// The left panel of a tab of a library project: project and file names, the library dropdown,
 /// the pages and the layers.
 fn library_stack(app: &mut FigApp, ui: &mut Ui) {
+    ui.spacing_mut().item_spacing.y = 0.0;
     library_head(app, ui);
     if app.ui.libraries {
         crate::assets_panel::show(app, ui);
         return;
     }
-    ui.spacing_mut().item_spacing.y = 0.0;
     lt::section(app, ui);
     pages(app, ui);
     layers(app, ui);
@@ -231,15 +232,28 @@ fn library_head(app: &mut FigApp, ui: &mut Ui) {
     let (head, _) = ui.allocate_exact_size(vec2(w, 64.0), Sense::hover());
     let project = file_place(&app.session).unwrap_or_default();
     let shown = crate::widgets::elide_font(ui, &project, (w - 56.0).max(0.0), semibold(14.0));
-    ui.painter().text(pos2(head.min.x + 14.0, head.min.y + 23.8), Align2::LEFT_CENTER, shown, semibold(14.0), t.text);
+    ui.painter().text(pos2(head.min.x + lt::INNER, head.min.y + 23.8), Align2::LEFT_CENTER, shown, semibold(14.0), t.text);
     let name = app.session.doc().map(|d| d.name.clone()).unwrap_or_default();
-    let field = Rect::from_min_max(pos2(head.min.x + 12.0, head.min.y + 33.0), pos2(head.max.x - 14.0, head.min.y + 51.0));
+    let field = Rect::from_min_max(pos2(head.min.x + lt::INNER - 2.0, head.min.y + 33.0), pos2(head.max.x - lt::INNER, head.min.y + 51.0));
     let start = std::mem::take(&mut app.ui.rename_file);
-    ui.visuals_mut().override_text_color = Some(t.text_secondary);
-    let renamed = crate::widgets::rename_field(ui, Id::unique("filename"), &name, field, regular(12.0), start).0;
-    ui.visuals_mut().override_text_color = None;
-    if let Some(new) = renamed {
-        app.run("file.rename", json!({"name": new}));
+    let id = Id::unique("filename");
+    if start || ui.memory(|m| m.has_focus(id.with("te"))) {
+        if let Some(new) = crate::widgets::rename_field(ui, id, &name, field, regular(12.0), start).0 {
+            app.run("file.rename", json!({"name": new}));
+        }
+    } else {
+        let resp = ui.interact(field, id.with("label"), Sense::click());
+        a11y::button(&resp, &name);
+        a11y::ring_around(ui, field, &resp);
+        crate::bidi::paint_name(
+            ui.painter(),
+            pos2(head.min.x + lt::INNER, field.center().y),
+            &name,
+            regular(12.0),
+            t.text_secondary,
+            (w - 28.0).max(20.0),
+        );
+        app.ui.rename_file = resp.clicked();
     }
     let button = Rect::from_center_size(pos2(head.max.x - 24.0, head.min.y + 24.0), vec2(24.0, 24.0));
     let over = ui.rect_contains_pointer(head);
@@ -358,7 +372,7 @@ fn pages(app: &mut FigApp, ui: &mut Ui) {
                 reorder.row_by(&resp, k, r, || if divider { tr("Divider").to_string() } else { name.clone() });
             }
             a11y::list_item(&resp, if divider { tr("Divider") } else { &name }, id == cur);
-            let r = r.shrink2(vec2(8.0, 0.0));
+            let r = r.shrink2(vec2(if lib { lt::SIDE } else { 8.0 }, 0.0));
             a11y::ring_around(ui, r, &resp);
             let renaming = app.ui.rename_page.as_ref().is_some_and(|(i, _)| *i == id);
             if divider && !renaming {
@@ -1228,7 +1242,10 @@ fn layers(app: &mut FigApp, ui: &mut Ui) {
         let total = rows.len() as f32 * pitch;
         ui.set_height(total.max(viewport.height()));
         if let Some(i) = scroll_to {
-            ui.scroll_to_rect(Rect::from_min_size(pos2(ui.max_rect().left(), top + i as f32 * pitch), vec2(w, row_h)), None);
+            ui.scroll_to_rect(
+                Rect::from_min_size(pos2(ui.max_rect().left(), top + i as f32 * pitch), vec2(w, if lib { 2.0 * row_h } else { row_h })),
+                None,
+            );
         }
         if rows.is_empty() {
             ui.add_space(8.0);
@@ -1265,7 +1282,7 @@ fn layers(app: &mut FigApp, ui: &mut Ui) {
             a11y::tree_item(&resp, if n.name.is_empty() { tr(n.kind.label()) } else { &n.name }, &info);
             let in_selected = !selected && doc.ancestors(row.id).iter().any(|a| sel.contains(a));
             let is_comp = matches!(n.kind, NodeKind::Component { .. } | NodeKind::ComponentSet { .. } | NodeKind::Instance { .. });
-            let rr = r.shrink2(vec2(8.0, 0.0));
+            let rr = r.shrink2(vec2(if lib { lt::SIDE } else { 8.0 }, 0.0));
             a11y::ring_around(ui, rr, &resp);
             // Over the row, its eye and padlock included (they sit on top of it).
             let over = resp.contains_pointer();
@@ -1309,7 +1326,12 @@ fn layers(app: &mut FigApp, ui: &mut Ui) {
                 (true, false, true) => t.text_secondary,
                 (false, comp, shown) => row_color(comp, shown, t.icon, t.text_tertiary),
             };
-            icons::paint(ui.painter(), Rect::from_center_size(pos2(icon_x, r.center().y), vec2(14.0, 14.0)), icon, icon_col);
+            let icon_rect = Rect::from_center_size(pos2(icon_x, r.center().y), vec2(14.0, 14.0));
+            if lib && matches!(icon, Icon::Component | Icon::ComponentSet) {
+                lt::paint_component_mark(ui.painter(), icon_rect, icon_col);
+            } else {
+                icons::paint(ui.painter(), icon_rect, icon, icon_col);
+            }
             if app.ui.rename.is_some_and(|rn| rn.id == row.id) {
                 if let Some(new) = rename_field(app, ui, row.id, row.depth, &n.name, r) {
                     rename_done = Some((row.id, new));
