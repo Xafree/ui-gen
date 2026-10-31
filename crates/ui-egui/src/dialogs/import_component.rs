@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use egui::Ui;
 use figcraft_engine::capture::{CaptureEvent, CaptureOutcome};
-use figcraft_engine::{file_access, Inspected, InspectedComponent, MAX_RENDERS, PropKind, render_count};
+use figcraft_engine::{Inspected, InspectedComponent, MAX_RENDERS, PropKind, file_access, render_count};
 use serde_json::{Value, json};
 
 use crate::FigApp;
@@ -268,8 +268,10 @@ fn close_if_nothing_can_show_it(app: &mut FigApp) {
     if app.session.docs.iter().any(|ds| ds.uid == *doc) || app.session.project().is_some() {
         return;
     }
-    let told = failures.join("
-");
+    let told = failures.join(
+        "
+",
+    );
     app.ui.import_window = None;
     if !told.is_empty() {
         app.show_error(told);
@@ -367,9 +369,7 @@ fn cards_of(app: &FigApp, state: &ImportWindow, families: &[Family]) -> Vec<Card
         .filter_map(|package| app.session.inspected(package).map(|found| (package.clone(), found)))
         .collect();
     let is_ticked = |package: &str, name: &str| state.ticked.iter().any(|(p, n)| p == package && n == name);
-    let shows = |package: &str, found: &Inspected, name: &str| {
-        state.show_parts || !parts_of(found).contains(name) || is_ticked(package, name)
-    };
+    let shows = |package: &str, found: &Inspected, name: &str| state.show_parts || !parts_of(found).contains(name) || is_ticked(package, name);
     ordered
         .into_iter()
         .filter_map(|family| {

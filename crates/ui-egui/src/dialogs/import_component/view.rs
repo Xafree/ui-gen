@@ -5,7 +5,7 @@ use egui::{
 
 use crate::a11y;
 use crate::dialogs::project_settings::page::{
-    BAR_H, BODY_LINE, Look, MAX_WIDTH, button, note_focus, button_at, card_frame, focus_ring, keyboard_focus, mono, tag_at, tag_width, text_width,
+    BAR_H, BODY_LINE, Look, MAX_WIDTH, button, button_at, card_frame, focus_ring, keyboard_focus, mono, note_focus, tag_at, tag_width, text_width,
     track_keyboard_focus,
 };
 use crate::i18n::{tr, trf, trn};

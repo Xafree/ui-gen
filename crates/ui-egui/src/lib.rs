@@ -218,14 +218,15 @@ mod toast_action_tests;
 mod compare_review_ui_tests;
 #[cfg(test)]
 mod compare_tab_ui_tests;
-#[cfg(test)]
-mod import_drop_ui_tests;
-#[cfg(test)]
-mod import_pick_ui_tests;
+mod component_parts;
 #[cfg(test)]
 mod component_parts_tests;
 #[cfg(test)]
 mod import_batch_ui_tests;
+#[cfg(test)]
+mod import_drop_ui_tests;
+#[cfg(test)]
+mod import_pick_ui_tests;
 #[cfg(test)]
 mod import_review_ui_tests;
 #[cfg(test)]
@@ -248,7 +249,6 @@ mod project_settings_review_tests;
 mod project_sources_ui_tests;
 #[cfg(test)]
 mod project_themes_ui_tests;
-mod component_parts;
 mod source_family;
 #[cfg(test)]
 mod source_family_tests;

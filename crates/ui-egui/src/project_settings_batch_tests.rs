@@ -43,14 +43,23 @@ fn a_family_version_goes_only_to_the_members_that_share_the_version_of_the_head(
     let CaptureJob::InstallMany { packages, .. } = last_job(&b) else { panic!("one job for the family: {:?}", jobs(&b)) };
     let mut sent: Vec<(String, String)> = packages.into_iter().map(|spec| (spec.name, spec.version)).collect();
     sent.sort();
-    assert_eq!(sent, [(SAME.to_string(), "6.0.0".to_string()), (HEAD.to_string(), "6.0.0".to_string())], "the dependency at another version is left alone");
+    assert_eq!(
+        sent,
+        [(SAME.to_string(), "6.0.0".to_string()), (HEAD.to_string(), "6.0.0".to_string())],
+        "the dependency at another version is left alone"
+    );
 }
 
 #[test]
 fn a_package_another_head_depends_on_stays_and_the_confirmation_names_what_goes_and_what_stays() {
     let other = "@other/kit";
     let shared = "shared-core";
-    let sources = [row(HEAD, "3.0.0", Some("react"), false), row(other, "1.0.0", Some("react"), false), row(shared, "9.0.0", None, false), row(SAME, "3.0.0", None, false)];
+    let sources = [
+        row(HEAD, "3.0.0", Some("react"), false),
+        row(other, "1.0.0", Some("react"), false),
+        row(shared, "9.0.0", None, false),
+        row(SAME, "3.0.0", None, false),
+    ];
     let mut b = Bench::with("family-remove-shared", &sources, Vec::new());
     depends(&b, HEAD, &[shared, SAME]);
     depends(&b, other, &[shared]);
