@@ -10,6 +10,8 @@ import { captureSnapshot } from './snapshot.mjs';
 import { findStylesheets } from './stylesheets.mjs';
 
 const ROOT_SELECTOR = '[data-uigen-root]';
+const COMPONENT_MARK = 'data-uigen-component';
+const COMPONENT_SELECTOR = `[${COMPONENT_MARK}]`;
 const RENDERABLE = ['react', 'web-components'];
 const STATES = ['default', 'hover', 'focus', 'pressed', 'disabled'];
 const THEMES = ['light', 'dark'];
@@ -114,6 +116,26 @@ async function forceState(page, state, budget) {
   await settle(page, budget);
 }
 
+// The bootstrap div is not the component: a lone rendered element is measured and drawn on its own box.
+function markRenderedElement({ rootSelector, mark }) {
+  const IGNORED = new Set(['style', 'script', 'link', 'meta', 'template', 'noscript']);
+  const loneChild = (parent) => {
+    const hasText = [...parent.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== '');
+    const rendered = [...parent.children].filter((child) => !IGNORED.has(child.localName) && getComputedStyle(child).display !== 'none');
+    return !hasText && rendered.length === 1 ? rendered[0] : undefined;
+  };
+  let element = loneChild(document.querySelector(rootSelector));
+  while (element !== undefined && getComputedStyle(element).display === 'contents') {
+    element = loneChild(element);
+  }
+  const box = element?.getBoundingClientRect();
+  if (box === undefined || box.width === 0 || box.height === 0) {
+    return false;
+  }
+  element.setAttribute(mark, '');
+  return true;
+}
+
 function pngSegments(installed, { component, props, state, theme }) {
   const hash = createHash('sha256').update(JSON.stringify(props)).digest('hex').slice(0, 12);
   const name = `${safeSegment(component)}-${hash}-${state}-${theme}.png`;
@@ -134,11 +156,12 @@ async function renderInPage(page, installed, params, { code, styles }, budget) {
   await settle(page, budget);
   await forceState(page, state, budget);
   const source = { package: installed.name, version: installed.version, component, props, state };
-  const snapshot = await captureSnapshot(page, ROOT_SELECTOR, source);
+  const captured = await page.evaluate(markRenderedElement, { rootSelector: ROOT_SELECTOR, mark: COMPONENT_MARK }) ? COMPONENT_SELECTOR : ROOT_SELECTOR;
+  const snapshot = await captureSnapshot(page, captured, source);
   const segments = pngSegments(installed, { component, props, state, theme });
   const file = path.join(params.dir, ...segments);
   await mkdir(path.dirname(file), { recursive: true });
-  await page.locator(ROOT_SELECTOR).screenshot({ path: file });
+  await page.locator(captured).screenshot({ path: file });
   return { snapshot, png: segments.join('/') };
 }
 
