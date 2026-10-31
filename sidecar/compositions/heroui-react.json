@@ -1,0 +1,540 @@
+{
+  "Select": {
+    "type": "Select",
+    "props": {
+      "placeholder": "Choose an option"
+    },
+    "children": [
+      {
+        "type": "Label",
+        "children": [
+          "Label"
+        ]
+      },
+      {
+        "type": "Select.Trigger",
+        "children": [
+          {
+            "type": "Select.Value"
+          },
+          {
+            "type": "Select.Indicator"
+          }
+        ]
+      },
+      {
+        "type": "Select.Popover",
+        "children": [
+          {
+            "type": "ListBox",
+            "children": [
+              {
+                "type": "ListBox.Item",
+                "props": {
+                  "id": "one",
+                  "textValue": "One"
+                },
+                "children": [
+                  "One"
+                ]
+              },
+              {
+                "type": "ListBox.Item",
+                "props": {
+                  "id": "two",
+                  "textValue": "Two"
+                },
+                "children": [
+                  "Two"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "ComboBox": {
+    "type": "ComboBox",
+    "children": [
+      {
+        "type": "Label",
+        "children": [
+          "Label"
+        ]
+      },
+      {
+        "type": "ComboBox.InputGroup",
+        "children": [
+          {
+            "type": "Input",
+            "props": {
+              "placeholder": "Choose an option"
+            }
+          },
+          {
+            "type": "ComboBox.Trigger"
+          }
+        ]
+      },
+      {
+        "type": "ComboBox.Popover",
+        "children": [
+          {
+            "type": "ListBox",
+            "children": [
+              {
+                "type": "ListBox.Item",
+                "props": {
+                  "id": "one",
+                  "textValue": "One"
+                },
+                "children": [
+                  "One"
+                ]
+              },
+              {
+                "type": "ListBox.Item",
+                "props": {
+                  "id": "two",
+                  "textValue": "Two"
+                },
+                "children": [
+                  "Two"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "Avatar": {
+    "type": "Avatar",
+    "children": [
+      {
+        "type": "Avatar.Fallback",
+        "children": [
+          "AB"
+        ]
+      }
+    ]
+  },
+  "Checkbox": {
+    "type": "Checkbox",
+    "children": [
+      {
+        "type": "Checkbox.Content",
+        "children": [
+          {
+            "type": "Checkbox.Control",
+            "children": [
+              {
+                "type": "Checkbox.Indicator"
+              }
+            ]
+          },
+          {
+            "type": "Label",
+            "children": [
+              "Label"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "Switch": {
+    "type": "Switch",
+    "children": [
+      {
+        "type": "Switch.Content",
+        "children": [
+          {
+            "type": "Switch.Control",
+            "children": [
+              {
+                "type": "Switch.Thumb"
+              }
+            ]
+          },
+          {
+            "type": "Label",
+            "children": [
+              "Label"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "Tabs": {
+    "type": "Tabs",
+    "children": [
+      {
+        "type": "Tabs.ListContainer",
+        "children": [
+          {
+            "type": "Tabs.List",
+            "props": {
+              "aria-label": "Tabs"
+            },
+            "children": [
+              {
+                "type": "Tabs.Tab",
+                "props": {
+                  "id": "one"
+                },
+                "children": [
+                  "One",
+                  {
+                    "type": "Tabs.Indicator"
+                  }
+                ]
+              },
+              {
+                "type": "Tabs.Tab",
+                "props": {
+                  "id": "two"
+                },
+                "children": [
+                  "Two",
+                  {
+                    "type": "Tabs.Indicator"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Tabs.Panel",
+        "props": {
+          "id": "one"
+        },
+        "children": [
+          "First panel"
+        ]
+      },
+      {
+        "type": "Tabs.Panel",
+        "props": {
+          "id": "two"
+        },
+        "children": [
+          "Second panel"
+        ]
+      }
+    ]
+  },
+  "Accordion": {
+    "type": "Accordion",
+    "children": [
+      {
+        "type": "Accordion.Item",
+        "props": {
+          "id": "one"
+        },
+        "children": [
+          {
+            "type": "Accordion.Heading",
+            "children": [
+              {
+                "type": "Accordion.Trigger",
+                "children": [
+                  "First",
+                  {
+                    "type": "Accordion.Indicator"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "Accordion.Panel",
+            "children": [
+              {
+                "type": "Accordion.Body",
+                "children": [
+                  "First panel"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Accordion.Item",
+        "props": {
+          "id": "two"
+        },
+        "children": [
+          {
+            "type": "Accordion.Heading",
+            "children": [
+              {
+                "type": "Accordion.Trigger",
+                "children": [
+                  "Second",
+                  {
+                    "type": "Accordion.Indicator"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "Accordion.Panel",
+            "children": [
+              {
+                "type": "Accordion.Body",
+                "children": [
+                  "Second panel"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "RadioGroup": {
+    "type": "RadioGroup",
+    "props": {
+      "defaultValue": "one",
+      "aria-label": "Options"
+    },
+    "children": [
+      {
+        "type": "Radio",
+        "props": {
+          "value": "one"
+        },
+        "children": [
+          {
+            "type": "Radio.Content",
+            "children": [
+              {
+                "type": "Radio.Control",
+                "children": [
+                  {
+                    "type": "Radio.Indicator"
+                  }
+                ]
+              },
+              {
+                "type": "Label",
+                "children": [
+                  "One"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Radio",
+        "props": {
+          "value": "two"
+        },
+        "children": [
+          {
+            "type": "Radio.Content",
+            "children": [
+              {
+                "type": "Radio.Control",
+                "children": [
+                  {
+                    "type": "Radio.Indicator"
+                  }
+                ]
+              },
+              {
+                "type": "Label",
+                "children": [
+                  "Two"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "TextField": {
+    "type": "TextField",
+    "children": [
+      {
+        "type": "Label",
+        "children": [
+          "Label"
+        ]
+      },
+      {
+        "type": "Input",
+        "props": {
+          "placeholder": "Placeholder"
+        }
+      }
+    ]
+  },
+  "Card": {
+    "type": "Card",
+    "children": [
+      {
+        "type": "Card.Header",
+        "children": [
+          {
+            "type": "Card.Title",
+            "children": [
+              "Title"
+            ]
+          },
+          {
+            "type": "Card.Description",
+            "children": [
+              "Description"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Card.Content",
+        "children": [
+          "Content"
+        ]
+      },
+      {
+        "type": "Card.Footer",
+        "children": [
+          "Footer"
+        ]
+      }
+    ]
+  },
+  "Alert": {
+    "type": "Alert",
+    "children": [
+      {
+        "type": "Alert.Indicator"
+      },
+      {
+        "type": "Alert.Content",
+        "children": [
+          {
+            "type": "Alert.Title",
+            "children": [
+              "Title"
+            ]
+          },
+          {
+            "type": "Alert.Description",
+            "children": [
+              "Description"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "Chip": {
+    "type": "Chip",
+    "children": [
+      {
+        "type": "Chip.Label",
+        "children": [
+          "Chip"
+        ]
+      }
+    ]
+  },
+  "Badge": {
+    "type": "Badge",
+    "children": [
+      {
+        "type": "Badge.Label",
+        "children": [
+          "5"
+        ]
+      }
+    ]
+  },
+  "ProgressBar": {
+    "type": "ProgressBar",
+    "props": {
+      "value": 40,
+      "aria-label": "Progress"
+    },
+    "children": [
+      {
+        "type": "Label",
+        "children": [
+          "Label"
+        ]
+      },
+      {
+        "type": "ProgressBar.Output"
+      },
+      {
+        "type": "ProgressBar.Track",
+        "children": [
+          {
+            "type": "ProgressBar.Fill"
+          }
+        ]
+      }
+    ]
+  },
+  "Slider": {
+    "type": "Slider",
+    "props": {
+      "defaultValue": 40,
+      "aria-label": "Value"
+    },
+    "children": [
+      {
+        "type": "Label",
+        "children": [
+          "Label"
+        ]
+      },
+      {
+        "type": "Slider.Output"
+      },
+      {
+        "type": "Slider.Track",
+        "children": [
+          {
+            "type": "Slider.Fill"
+          },
+          {
+            "type": "Slider.Thumb"
+          }
+        ]
+      }
+    ]
+  },
+  "Tooltip": {
+    "type": "Tooltip",
+    "children": [
+      {
+        "type": "Tooltip.Trigger",
+        "children": [
+          {
+            "type": "Button",
+            "children": [
+              "Trigger"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Tooltip.Content",
+        "children": [
+          "Tooltip"
+        ]
+      }
+    ]
+  }
+}

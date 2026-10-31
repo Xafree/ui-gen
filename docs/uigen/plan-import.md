@@ -66,6 +66,16 @@ ajoute `note` = `sampleText ignored: the component takes no content`. Un composa
 enfants ne donne aucune note. Les deux essais tiennent dans les 25 s du service. Le moteur remonte la `note` dans
 les `warnings` de l'import, une seule fois.
 
+`composition` (facultatif) est l'arbre JSON `{type, props?, children?}` du composant monté avec ses parties : `type`
+est un chemin d'export (`Select.Trigger`, `ListBox.Item`), la racine est le composant demandé, un enfant peut être une
+chaîne. Profondeur, nombre de nœuds et taille sont bornés, un `type` non exporté rend `invalidRequest`. Sans ce
+paramètre, le service applique à tout `render` du composant `<projet>/.uigen/compositions/<paquet-slug>.json` puis
+`sidecar/compositions/<paquet-slug>.json` (`@heroui/react` → `heroui-react`), composant par composant ; un fichier de
+projet invalide est refusé. Le moteur n'a rien à décider. Les `props` de la requête vont à la racine et priment ;
+`sampleText` est ignoré : la composition porte ses textes. Le nom du PNG hache les propriétés, la composition et le
+texte ; le moteur refait chaque rendu à chaque import, aucune autre empreinte n'est nécessaire. Un composant qui ne
+peint rien échoue aussitôt (`rendered nothing visible`, avec ses parties si elles sont connues).
+
 `state` ∈ `default`, `hover`, `focus`, `pressed`, `disabled` ; `theme` ∈ `light`, `dark`. `framework` ∈ `react`,
 `vue`, `svelte`, `web-components`, `unknown` ; `render` n'accepte que `react` et `web-components`
 (`frameworkUnsupported` sinon).

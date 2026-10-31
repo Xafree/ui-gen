@@ -3,7 +3,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { loadBundle, withPage } from './browser.mjs';
 import { IS_COMPONENT, cachedBundle } from './bundle.mjs';
-import { checkComposition } from './composition.mjs';
+import { checkComposition, compositionOf } from './composition.mjs';
 import { startBudget } from './deadline.mjs';
 import { insideRoot, readInstalledPackage } from './installed-package.mjs';
 import { ServiceError } from './protocol.mjs';
@@ -145,8 +145,9 @@ function findStateTarget({ captured, state }) {
   const MIN_POINTER_SIDE = 4;
   const IGNORED = new Set(['style', 'script', 'link', 'meta', 'template', 'noscript']);
   const hasBox = (element) => {
-    const { width, height } = element.getBoundingClientRect();
-    return width >= MIN_POINTER_SIDE && height >= MIN_POINTER_SIDE;
+    const { x, y, width, height } = element.getBoundingClientRect();
+    const reached = document.elementFromPoint(x + width / 2, y + height / 2);
+    return width >= MIN_POINTER_SIDE && height >= MIN_POINTER_SIDE && reached !== null && element.contains(reached);
   };
   const owner = document.querySelector(captured);
   const candidates = [owner, ...owner.querySelectorAll(INTERACTIVE)].filter((element) => element.matches(INTERACTIVE));
@@ -262,10 +263,14 @@ export async function render(params) {
   if (!RENDERABLE.includes(installed.framework)) {
     throw new ServiceError('frameworkUnsupported', `${installed.framework} packages cannot be rendered yet (supported: ${RENDERABLE.join(', ')})`);
   }
-  const composition = params.composition === undefined ? undefined : checkComposition(params.composition, params.component);
-  if (composition !== undefined && installed.tags.has(params.component)) {
+  const isElement = installed.tags.has(params.component);
+  if (params.composition !== undefined && isElement) {
     throw invalid(`"composition" applies to React components, not to the web component "${params.component}"`);
   }
+  const composition =
+    params.composition === undefined
+      ? isElement ? undefined : await compositionOf(params.dir, installed.name, params.component)
+      : checkComposition(params.composition, params.component);
   const props = params.state === 'disabled' ? { ...params.props, disabled: true, isDisabled: true } : params.props;
   const { styles, notes } = await budget.bound(findStylesheets(installed));
   const withNotes = (result, extra = []) => {

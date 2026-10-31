@@ -1,9 +1,11 @@
 import { after, afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { closeBrowser } from '../browser.mjs';
-import { checkComposition } from '../composition.mjs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { checkComposition, compositionOf } from '../composition.mjs';
 import { render } from '../render.mjs';
-import { makeSourcesProject } from './helpers/review-project.mjs';
+import { makeSourcesProject, makeTempDir } from './helpers/review-project.mjs';
 
 const LIBRARY = `import { createElement as h } from 'react';
 const Root = ({ children, tone, disabled }) => h('section', { 'data-tone': tone, 'data-off': String(Boolean(disabled)), style: { width: '40px', height: '20px' } }, children);
@@ -50,6 +52,65 @@ describe('checkComposition', () => {
   });
 });
 
+describe('compositionOf', () => {
+  const cleanups = [];
+  afterEach(async () => {
+    await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
+  });
+
+  const folders = async ({ project, shipped }) => {
+    const { dir, remove } = await makeTempDir();
+    cleanups.push(remove);
+    const own = path.join(dir, '.uigen', 'compositions');
+    const bundled = path.join(dir, 'shipped');
+    await mkdir(own, { recursive: true });
+    await mkdir(bundled, { recursive: true });
+    if (project !== undefined) await writeFile(path.join(own, 'scope-lib.json'), project);
+    if (shipped !== undefined) await writeFile(path.join(bundled, 'scope-lib.json'), shipped);
+    return { dir, bundled };
+  };
+  const of = ({ dir, bundled }, component = 'Note') => compositionOf(dir, '@scope/lib', component, bundled);
+  const tree = (text) => JSON.stringify({ Note: { type: 'Note', children: [text] } });
+
+  it('answers nothing when no file names the component', async () => {
+    assert.equal(await of(await folders({})), undefined);
+    assert.equal(await of(await folders({ shipped: tree('x') }), 'Other'), undefined);
+  });
+
+  it('reads the shipped file', async () => {
+    assert.deepEqual((await of(await folders({ shipped: tree('shipped') }))).children, ['shipped']);
+  });
+
+  it('prefers the project file', async () => {
+    assert.deepEqual((await of(await folders({ project: tree('project'), shipped: tree('shipped') }))).children, ['project']);
+  });
+
+  it('keeps the shipped composition of a component the project file does not name', async () => {
+    const found = await of(await folders({ project: JSON.stringify({ Other: { type: 'Other' } }), shipped: tree('shipped') }));
+    assert.deepEqual(found.children, ['shipped']);
+  });
+
+  for (const [title, project, message] of [
+    ['broken JSON', '{', /not valid JSON/],
+    ['a list', '[]', /must map component names/],
+    ['an invalid tree', JSON.stringify({ Note: { type: 'Other' } }), /scope-lib\.json for "Note" is refused/],
+    ['an oversized file', ' '.repeat(1024 * 1024 + 1), /at most 1048576 bytes/],
+  ]) {
+    it(`refuses a project file holding ${title}`, async () => {
+      await assert.rejects(of(await folders({ project, shipped: tree('shipped') })), (error) => error.kind === 'invalidRequest' && message.test(error.message));
+    });
+  }
+
+  it('ships only valid compositions', async () => {
+    const file = path.join(import.meta.dirname, '..', 'compositions', 'heroui-react.json');
+    const shipped = JSON.parse(await readFile(file, 'utf8'));
+    for (const [component, composition] of Object.entries(shipped)) {
+      assert.equal(checkComposition(composition, component), composition);
+    }
+    assert.ok(Object.keys(shipped).includes('Select'));
+  });
+});
+
 describe('render with a composition', () => {
   const cleanups = [];
   afterEach(async () => {
@@ -86,6 +147,14 @@ describe('render with a composition', () => {
     const first = await render(params(dir, { composition: PICK }));
     const other = await render(params(dir, { composition: { ...PICK, children: ['other'] } }));
     assert.equal(new Set([bare.png, first.png, other.png]).size, 3);
+  });
+
+  it('applies the composition of the project file to every render of the component', async () => {
+    const dir = await project();
+    await mkdir(path.join(dir, '.uigen', 'compositions'));
+    await writeFile(path.join(dir, '.uigen', 'compositions', 'pick-lib.json'), JSON.stringify({ Pick: PICK }));
+    const { snapshot } = await render(params(dir));
+    assert.match(JSON.stringify(snapshot), /inner/);
   });
 
   it('names the capture after the sample text', async () => {

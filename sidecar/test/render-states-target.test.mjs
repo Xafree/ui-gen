@@ -13,6 +13,12 @@ export const Collection = ({ disabled }) => {
     h('span', null, 'Label'),
     h('button', { disabled, onMouseEnter: () => setShown('hovered'), onMouseDown: () => setShown('down'), onFocus: () => setShown((now) => (now === 'down' ? now : 'focused')) }, disabled ? 'off' : shown));
 };
+export const Covered = () => {
+  const [shown, setShown] = useState('idle');
+  return h('label', { onMouseEnter: () => setShown('hovered'), style: { position: 'relative', display: 'block' } },
+    h('input', { type: 'checkbox', style: { position: 'absolute', inset: 0, width: '100%', height: '100%', clipPath: 'inset(50%)' } }),
+    h('span', null, shown));
+};
 export const Check = () => {
   const [shown, setShown] = useState('idle');
   return h('label', { onMouseEnter: () => setShown('hovered') },
@@ -47,6 +53,10 @@ describe('the element a forced state reaches', () => {
 
   it('hover passes over a visually hidden input', async () => {
     assert.match(await shownIn('Check', 'hover'), /hovered/);
+  });
+
+  it('hover passes over a clipped input as large as its label', async () => {
+    assert.match(await shownIn('Covered', 'hover'), /hovered/);
   });
 
   it('focus reaches a visually hidden input', async () => {
