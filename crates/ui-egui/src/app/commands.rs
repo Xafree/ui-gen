@@ -24,7 +24,21 @@ fn with_role_names(id: &str, mut params: Value) -> Value {
     if id == "uigen.importComponent"
         && let Some(map) = params.as_object_mut().filter(|m| !m.contains_key("roleNames"))
     {
-        let names: serde_json::Map<String, Value> = figcraft_engine::ROLE_NAMES.iter().map(|role| ((*role).to_string(), Value::String(i18n::tr(role).to_string()))).collect();
+        let names = [
+            ("Background", i18n::tr("Background")),
+            ("Label", i18n::tr("Label")),
+            ("Icon", i18n::tr("Icon")),
+            ("Content", i18n::tr("Content")),
+            ("Shape", i18n::tr("Shape")),
+            ("Button", i18n::tr("Button")),
+            ("Link", i18n::tr("Link")),
+            ("Input", i18n::tr("Input")),
+            ("Image", i18n::tr("Image")),
+            ("List", i18n::tr("List")),
+            ("Item", i18n::tr("Item")),
+            ("Heading", i18n::tr("Heading")),
+        ];
+        let names: serde_json::Map<String, Value> = names.into_iter().map(|(role, name)| (role.to_string(), Value::String(name.to_string()))).collect();
         map.insert("roleNames".into(), Value::Object(names));
     }
     params

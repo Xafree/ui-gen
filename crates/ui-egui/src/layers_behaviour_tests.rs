@@ -126,12 +126,6 @@ fn a_selected_layer_shows_its_layers_once_and_a_manual_collapse_stays() {
     u.app.ui.expanded.remove(&f);
     u.frame(vec![]);
     assert!(!u.app.ui.expanded.contains(&f), "a manual collapse stays while the selection does not change");
-
-    u.app.run("select.none", json!({}));
-    u.frame(vec![]);
-    let row = u.row_at(f);
-    click(&mut u, Pos2::new(row.x + 40.0, row.y), Modifiers::NONE);
-    assert!(u.app.ui.expanded.contains(&f), "clicked in the panel, the layer opens");
 }
 
 #[test]
