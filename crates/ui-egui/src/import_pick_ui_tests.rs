@@ -12,8 +12,8 @@
 use std::collections::BTreeSet;
 
 use egui::{Key, Modifiers};
-use figcraft_engine::MAX_RENDERS;
 use figcraft_engine::capture::CaptureJob;
+use figcraft_engine::{MAX_RENDERS, render_count};
 use serde_json::{Value, json};
 
 use crate::a11y::focused_name;
@@ -450,7 +450,8 @@ fn escape_on_the_surface_returns_to_the_source_libraries_page_and_starts_nothing
 
 // covers: PICK-9
 #[test]
-fn a_selection_over_the_render_limit_is_refused_on_import_naming_the_limit_and_a_small_one_goes_on() {
+fn a_component_over_the_render_limit_is_refused_on_import_naming_the_limit_and_a_small_one_goes_on() {
+    assert!(render_count(9, 4, 5, 2) > MAX_RENDERS, "9 styles x 4 sizes x 5 states x 2 themes is over the limit");
     let mut b = grid_open("over-limit", &[("Slim", 0, 0), ("Wide", 9, 4)]);
     b.click("Wide");
     let mark = b.mark();
@@ -461,31 +462,32 @@ fn a_selection_over_the_render_limit_is_refused_on_import_naming_the_limit_and_a
     b.click("Slim");
     b.click("Import");
     let calls = import_calls_since(&b, mark);
-    assert_eq!(calls.len(), 1, "a selection within the limit starts: {:?}", b.shown());
+    assert_eq!(calls.len(), 1, "a component within the limit starts: {:?}", b.shown());
     assert_eq!(calls[0]["component"], json!("Slim"));
 }
 
 // covers: PICK-9
 #[test]
-fn the_limit_counts_the_renders_of_every_ticked_component_together() {
-    let mut b = grid_open("sum", &[("Left", 4, 2), ("Right", 4, 2)]);
+fn the_limit_is_per_component_so_several_components_each_within_it_go_through_whatever_their_sum() {
+    let each = render_count(4, 4, 5, 2);
+    assert!(each <= MAX_RENDERS && 2 * each > MAX_RENDERS, "each component is within the limit and both together are over it: {each}");
+    let mut b = grid_open("per-component", &[("Left", 4, 4), ("Right", 4, 4)]);
     b.click("Left");
     b.click("Right");
     let mark = b.mark();
     b.click("Import");
-    assert_refused_for_the_limit(&mut b, mark);
-
-    b.click("Right");
-    b.click("Import");
-    let calls = import_calls_since(&b, mark);
-    assert_eq!(calls.len(), 1, "each alone is within the limit: {:?}", b.shown());
-    assert_eq!(calls[0]["component"], json!("Left"));
+    let mut calls = import_calls_since(&b, mark);
+    assert_eq!(calls.len(), 2, "both components start: {:?}", b.shown());
+    calls.sort_by_key(|call| call["component"].as_str().map(str::to_string));
+    assert_eq!((calls[0]["component"].clone(), calls[1]["component"].clone()), (json!("Left"), json!("Right")));
+    assert!(!mentions(&b.shown(), &over_limit_reason()), "no refusal: {:?}", b.shown());
 }
 
 // covers: PICK-9
 #[test]
 fn exactly_the_render_limit_is_allowed_and_one_more_state_is_not() {
-    let mut b = grid_open("boundary", &[("Grid", 4, 4)]);
+    assert_eq!(render_count(8, 4, 4, 2), MAX_RENDERS, "8 styles x 4 sizes x 4 states x 2 themes is the limit");
+    let mut b = grid_open("boundary", &[("Grid", 8, 4)]);
     b.click("Grid");
     let mark = b.mark();
     b.click("Import");
@@ -494,8 +496,23 @@ fn exactly_the_render_limit_is_allowed_and_one_more_state_is_not() {
     b.click("Hover");
     b.click("Import");
     let calls = import_calls_since(&b, mark);
-    assert_eq!(calls.len(), 1, "4 styles x 4 sizes x 4 states x 2 themes is {MAX_RENDERS}: {:?}", b.shown());
+    assert_eq!(calls.len(), 1, "a component of exactly {MAX_RENDERS} renders starts: {:?}", b.shown());
     assert_eq!(calls[0]["component"], json!("Grid"));
+}
+
+// covers: PICK-9
+#[test]
+fn a_component_of_seven_styles_and_three_sizes_is_accepted_and_every_size_is_imported() {
+    assert!(render_count(7, 3, 5, 2) <= MAX_RENDERS, "7 styles x 3 sizes x 5 states x 2 themes is within the limit");
+    let mut b = grid_open("heroui-shape", &[("Hero", 7, 3)]);
+    b.click("Hero");
+    let mark = b.mark();
+    b.click("Import");
+    let calls = import_calls_since(&b, mark);
+    assert_eq!(calls.len(), 1, "the component starts: {:?}", b.shown());
+    assert_eq!(sorted(&calls[0]["sizes"]), strings(&["size-0", "size-1", "size-2"]), "every size reaches the import");
+    assert_eq!(sorted(&calls[0]["styles"]).len(), 7, "every style too: {}", calls[0]);
+    assert_eq!(calls[0]["sizeProp"], json!("size"));
 }
 
 // covers: PICK-10
