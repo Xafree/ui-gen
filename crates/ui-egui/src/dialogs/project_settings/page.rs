@@ -11,15 +11,15 @@ use crate::a11y;
 use crate::i18n::{tr, trf, trn};
 use crate::theme::{Tokens, regular, semibold};
 
-const MAX_WIDTH: f32 = 1120.0;
-const BAR_H: f32 = 52.0;
-const CARD_RADIUS: u8 = 14;
+pub(in crate::dialogs) const MAX_WIDTH: f32 = 1120.0;
+pub(in crate::dialogs) const BAR_H: f32 = 52.0;
+pub(in crate::dialogs) const CARD_RADIUS: u8 = 14;
 const ROW_PAD_X: f32 = 16.0;
 const ROW_PAD_Y: f32 = 12.0;
 const ACTIONS_H: f32 = 32.0;
 const TAG_ROW_H: f32 = 23.0;
 const HEAD_H: f32 = 42.0;
-const BODY_LINE: f32 = 1.45;
+pub(in crate::dialogs) const BODY_LINE: f32 = 1.45;
 const READY_TEXT_BASIS: f32 = 240.0;
 const MONO_LINE: f32 = 14.0;
 const EXAMPLES_LINE: f32 = 19.0;
@@ -29,18 +29,18 @@ const LOG_OK: Color32 = Color32::from_rgb(0x7B, 0xF1, 0xA8);
 const EXAMPLES: [&str; 2] = ["npm install @heroui/react", "npm i @mui/material @emotion/react @emotion/styled"];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Look {
+pub(in crate::dialogs) enum Look {
     Secondary,
     Primary,
     Ghost,
     Icon,
 }
 
-fn mono(size: f32) -> FontId {
+pub(in crate::dialogs) fn mono(size: f32) -> FontId {
     FontId::monospace(size)
 }
 
-fn text_width(ui: &Ui, text: &str, font: FontId) -> f32 {
+pub(in crate::dialogs) fn text_width(ui: &Ui, text: &str, font: FontId) -> f32 {
     ui.painter().layout_no_wrap(text.to_owned(), font, Color32::WHITE).size().x
 }
 
@@ -55,7 +55,7 @@ fn focus_track_id() -> egui::Id {
     egui::Id::unique("project_page_focus")
 }
 
-fn track_keyboard_focus(ui: &Ui) {
+pub(in crate::dialogs) fn track_keyboard_focus(ui: &Ui) {
     let ctx = ui.ctx();
     let pass = ctx.cumulative_pass_nr();
     let focused = ctx.memory(|m| m.focused());
@@ -75,18 +75,18 @@ fn track_keyboard_focus(ui: &Ui) {
     });
 }
 
-fn keyboard_focus(ui: &Ui) -> bool {
+pub(in crate::dialogs) fn keyboard_focus(ui: &Ui) -> bool {
     ui.data(|data| data.get_temp::<FocusTrack>(focus_track_id()).is_some_and(|track| track.keyboard))
 }
 
-fn focus_ring(ui: &Ui, t: &Tokens, rect: Rect, radius: u8) {
+pub(in crate::dialogs) fn focus_ring(ui: &Ui, t: &Tokens, rect: Rect, radius: u8) {
     if !keyboard_focus(ui) {
         return;
     }
     ui.painter().rect_stroke(rect.expand(2.0), CornerRadius::same(radius + 2), Stroke::new(2.0, t.accent_text), StrokeKind::Outside);
 }
 
-fn button_at(ui: &mut Ui, t: &Tokens, rect: Rect, label: &str, look: Look, enabled: bool) -> Response {
+pub(in crate::dialogs) fn button_at(ui: &mut Ui, t: &Tokens, rect: Rect, label: &str, look: Look, enabled: bool) -> Response {
     let resp = ui.interact(
         rect,
         ui.scope_id().with(("page_button", label, rect.min.x as i32, rect.min.y as i32)),
@@ -122,23 +122,23 @@ fn button_at(ui: &mut Ui, t: &Tokens, rect: Rect, label: &str, look: Look, enabl
     resp
 }
 
-fn button(ui: &mut Ui, t: &Tokens, label: &str, look: Look, height: f32, pad: f32, enabled: bool) -> Response {
+pub(in crate::dialogs) fn button(ui: &mut Ui, t: &Tokens, label: &str, look: Look, height: f32, pad: f32, enabled: bool) -> Response {
     let width = text_width(ui, label, regular(13.5)) + 2.0 * pad;
     let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
     button_at(ui, t, rect, label, look, enabled)
 }
 
-fn tag_width(ui: &Ui, text: &str) -> f32 {
+pub(in crate::dialogs) fn tag_width(ui: &Ui, text: &str) -> f32 {
     text_width(ui, text, regular(11.5)) + 16.0
 }
 
-fn tag_at(ui: &Ui, left: f32, centre_y: f32, text: &str, bg: Color32, ink: Color32) {
+pub(in crate::dialogs) fn tag_at(ui: &Ui, left: f32, centre_y: f32, text: &str, bg: Color32, ink: Color32) {
     let rect = Rect::from_min_size(pos2(left, centre_y - 11.0), vec2(tag_width(ui, text), 22.0));
     ui.painter().rect_filled(rect, CornerRadius::same(11), bg);
     ui.painter().text(rect.center(), Align2::CENTER_CENTER, text, regular(11.5), ink);
 }
 
-fn card_frame(t: &Tokens, padding: i8) -> Frame {
+pub(in crate::dialogs) fn card_frame(t: &Tokens, padding: i8) -> Frame {
     Frame::new().fill(t.bg).stroke(Stroke::new(1.0, t.border)).corner_radius(CornerRadius::same(CARD_RADIUS)).inner_margin(Margin::same(padding))
 }
 

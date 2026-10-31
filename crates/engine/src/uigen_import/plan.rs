@@ -6,7 +6,7 @@ use serde_json::{Map, Value, json};
 use super::Request;
 use crate::capture::{CaptureError, CaptureErrorKind};
 
-pub const MAX_RENDERS: usize = 128;
+pub const MAX_RENDERS: usize = 256;
 pub(super) const MAX_PROPS: usize = 64;
 pub(super) const MAX_VALUES: usize = 64;
 pub(super) const MAX_VALUE_CHARS: usize = 64;

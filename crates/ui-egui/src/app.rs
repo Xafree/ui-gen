@@ -264,8 +264,12 @@ impl FigApp {
             self.observe_ime(&ctx, false);
             return;
         }
-        if self.ui.project_settings.is_some() {
-            dialogs::project_settings::show(self, ui);
+        if self.ui.import_window.is_some() || self.ui.project_settings.is_some() {
+            if self.ui.import_window.is_some() {
+                dialogs::import_component::show(self, ui);
+            } else {
+                dialogs::project_settings::show(self, ui);
+            }
             dialogs::keys(self, &ctx);
             dialogs::show(self, &ctx);
             updates_ui::show(self, &ctx);

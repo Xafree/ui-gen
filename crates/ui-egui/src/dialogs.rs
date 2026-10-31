@@ -228,7 +228,6 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
     crate::pending_open::pending_opens(app, ctx);
     crate::import_report::show(app, ctx);
     lit_export::show(app, ctx);
-    import_component::show(app, ctx);
     crate::missing_fonts::show(app, ctx);
     playground_save::show(app, ctx);
     playground_code::show(app, ctx);

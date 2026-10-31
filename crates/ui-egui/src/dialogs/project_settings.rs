@@ -10,7 +10,7 @@ use figcraft_project::ProjectError;
 use figcraft_project::npm;
 use serde_json::json;
 
-mod page;
+pub(in crate::dialogs) mod page;
 
 use super::project_themes::{self, ThemeAct, Themes};
 use crate::FigApp;

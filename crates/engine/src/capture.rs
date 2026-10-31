@@ -72,7 +72,7 @@ pub struct CaptureEvent {
     pub outcome: CaptureOutcome,
 }
 
-const MAX_FINISHED_JOBS: usize = 100;
+const MAX_FINISHED_JOBS: usize = 2 * (crate::uigen_import::MAX_RENDERS + 1);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JobState {
