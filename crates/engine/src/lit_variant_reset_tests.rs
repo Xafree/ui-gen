@@ -117,3 +117,35 @@ fn a_component_with_a_focus_state_draws_its_focus_itself() {
     let def = compact(&definition(&mut s, vec![rest, focus]));
     assert!(def.contains(":host(:focus-visible) { outline: none; }"), "the browser ring would cover the design's: {def}");
 }
+
+fn rectangle(s: &mut Session, parent: NodeId, name: &str, fill: &str) {
+    ex(s, "shape.rectangle", json!({"x": 4, "y": 4, "width": 20, "height": 20, "parent": parent, "props": {"name": name, "fill": fill}}));
+}
+
+#[test]
+fn a_layer_only_some_variants_have_is_in_the_markup_and_shows_only_in_them() {
+    let mut s = Session::new();
+    let label = || json!({"name": "Label", "fill": "#111111"});
+    let rest = variant(&mut s, "State=Default", 0.0, json!({"fill": "#cc0000"}), label());
+    let f = idv(&ex(&mut s, "frame.create", json!({"x": 200, "y": 0, "width": 100, "height": 40, "name": "State=Pressed"})));
+    rectangle(&mut s, f, "Ripple", "#ffffff");
+    ex(&mut s, "text.create", json!({"text": "Go", "x": 8, "y": 8, "parent": f, "props": label()}));
+    let pressed = idv(&ex(&mut s, "component.create", json!({"ids": [f]})));
+    let def = definition(&mut s, vec![rest, pressed]);
+    let text = compact(&def);
+    assert!(text.contains("<div class=\"ripple\"></div>"), "the layer has an element: {def}");
+    assert!(body_of(&def, ".ripple").contains("display: none;"), "hidden by default: {def}");
+    assert!(body_of(&def, ":host(:active) .ripple").contains("display: revert;"), "shown while pressed: {def}");
+    assert!(text.find("class=\"ripple\"") < text.find("class=\"label\""), "it keeps its place under the label: {def}");
+}
+
+#[test]
+fn a_variant_without_a_layer_of_the_default_variant_hides_it() {
+    let mut s = Session::new();
+    let f = idv(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 100, "height": 40, "name": "Icon=on"})));
+    rectangle(&mut s, f, "Glyph", "#ffffff");
+    let on = idv(&ex(&mut s, "component.create", json!({"ids": [f]})));
+    let off = variant(&mut s, "Icon=off", 200.0, json!({"fill": "#cc0000"}), json!({"name": "Label", "fill": "#111111"}));
+    let def = definition(&mut s, vec![on, off]);
+    assert!(body_of(&def, ":host([icon=\"off\"]) .glyph").contains("display: none;"), "{def}");
+}

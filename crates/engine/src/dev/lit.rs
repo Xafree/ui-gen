@@ -781,6 +781,9 @@ fn state_rank(kind: StateKind) -> u8 {
     }
 }
 
+/// How a layer that only some variants have stays out of the others.
+pub(crate) const HIDDEN: &str = "display: none;";
+
 fn declared_property(line: &str) -> Option<&str> {
     line.split_once(':').map(|(property, _)| property)
 }
@@ -872,7 +875,21 @@ pub(crate) fn variant_rules(doc: &Document, c: &Component, main: &[Rule], pass: 
         let reference = at_rest.map(pass);
         let reference: &[Rule] = reference.as_deref().unwrap_or(main);
         let stacked = state_rank(kind) > 0;
-        for (path, _, decls) in pass(*v) {
+        let own = pass(*v);
+        let mut gone: Vec<&str> = Vec::new();
+        for (path, class, _) in main.iter().filter(|(path, ..)| !own.iter().any(|(p, ..)| p == path)) {
+            if gone.iter().any(|parent| path.strip_prefix(parent).is_some_and(|rest| rest.starts_with('/'))) {
+                continue;
+            }
+            gone.push(path);
+            let shown = reference.iter().find(|(p, ..)| p == path).is_some_and(|(_, _, decls)| !decls.lines().any(|l| l == HIDDEN));
+            let earlier = touched.entry((attributes(pairs), path.clone())).or_default();
+            if (shown || (stacked && earlier.iter().any(|e| e == "display"))) && !written.contains(&(selector.clone(), class.clone())) {
+                written.push((selector.clone(), class.clone()));
+                out.push_str(&format!("{selector} .{class} {{\n  {HIDDEN}\n}}\n"));
+            }
+        }
+        for (path, _, decls) in own {
             let Some((_, class, base)) = main.iter().find(|(p, _, _)| *p == path) else { continue };
             let base = reference.iter().find(|(p, _, _)| *p == path).map_or(base, |(_, _, d)| d);
             let added_for_motion = motion.base.get(&path).map_or("", String::as_str);
@@ -1054,14 +1071,14 @@ pub fn definition(doc: &Document, c: &Component, opts: &LitOptions) -> LitOutput
         out.push('\n');
     }
     out.push_str(&format!("  static styles = css`\n    :host {{ display: {display}; }}\n    * {{ box-sizing: border-box; margin: 0; }}\n"));
+    for line in template_text(&css).lines() {
+        out.push_str(&if line.is_empty() { "\n".to_string() } else { format!("    {line}\n") });
+    }
     if lay.state.as_ref().is_some_and(|state| state.has(StateKind::FocusVisible)) {
         out.push_str(
             "    :host(:focus-visible) { outline: none; }
 ",
         );
-    }
-    for line in template_text(&css).lines() {
-        out.push_str(&if line.is_empty() { "\n".to_string() } else { format!("    {line}\n") });
     }
     out.push_str("  `;\n\n");
     out.push_str(&focus_methods(&lay));

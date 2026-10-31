@@ -138,6 +138,17 @@ pub(crate) struct Markup<'c, 'a> {
     pub ids: Vec<(NodeId, String)>,
     /// Lit: declarations added to the rule of the layer at a path (transitions, effects).
     pub lit_motion: BTreeMap<String, String>,
+    /// Lit: the layers only some variants have, by the path of their parent.
+    pub lit_guests: BTreeMap<String, Vec<Guest>>,
+}
+
+/// A layer the default variant lacks and another variant has: an element all the same, hidden until that variant.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Guest {
+    pub id: NodeId,
+    pub parent: NodeId,
+    pub index: usize,
+    pub path: String,
 }
 
 /// How `n` sits in its parent: in the flex flow, or placed at its position.
@@ -192,6 +203,7 @@ impl<'c, 'a> Markup<'c, 'a> {
             lit_plain: false,
             ids: Vec::new(),
             lit_motion: BTreeMap::new(),
+            lit_guests: BTreeMap::new(),
         }
     }
 
@@ -255,6 +267,8 @@ impl<'c, 'a> Markup<'c, 'a> {
             Some(extra) => merge_decls(&decls, extra),
             None => decls,
         };
+        let is_guest = self.lit_guests.values().flatten().any(|guest| guest.path == path);
+        let decls = if is_guest { merge_decls(&decls, crate::lit::HIDDEN) } else { decls };
         self.styles.push_str(&format!(".{class} {{\n"));
         for line in decls.lines() {
             self.styles.push_str(&format!("  {line}\n"));
@@ -471,11 +485,19 @@ impl<'c, 'a> Markup<'c, 'a> {
                     };
                     let mut seen: Vec<&str> = Vec::new();
                     // Bottom layer first: later elements paint on top, like the layer order.
-                    for k in kids {
+                    let guests = self.lit_guests.get(path).cloned().unwrap_or_default();
+                    let mut waiting = guests.iter().peekable();
+                    for (index, k) in kids.into_iter().enumerate() {
+                        while let Some(guest) = waiting.next_if(|guest| guest.index <= index) {
+                            self.node(guest.id, doc.node(guest.parent), inner, &guest.path);
+                        }
                         let Some(kn) = doc.node(k) else { continue };
                         let count = seen.iter().filter(|s| **s == kn.name).count();
                         seen.push(&kn.name);
                         self.node(k, Some(n), inner, &format!("{path}/{}#{count}", kn.name));
+                    }
+                    for guest in waiting {
+                        self.node(guest.id, doc.node(guest.parent), inner, &guest.path);
                     }
                     match slot {
                         Some(_) if vue || lit => self.markup.push_str(&format!("{p1}</slot>\n")),

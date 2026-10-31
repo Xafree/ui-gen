@@ -14,7 +14,7 @@ use figcraft_doc::{Document, NodeId, NodeKind, PropDef};
 use serde_json::{Value, json};
 
 use crate::cmd::CommandSpec;
-use crate::codegen::{CodeLang, Ctx, Markup, Tokens, arkui, class_name, compose, indent, literal, swift};
+use crate::codegen::{CodeLang, Ctx, Guest, Markup, Tokens, arkui, class_name, compose, indent, literal, swift};
 use crate::components::{prop_default_value, slot_edited, slots_of, variant_options, variant_props, variant_set};
 use crate::lit::LitOptions;
 use crate::params::{id_of, string, targets};
@@ -807,6 +807,63 @@ pub fn definition(doc: &Document, c: &Component, lang: CodeLang) -> String {
     }
 }
 
+/// The layer at `wanted` under `id`, whose path is `path`: (layer, parent, its index among its siblings).
+fn layer_at(ctx: &Ctx, id: NodeId, path: &str, wanted: &str) -> Option<(NodeId, NodeId, usize)> {
+    let n = ctx.doc.node(id)?;
+    let mut seen: Vec<&str> = Vec::new();
+    for (index, k) in ctx.kids(n).into_iter().enumerate() {
+        let Some(kn) = ctx.doc.node(k) else { continue };
+        let count = seen.iter().filter(|s| **s == kn.name).count();
+        seen.push(&kn.name);
+        let child = format!("{path}/{}#{count}", kn.name);
+        if child == wanted {
+            return Some((k, id, index));
+        }
+        if wanted.strip_prefix(&child).is_some_and(|rest| rest.starts_with('/')) {
+            return layer_at(ctx, k, &child, wanted);
+        }
+    }
+    None
+}
+
+/// The topmost layers of the other variants that the default variant, whose rules are `main`, has no layer for.
+fn guest_layers(
+    doc: &Document,
+    c: &Component,
+    main: &[crate::lit::Rule],
+    pass: &dyn Fn(NodeId) -> Vec<crate::lit::Rule>,
+) -> BTreeMap<String, Vec<Guest>> {
+    let mut guests: BTreeMap<String, Vec<Guest>> = BTreeMap::new();
+    let mut known: Vec<String> = main.iter().map(|(path, ..)| path.clone()).collect();
+    let others = c.set.and_then(|s| doc.node(s)).map(|s| s.children.clone()).unwrap_or_default();
+    for v in others.into_iter().filter(|v| *v != c.comp && is_component(doc, *v)) {
+        let ctx = Ctx { doc, root: v, comp: Some(c), base: 0 };
+        for (path, ..) in pass(v) {
+            if known.contains(&path) {
+                continue;
+            }
+            known.push(path.clone());
+            if let Some((id, parent, index)) = layer_at(&ctx, v, "", &path) {
+                let parent_path = parent_path_of(doc, &path, id);
+                let inside_guest =
+                    guests.values().flatten().any(|guest| parent_path == guest.path || parent_path.starts_with(&format!("{}/", guest.path)));
+                if !inside_guest {
+                    let list = guests.entry(parent_path).or_default();
+                    list.push(Guest { id, parent, index, path });
+                    list.sort_by_key(|guest| guest.index);
+                }
+            }
+        }
+    }
+    guests
+}
+
+/// The path of the parent of the layer `id` at `path`: a layer name may hold a slash, so the name is taken off whole.
+fn parent_path_of(doc: &Document, path: &str, id: NodeId) -> String {
+    let name = doc.node(id).map_or("", |n| n.name.as_str());
+    path.rfind(&format!("/{name}#")).and_then(|at| path.get(..at)).unwrap_or_default().to_string()
+}
+
 /// `data-*` attribute names for variant parameters, unique among them (in order).
 fn data_attrs(variants: &[&Param]) -> Vec<String> {
     let mut used = Vec::new();
@@ -841,8 +898,9 @@ pub(crate) fn web_tokens(doc: &Document, c: &Component, lang: CodeLang, lit: &Li
         variant_tokens.borrow_mut().absorb(tokens);
         rules
     };
-    let main = |motion: &BTreeMap<String, String>| {
+    let main = |motion: &BTreeMap<String, String>, guests: &BTreeMap<String, Vec<Guest>>| {
         let mut m = Markup::new(&ctx, lang);
+        m.lit_guests.clone_from(guests);
         m.use_lit(lit);
         m.root_class = Some(root_class.clone());
         m.lit_motion.clone_from(motion);
@@ -862,14 +920,15 @@ pub(crate) fn web_tokens(doc: &Document, c: &Component, lang: CodeLang, lit: &Li
         m.node(c.comp, None, start, "");
         m
     };
-    let mut m = main(&BTreeMap::new());
+    let mut m = main(&BTreeMap::new(), &BTreeMap::new());
     let mut motion = crate::lit::Motion::default();
     // Other variants: what differs from this one, layer by layer.
     let mut variant_rules = String::new();
     if lit_lang {
         motion = crate::lit::plan_motion(doc, c, lit, &m.rules, &m.ids, &pass);
-        if !motion.base.is_empty() {
-            m = main(&motion.base);
+        let guests = guest_layers(doc, c, &m.rules, &pass);
+        if !motion.base.is_empty() || !guests.is_empty() {
+            m = main(&motion.base, &guests);
         }
         for note in &motion.notes {
             m.tokens.note(note.code, note.layer.as_deref(), &note.message);
