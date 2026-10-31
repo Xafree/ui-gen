@@ -22,7 +22,6 @@ const TAGGED_ROW_H: f32 = 45.0;
 const CHIP_H: f32 = 28.0;
 const CHIP_GAP: f32 = 6.0;
 const BOX: f32 = 16.0;
-const UNTICKED_BORDER: egui::Color32 = egui::Color32::from_rgb(0x76, 0x76, 0x76);
 
 pub(super) struct RowView {
     pub package: String,
@@ -326,7 +325,7 @@ fn draw_box(ui: &Ui, t: &Tokens, rect: Rect, on: bool, free: bool) {
         painter.line_segment([c + vec2(-4.0, 0.0), c + vec2(-1.0, 3.0)], stroke);
         painter.line_segment([c + vec2(-1.0, 3.0), c + vec2(4.5, -3.5)], stroke);
     } else {
-        let (fill, ink) = if free { (egui::Color32::WHITE, UNTICKED_BORDER) } else { (egui::Color32::TRANSPARENT, t.text_tertiary) };
+        let (fill, ink) = if free { (t.box_off, t.box_off_border) } else { (egui::Color32::TRANSPARENT, t.text_tertiary) };
         painter.rect_filled(rect, CornerRadius::same(3), fill);
         painter.rect_stroke(rect, CornerRadius::same(3), Stroke::new(1.0, ink), StrokeKind::Inside);
     }

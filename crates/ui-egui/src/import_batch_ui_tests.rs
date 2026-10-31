@@ -235,3 +235,12 @@ fn the_crumb_the_steps_the_cards_and_the_tag_reach_a_screen_reader_and_the_searc
     let tag = format!("Already taken in {PACKAGE}");
     assert!(rows.iter().any(|n| n.description() == Some(tag.as_str())), "the row says its tag");
 }
+
+#[test]
+fn the_surfaces_take_their_colours_from_the_theme() {
+    for (file, source) in [("view", include_str!("dialogs/import_component/view.rs")), ("page", include_str!("dialogs/project_settings/page.rs"))] {
+        assert!(!source.contains("Color32::from_rgb"), "{file} has a hard-coded colour");
+    }
+    assert!(!include_str!("dialogs/import_component/view.rs").contains("Color32::WHITE"), "the unticked box has a token");
+    assert!(!include_str!("dialogs/project_settings/page.rs").contains("line(ui, &format!(\"$ {}\", run.command), Color32::WHITE)"));
+}

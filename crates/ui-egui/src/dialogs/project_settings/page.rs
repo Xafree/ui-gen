@@ -24,8 +24,6 @@ const READY_TEXT_BASIS: f32 = 240.0;
 const MONO_LINE: f32 = 14.0;
 const EXAMPLES_LINE: f32 = 19.0;
 const COLUMNS: usize = 5;
-const LOG_MUTED: Color32 = Color32::from_rgb(0xA3, 0xA3, 0xA3);
-const LOG_OK: Color32 = Color32::from_rgb(0x7B, 0xF1, 0xA8);
 const EXAMPLES: [&str; 2] = ["npm install @heroui/react", "npm i @mui/material @emotion/react @emotion/styled"];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -309,15 +307,15 @@ fn log_block(ui: &mut Ui, t: &Tokens, run: &super::LastRun) {
         let line = |ui: &mut Ui, text: &str, ink: Color32| {
             ui.add(Label::new(RichText::new(text).font(mono(12.5)).color(ink).line_height(Some(MONO_LINE))).wrap());
         };
-        line(ui, &format!("$ {}", run.command), Color32::WHITE);
-        line(ui, tr("install scripts skipped"), LOG_MUTED);
+        line(ui, &format!("$ {}", run.command), t.log_text);
+        line(ui, tr("install scripts skipped"), t.log_muted);
         match &run.state {
-            RunState::Running => line(ui, tr("Installing…"), LOG_MUTED),
+            RunState::Running => line(ui, tr("Installing…"), t.log_muted),
             RunState::Done => {
                 let message = trn("UIGEN: {n} libraries installed in this project", run.packages.len(), &[]);
-                line(ui, &message, LOG_OK);
+                line(ui, &message, t.log_ok);
             }
-            RunState::Failed(cause) => line(ui, &failure_text("", &run.packages.join(", "), cause), Tokens::dark().danger),
+            RunState::Failed(cause) => line(ui, &failure_text("", &run.packages.join(", "), cause), t.log_danger),
         }
     });
 }
