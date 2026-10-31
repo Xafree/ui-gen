@@ -249,3 +249,11 @@ fn a_text_warning_starts_with_the_start_of_the_text() {
     assert!(mentions(&run.warnings, &name, "color"), "{:?}", run.warnings);
     assert_eq!(run.child(0).fills.len(), 1, "an unreadable colour leaves the default fill");
 }
+
+#[test]
+fn an_imported_text_hugs_the_width_the_browser_snapped_it_to() {
+    figcraft_text::scan_system_fonts();
+    let natural = |text: &TextData| figcraft_text::layout_cached(text, None, None).width;
+    let (text, _) = styled(json!({ "fontFamily": "Arial", "fontSize": "13px" }));
+    assert!((natural(&text) + text.hug_nudge - 50.0).abs() < 1e-9, "{} {}", natural(&text), text.hug_nudge);
+}

@@ -22,3 +22,9 @@ pub(super) fn nudge(run: &TextRun, data: &TextData) -> f64 {
     let wanted = baseline.round() - top.round() - natural;
     if wanted.is_finite() && wanted.abs() <= data.style.font_size { wanted } else { 0.0 }
 }
+
+/// What `data`, its style final, must add to its natural width to hug the `width` the browser snapped its box to; nothing for a width out of reason.
+pub(super) fn hug_nudge(width: f64, data: &TextData) -> f64 {
+    let wanted = width - figcraft_text::layout_cached(data, None, None).width;
+    if wanted.is_finite() && wanted.abs() <= data.style.font_size { wanted } else { 0.0 }
+}

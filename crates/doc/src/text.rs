@@ -438,6 +438,10 @@ pub struct TextData {
     /// rounded font metrics and floored half leading differ from the natural line.
     #[serde(skip_serializing_if = "crate::node::is_default")]
     pub baseline_nudge: f64,
+    /// Px added to the natural width of a width-hugging box, which then rounds instead of growing to hold the last
+    /// fraction: an imported text keeps the width its browser snapped it to, so its frame leaves it in place.
+    #[serde(skip_serializing_if = "crate::node::is_default")]
+    pub hug_nudge: f64,
     /// Max lines when truncating, or before an auto-height text ends in an ellipsis (0 = as many
     /// as fit).
     #[serde(skip_serializing_if = "crate::node::is_default")]
