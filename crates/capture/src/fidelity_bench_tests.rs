@@ -2,7 +2,7 @@
 //! list of components into an existing library project and prints `uigen.compare` for every variant.
 //! Parity % = 100 × (1 − differing pixels / pixels of the larger raster), all pixels of the variant, text
 //! included: differing = `shapes.differing` + `text.pixelPercent` of the pixels inside the text boxes.
-//! Shapes % is the same outside the text boxes only, the figure Compare judges.
+//! Shapes % is the same outside the text boxes only, the figure Compare judges. Every case runs in light and dark.
 //! `#[ignore]`d: it needs Node, Chromium and a project whose `.uigen/sources` holds the packages.
 //!
 //! ```text
@@ -30,6 +30,7 @@ const IMPORT: &str = "uigen.importComponent";
 const COMPARE: &str = "uigen.compare";
 const JOB_LIMIT: Duration = Duration::from_secs(600);
 const GAP: u32 = 8;
+const THEMES: [&str; 2] = ["light", "dark"];
 
 struct Bench {
     session: Session,
@@ -50,7 +51,7 @@ fn wanted(case: &Value) -> bool {
 
 fn import_params(case: &Value) -> Value {
     let mut params =
-        json!({"package": case["package"], "component": case["component"], "states": case["states"], "animations": false, "themes": ["light"]});
+        json!({"package": case["package"], "component": case["component"], "states": case["states"], "animations": false, "themes": THEMES});
     for key in ["styles", "sizes"] {
         if case[key].as_array().is_some_and(|values| !values.is_empty()) {
             params[key] = case[key].clone();
@@ -99,11 +100,11 @@ fn safe_name(text: &str) -> String {
     text.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
 }
 
-fn save_sheet(doc: &Document, root: &str, out: &Path, title: &str, variant: NodeId) -> Result<(), String> {
+fn save_sheet(doc: &Document, root: &str, out: &Path, (title, theme): (&str, &str), variant: NodeId) -> Result<(), String> {
     let reference = figcraft_engine::reference_of(doc, variant).ok_or("no reference")?;
-    let png = reference.themes.get("light").and_then(|theme| theme.png.clone()).ok_or("no original png")?;
+    let png = reference.themes.get(theme).and_then(|kept| kept.png.clone()).ok_or("no original png")?;
     let original = original_raster(root, &png)?;
-    let library = library_raster(doc, variant, false)?;
+    let library = library_raster(doc, variant, theme == "dark")?;
     let difference = difference_image(&original, &library);
     std::fs::create_dir_all(out).map_err(|error| error.to_string())?;
     side_by_side(&[&original, &library, &difference]).save(out.join(format!("{}.png", safe_name(title)))).map_err(|error| error.to_string())
@@ -120,19 +121,24 @@ impl Bench {
             Ok(imported) => imported,
             Err(message) => return println!("{title}: IMPORT FAILED: {}", message.lines().next().unwrap_or_default()),
         };
-        let compared = match self.session.execute(COMPARE, &json!({"set": imported["set"], "theme": "light"})) {
-            Ok(compared) => compared,
-            Err(error) => return println!("{title}: COMPARE FAILED: {error}"),
-        };
-        for row in compared["rows"].as_array().into_iter().flatten() {
-            self.print_row(&title, &imported, row);
+        for theme in THEMES {
+            let compared = match self.session.execute(COMPARE, &json!({"set": imported["set"], "theme": theme})) {
+                Ok(compared) => compared,
+                Err(error) => {
+                    println!("{title} {theme}: COMPARE FAILED: {error}");
+                    continue;
+                }
+            };
+            for row in compared["rows"].as_array().into_iter().flatten() {
+                self.print_row((&title, theme), &imported, row);
+            }
         }
         for warning in imported["warnings"].as_array().into_iter().flatten() {
             println!("  note {}", warning.as_str().unwrap_or_default());
         }
     }
 
-    fn print_row(&mut self, title: &str, imported: &Value, row: &Value) {
+    fn print_row(&mut self, (title, theme): (&str, &str), imported: &Value, row: &Value) {
         let variant = row["variant"].as_str().unwrap_or_default();
         let size = |side: &Value| format!("{}x{}", side["width"], side["height"]);
         match row["shapes"]["percent"].as_f64() {
@@ -140,7 +146,7 @@ impl Bench {
                 let score = parity(row);
                 self.scores.push(score);
                 println!(
-                    "{score:7.2} %  {title} [{variant}] shapes={:.2}% status={} original={} library={} text={} textPixels={:.2}%",
+                    "{score:7.2} %  {title} {theme} [{variant}] shapes={:.2}% status={} original={} library={} text={} textPixels={:.2}%",
                     100.0 - percent,
                     row["status"].as_str().unwrap_or_default(),
                     size(&row["original"]),
@@ -149,12 +155,14 @@ impl Bench {
                     row["text"]["pixelPercent"].as_f64().unwrap_or(f64::NAN),
                 );
             }
-            None => println!("    n/a    {title} [{variant}] status={} reason={}", row["status"].as_str().unwrap_or_default(), row["reason"]),
+            None => println!("    n/a    {title} {theme} [{variant}] status={} reason={}", row["status"].as_str().unwrap_or_default(), row["reason"]),
         }
         if let Some(out) = &self.out {
             let doc = self.session.docs[self.session.active].doc.as_ref();
             let id = figcraft_engine::params::id_of(&imported["set"]).and_then(|set| variant_id(doc, set, variant));
-            let saved = id.ok_or_else(|| "no variant".to_string()).and_then(|id| save_sheet(doc, &self.root, out, &format!("{title} {variant}"), id));
+            let saved = id
+                .ok_or_else(|| "no variant".to_string())
+                .and_then(|id| save_sheet(doc, &self.root, out, (&format!("{title} {theme} {variant}"), theme), id));
             if let Err(error) = saved {
                 println!("  no sheet for {variant}: {error}");
             }
