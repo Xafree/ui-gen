@@ -157,7 +157,9 @@ pub fn left_panel(app: &mut FigApp, ui: &mut Ui) {
         if let (Some(new), _) = crate::widgets::rename_field(ui, Id::unique("filename"), &name, nr, semibold(13.0), start) {
             app.run("file.rename", json!({"name": new}));
         }
-        ui.painter().text(pos2(head.min.x + 16.0, head.min.y + 46.0), Align2::LEFT_CENTER, tr("Drafts"), regular(11.0), t.text_secondary);
+        let place = file_place(&app.session).unwrap_or_else(|| tr("Drafts").to_string());
+        let place = crate::widgets::elide_font(ui, &place, (head.width() - 64.0).max(0.0), regular(11.0));
+        ui.painter().text(pos2(head.min.x + 16.0, head.min.y + 46.0), Align2::LEFT_CENTER, place, regular(11.0), t.text_secondary);
     }
     let hr = Rect::from_center_size(pos2(head.max.x - 24.0, head.min.y + 24.0), vec2(24.0, 24.0));
     let hresp = ui.interact(hr, ui.scope_id().with("hideui"), Sense::click()).tip(tr("Collapse panel"));
@@ -704,6 +706,21 @@ fn set_expanded_deep(doc: &Document, id: NodeId, open: bool, expanded: &mut BTre
     }
 }
 
+/// The project the current file belongs to, if any.
+pub(crate) fn file_place(session: &figcraft_engine::Session) -> Option<String> {
+    session.project().map(|project| project.config.name.clone())
+}
+
+/// What a variant's row says: the values that tell it from the other variants of its set, whole ones first.
+pub(crate) fn variant_row_label(doc: &Document, n: &figcraft_doc::Node) -> Option<String> {
+    let set = figcraft_engine::components::variant_set(doc, n.id)?;
+    let values = figcraft_engine::components::variant_props(&n.name);
+    let axes = figcraft_engine::components::variant_options(doc, set);
+    let differing: Vec<&str> =
+        axes.iter().filter(|(_, options)| options.len() > 1).filter_map(|(axis, _)| values.get(axis).map(String::as_str)).collect();
+    (!differing.is_empty()).then(|| differing.join(" "))
+}
+
 /// The search row under the Pages or Layers header: a live filter `text`, taking the keyboard when
 /// `focus` (just opened). Escape in it clears it and closes the row (`open`), and goes no further
 /// (the canvas keeps its selection).
@@ -1152,7 +1169,8 @@ fn layers(app: &mut FigApp, ui: &mut Ui) {
                 let top_level = doc.node(n.parent.unwrap_or(page)).is_some_and(|p| p.is_page());
                 let font =
                     if top_level && (n.kind.is_frame_like() || matches!(n.kind, NodeKind::Section { .. })) { semibold(11.0) } else { regular(11.0) };
-                let name = if n.name.is_empty() { tr(n.kind.label()).to_string() } else { n.name.clone() };
+                let name =
+                    if n.name.is_empty() { tr(n.kind.label()).to_string() } else { variant_row_label(&doc, n).unwrap_or_else(|| n.name.clone()) };
                 // Room left of the lock and eye buttons.
                 let max_w = (rr.max.x - 56.0 - name_x).max(20.0);
                 crate::bidi::paint_name(ui.painter(), pos2(name_x, r.center().y), &name, font, col, max_w);
