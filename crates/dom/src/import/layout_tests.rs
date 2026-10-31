@@ -180,6 +180,16 @@ fn a_border_takes_room_like_padding_even_when_it_draws_nothing() {
 }
 
 #[test]
+fn a_drawn_dashed_border_is_a_stroke_and_takes_no_padding() {
+    let run = translate(&flex_row(
+        json!({ "borderLeftStyle": "dashed", "borderLeftWidth": "2px", "borderLeftColor": "rgb(0, 0, 0)", "paddingLeft": "14px" }),
+        88.0,
+    ));
+
+    assert_eq!(run.root().layout.as_ref().map(|layout| layout.padding[3]), Some(14.0));
+}
+
+#[test]
 fn a_stretched_or_grown_child_fills_its_frame() {
     let child = |label: &str, y: f64, height: f64, style: Value| json!({ "type": "element", "tag": "span", "label": label, "box": bounds(0.0, y, 100.0, height), "style": style });
     let column = snapshot(

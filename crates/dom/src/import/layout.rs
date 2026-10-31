@@ -175,7 +175,7 @@ fn undrawn_border(style: &Style, side: &str, em_px: f64) -> f64 {
     let visible = get(style, &format!("border{side}Color")).and_then(Color::parse_css).is_some_and(|color| color.a > 0.0);
     match line.as_deref() {
         None | Some("none" | "hidden") => 0.0,
-        Some("solid") if visible => 0.0,
+        Some(_) if visible => 0.0,
         Some(_) => get(style, &format!("border{side}Width")).and_then(|value| length(value, em_px, None)).unwrap_or(0.0).max(0.0),
     }
 }
