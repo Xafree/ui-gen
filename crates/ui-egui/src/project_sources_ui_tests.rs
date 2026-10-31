@@ -269,7 +269,7 @@ fn the_file_menu_offers_project_settings_which_opens_the_window_for_a_user_only(
 
     b.open_window();
     let shown = b.painted();
-    for text in ["Source libraries", "Install", "Package", "Version", "Framework", "Close"] {
+    for text in ["Source libraries", "Run", "Package", "Version", "Framework", "Close"] {
         assert!(mentions(&shown, text), "{text:?} is on screen: {shown:?}");
     }
     assert!(mentions(&shown, MUI) && mentions(&shown, "7.3.11"), "the listed source is on screen: {shown:?}");
@@ -421,7 +421,7 @@ fn the_window_has_one_text_field_and_an_install_button_and_no_version_field() {
     let labels: Vec<Option<&str>> = fields.iter().map(Node::label).collect();
     assert_eq!(fields.len(), 1, "{labels:?}");
     assert_ne!(labels[0].map(str::trim), Some("Version"));
-    assert!(b.has_label("Install"), "the Install button is on screen");
+    assert!(b.has_label("Run"), "the Run button is on screen");
     let shown = b.painted();
     assert!(!mentions(&shown, "Add an npm package"), "{shown:?}");
 }
@@ -433,7 +433,7 @@ fn clicking_install_runs_add_sources_with_the_typed_line_and_both_packages_show_
     b.open_window();
 
     b.type_line("npm i @heroui/styles @heroui/react");
-    b.click("Install");
+    b.click("Run");
 
     assert_eq!(b.install_many_jobs(), vec![pairs(&[(HEROUI_STYLES, "latest"), (HEROUI_REACT, "latest")])]);
     let status = b.ui.app.session.execute("capture.status", &json!({})).unwrap();
@@ -460,7 +460,7 @@ fn a_refused_line_shows_the_reason_keeps_the_typed_text_and_starts_no_job() {
     b.open_window();
 
     b.type_line("npm uninstall a");
-    b.click("Install");
+    b.click("Run");
 
     let reason = b.state().add_error().expect("the window shows why the line is refused").to_string();
     assert!(reason.contains("uninstall"), "{reason:?}");
@@ -516,7 +516,7 @@ fn keys_in(src: &str) -> BTreeSet<String> {
 
 const FIXED_KEYS: [&str; 12] = [
     "Source libraries",
-    "Install",
+    "Run",
     "Package",
     "Version",
     "Framework",
@@ -531,7 +531,7 @@ const FIXED_KEYS: [&str; 12] = [
 
 const FRENCH: [(&str, &str); 9] = [
     ("Source libraries", "Bibliothèques sources"),
-    ("Install", "Installer"),
+    ("Run", "Lancer"),
     ("Package", "Paquet"),
     ("Framework", "Framework"),
     ("Remove", "Retirer"),
