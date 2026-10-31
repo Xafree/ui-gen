@@ -2036,6 +2036,8 @@ name = "Svenska"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: versionen måste vara en exakt semver MAJOR.MINOR.PATCH, inget intervall eller tagg"
 "Default|state" = "Standard"
 "Libraries|import step" = "Bibliotek"
+"the file it was started from is closed" = "filen den startades från är stängd"
+
 [commands]
 
 "align.bottom" = "Justera nederkant"

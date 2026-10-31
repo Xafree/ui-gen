@@ -2036,6 +2036,8 @@ name = "Русский"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: версия должна быть точным semver MAJOR.MINOR.PATCH, без диапазона и тега"
 "Default|state" = "По умолчанию"
 "Libraries|import step" = "Библиотеки"
+"the file it was started from is closed" = "файл, из которого запущен импорт, закрыт"
+
 [commands]
 "align.bottom" = "Выровнять по нижнему краю"
 "align.hcenter" = "Выровнять центры по горизонтали"

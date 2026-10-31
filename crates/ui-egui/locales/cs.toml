@@ -1983,6 +1983,8 @@ status = "draft — needs native review"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: verze musí být přesný semver MAJOR.MINOR.PATCH, bez rozsahu či značky"
 "Default|state" = "Výchozí"
 "Libraries|import step" = "Knihovny"
+"the file it was started from is closed" = "soubor, ze kterého byl import spuštěn, je zavřený"
+
 [commands]
 "align.bottom" = "Zarovnat dolů"
 "align.hcenter" = "Zarovnat vodorovné středy"

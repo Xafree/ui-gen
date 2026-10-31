@@ -2012,6 +2012,8 @@ status = "draft — needs native review"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: เวอร์ชันต้องเป็น semver ที่แน่นอน MAJOR.MINOR.PATCH ไม่ใช่ช่วงหรือแท็ก"
 "Default|state" = "ค่าเริ่มต้น"
 "Libraries|import step" = "ไลบรารี"
+"the file it was started from is closed" = "ไฟล์ที่เริ่มต้นถูกปิดแล้ว"
+
 [commands]
 "align.bottom" = "จัดแนวชิดล่าง"
 "align.hcenter" = "จัดแนวกึ่งกลางแนวนอน"

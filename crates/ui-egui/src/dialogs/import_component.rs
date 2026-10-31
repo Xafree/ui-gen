@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use egui::Ui;
 use figcraft_engine::capture::{CaptureEvent, CaptureOutcome};
-use figcraft_engine::{Inspected, InspectedComponent, MAX_RENDERS, PropKind, render_count};
+use figcraft_engine::{file_access, Inspected, InspectedComponent, MAX_RENDERS, PropKind, render_count};
 use serde_json::{Value, json};
 
 use crate::FigApp;
@@ -37,6 +37,8 @@ struct Read {
 
 #[derive(Clone, Debug)]
 struct Batch {
+    doc: u64,
+    root: String,
     queue: VecDeque<(String, Value)>,
     current: Option<(String, u64)>,
     total: usize,
@@ -50,6 +52,7 @@ enum Run {
     Idle,
     Importing(Batch),
     Summary {
+        doc: u64,
         done: usize,
         total: usize,
         failures: Vec<String>,
@@ -142,17 +145,49 @@ fn finish(app: &mut FigApp, job: u64, outcome: &CaptureOutcome) -> bool {
     true
 }
 
+/// Run `work` with file `doc` in front, then bring back the file that was; `None` once it is closed.
+fn on_doc<R>(app: &mut FigApp, doc: u64, work: impl FnOnce(&mut FigApp) -> R) -> Option<R> {
+    let at = app.session.docs.iter().position(|ds| ds.uid == doc)?;
+    let front = app.session.ds().ok().map(|ds| ds.uid);
+    app.session.active = at;
+    let result = work(app);
+    if let Some(back) = front.and_then(|uid| app.session.docs.iter().position(|ds| ds.uid == uid)) {
+        app.session.active = back;
+    }
+    Some(result)
+}
+
+fn still_in_project(app: &FigApp, doc: u64, root: &str) -> bool {
+    let binding = app.session.docs.iter().find(|ds| ds.uid == doc).and_then(|ds| ds.project.as_ref());
+    binding.is_some_and(|binding| file_access::same_file(&binding.root, root))
+}
+
+fn abandon(batch: &mut Batch, first: String) {
+    let cause = tr("the file it was started from is closed");
+    for name in std::iter::once(first).chain(batch.queue.drain(..).map(|(name, _)| name)) {
+        batch.done += 1;
+        batch.failures.push(trf("Couldn't import {name}: {cause}", &[("name", &name), ("cause", &cause)]));
+    }
+}
+
 fn start_next(app: &mut FigApp) {
     loop {
-        let next = match app.ui.import_window.as_mut().map(|state| &mut state.run) {
-            Some(Run::Importing(batch)) => batch.queue.pop_front(),
+        let (doc, root, next) = match app.ui.import_window.as_mut().map(|state| &mut state.run) {
+            Some(Run::Importing(batch)) => (batch.doc, batch.root.clone(), batch.queue.pop_front()),
             _ => return,
         };
         let Some((name, params)) = next else {
             conclude(app);
             return;
         };
-        let started = app.run(IMPORT, params);
+        if !still_in_project(app, doc, &root) {
+            if let Some(Run::Importing(batch)) = app.ui.import_window.as_mut().map(|state| &mut state.run) {
+                abandon(batch, name);
+            }
+            conclude(app);
+            return;
+        }
+        let started = on_doc(app, doc, |app| app.run(IMPORT, params)).flatten();
         let cause = if started.is_none() { Some(app.ui.last_error.take().unwrap_or_default()) } else { None };
         let Some(Run::Importing(batch)) = app.ui.import_window.as_mut().map(|state| &mut state.run) else { return };
         match (started, cause) {
@@ -173,7 +208,21 @@ fn conclude(app: &mut FigApp) {
         && let Run::Importing(batch) = std::mem::take(&mut state.run)
     {
         let done = batch.total - batch.failures.len();
-        state.run = Run::Summary { done, total: batch.total, failures: batch.failures };
+        state.run = Run::Summary { doc: batch.doc, done, total: batch.total, failures: batch.failures };
+    }
+    close_if_nothing_can_show_it(app);
+}
+
+fn close_if_nothing_can_show_it(app: &mut FigApp) {
+    let Some(ImportWindow { run: Run::Summary { doc, failures, .. }, .. }) = app.ui.import_window.as_ref() else { return };
+    if app.session.docs.iter().any(|ds| ds.uid == *doc) || app.session.project().is_some() {
+        return;
+    }
+    let told = failures.join("
+");
+    app.ui.import_window = None;
+    if !told.is_empty() {
+        app.show_error(told);
     }
 }
 
@@ -314,13 +363,55 @@ fn progress_of(run: &Run) -> Progress {
     match run {
         Run::Idle => Progress::Idle,
         Run::Importing(batch) => Progress::Importing { done: batch.done, total: batch.total },
-        Run::Summary { done, total, failures } => Progress::Summary { done: *done, total: *total, failures: failures.clone() },
+        Run::Summary { done, total, failures, .. } => Progress::Summary { done: *done, total: *total, failures: failures.clone() },
     }
 }
 
+impl Run {
+    fn doc(&self) -> Option<u64> {
+        match self {
+            Self::Idle => None,
+            Self::Importing(batch) => Some(batch.doc),
+            Self::Summary { doc, .. } => Some(*doc),
+        }
+    }
+}
+
+/// While a run lasts the surface stays on the file it started from, whatever tab is in front.
 pub fn show(app: &mut FigApp, ui: &mut Ui) {
-    let Some(mut state) = app.ui.import_window.take() else { return };
-    let Some((root, sources)) = settle(app, &mut state) else { return };
+    let doc = app.ui.import_window.as_ref().and_then(|state| state.run.doc());
+    let open = doc.and_then(|doc| app.session.docs.iter().position(|ds| ds.uid == doc));
+    let show_components = match (doc, open) {
+        (Some(doc), Some(_)) => on_doc(app, doc, |app| draw_and_act(app, ui)).unwrap_or(false),
+        _ => draw_and_act(app, ui),
+    };
+    if show_components {
+        if let Some(at) = open {
+            app.session.active = at;
+        }
+        app.ui.import_window = None;
+        app.ui.project_settings = None;
+        app.run(SHOW, json!({}));
+    }
+}
+
+fn draw_and_act(app: &mut FigApp, ui: &mut Ui) -> bool {
+    let acts = draw(app, ui);
+    let show_components = acts.iter().any(|act| matches!(act, Act::Show));
+    for act in acts {
+        perform(app, act);
+    }
+    show_components
+}
+
+fn draw(app: &mut FigApp, ui: &mut Ui) -> Vec<Act> {
+    let Some(mut state) = app.ui.import_window.take() else { return Vec::new() };
+    let Some((root, sources)) = settle(app, &mut state) else {
+        if matches!(state.run, Run::Importing(_)) {
+            app.ui.import_window = Some(state);
+        }
+        return Vec::new();
+    };
     let project = app.session.project().map(|binding| binding.config.name.clone()).unwrap_or_default();
     let families = families(app, &root, &sources);
     let cards = cards_of(app, &state, &families);
@@ -351,9 +442,7 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
     });
     state.ticked = valid;
     app.ui.import_window = Some(state);
-    for act in acts {
-        perform(app, act);
-    }
+    acts
 }
 
 fn edit(app: &mut FigApp, change: impl FnOnce(&mut ImportWindow)) {
@@ -398,11 +487,7 @@ fn perform(app: &mut FigApp, act: Act) {
             app.ui.import_window = None;
             app.run(SETTINGS, json!({}));
         }
-        Act::Show => {
-            app.ui.import_window = None;
-            app.ui.project_settings = None;
-            app.run(SHOW, json!({}));
-        }
+        Act::Show => {}
     }
 }
 
@@ -461,7 +546,8 @@ fn plan(app: &FigApp, state: &mut ImportWindow) -> Option<Batch> {
     if matches!(state.run, Run::Importing(_)) {
         return None;
     }
-    let (_, sources) = active_sources(app)?;
+    let (root, sources) = active_sources(app)?;
+    let doc = app.session.ds().ok()?.uid;
     let all = families_in_order(app, state, &sources);
     if all.is_empty() {
         state.message = Some(tr("Choose at least one component.").to_string());
@@ -479,7 +565,7 @@ fn plan(app: &FigApp, state: &mut ImportWindow) -> Option<Batch> {
     let queue: VecDeque<(String, Value)> =
         all.iter().map(|(package, component)| (component.name.clone(), params_of(state, package, component))).collect();
     let total = queue.len();
-    Some(Batch { queue, current: None, total, done: 0, failures: Vec::new() })
+    Some(Batch { doc, root, queue, current: None, total, done: 0, failures: Vec::new() })
 }
 
 fn families_in_order(app: &FigApp, state: &ImportWindow, sources: &[Source]) -> Vec<(String, InspectedComponent)> {

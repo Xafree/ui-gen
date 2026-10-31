@@ -1940,6 +1940,8 @@ status = "draft — needs native review"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}:版本必须是确切的 semver MAJOR.MINOR.PATCH,不能是范围或标签"
 "Default|state" = "默认"
 "Libraries|import step" = "库"
+"the file it was started from is closed" = "启动它的文件已关闭"
+
 [commands]
 "align.bottom" = "底部对齐"
 "align.hcenter" = "水平居中对齐"

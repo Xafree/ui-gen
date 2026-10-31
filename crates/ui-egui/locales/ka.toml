@@ -2021,6 +2021,8 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: ვერსია უნდა იყოს ზუსტი semver MAJOR.MINOR.PATCH, დიაპაზონისა და ტეგის გარეშე"
 "Default|state" = "ნაგულისხმევი"
 "Libraries|import step" = "ბიბლიოთეკები"
+"the file it was started from is closed" = "ფაილი, საიდანაც დაიწყო, დახურულია"
+
 [commands]
 "align.bottom" = "ქვემოთ სწორება"
 "align.hcenter" = "ჰორიზონტალური ცენტრების სწორება"

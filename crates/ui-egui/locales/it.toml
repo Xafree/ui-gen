@@ -1961,6 +1961,8 @@ status = "draft — needs native review"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: la versione deve essere un semver esatto MAJOR.MINOR.PATCH, senza intervallo né tag"
 "Default|state" = "Predefinito"
 "Libraries|import step" = "Librerie"
+"the file it was started from is closed" = "il file da cui è partito è chiuso"
+
 [commands]
 "align.bottom" = "Allinea in basso"
 "align.hcenter" = "Allinea i centri orizzontali"

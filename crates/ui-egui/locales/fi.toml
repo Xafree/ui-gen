@@ -2025,6 +2025,8 @@ status = "draft — needs native review"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: version on oltava tarkka semver MAJOR.MINOR.PATCH, ei väli eikä tunniste"
 "Default|state" = "Oletus"
 "Libraries|import step" = "Kirjastot"
+"the file it was started from is closed" = "tiedosto, josta se aloitettiin, on suljettu"
+
 [commands]
 "align.bottom" = "Tasaa alas"
 "align.hcenter" = "Keskitä vaakasuunnassa"

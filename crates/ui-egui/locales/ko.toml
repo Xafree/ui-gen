@@ -2046,6 +2046,8 @@ status = "draft — needs native review"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: 버전은 정확한 semver MAJOR.MINOR.PATCH여야 하며 범위나 태그는 사용할 수 없습니다"
 "Default|state" = "기본값"
 "Libraries|import step" = "라이브러리"
+"the file it was started from is closed" = "시작한 파일이 닫혔습니다"
+
 [commands]
 "align.bottom" = "아래쪽 정렬"
 "align.hcenter" = "수평 가운데 정렬"

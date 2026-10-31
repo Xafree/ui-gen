@@ -1941,6 +1941,8 @@ status = "draft — needs native review"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: Die Version muss ein genaues Semver MAJOR.MINOR.PATCH sein, kein Bereich oder Tag"
 "Default|state" = "Standard"
 "Libraries|import step" = "Bibliotheken"
+"the file it was started from is closed" = "die Datei, von der aus er gestartet wurde, ist geschlossen"
+
 [commands]
 "align.bottom" = "Unten ausrichten"
 "align.hcenter" = "Horizontal zentrieren"

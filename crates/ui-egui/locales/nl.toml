@@ -2024,6 +2024,8 @@ status = "draft — needs native review"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: de versie moet een exacte semver MAJOR.MINOR.PATCH zijn, geen bereik of tag"
 "Default|state" = "Standaard"
 "Libraries|import step" = "Bibliotheken"
+"the file it was started from is closed" = "het bestand waaruit het is gestart is gesloten"
+
 [commands]
 "align.bottom" = "Onder uitlijnen"
 "align.hcenter" = "Horizontale middens uitlijnen"

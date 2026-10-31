@@ -2006,6 +2006,8 @@ status = "draft — needs native review"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: バージョンは正確な semver MAJOR.MINOR.PATCH にしてください。範囲やタグは使えません"
 "Default|state" = "デフォルト"
 "Libraries|import step" = "ライブラリ"
+"the file it was started from is closed" = "開始元のファイルが閉じられています"
+
 [commands]
 "align.bottom" = "下揃え"
 "align.hcenter" = "水平方向の中央揃え"

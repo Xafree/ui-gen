@@ -2036,6 +2036,8 @@ name = "Polski"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: wersja musi być dokładnym semver MAJOR.MINOR.PATCH, bez zakresu ani tagu"
 "Default|state" = "Domyślne"
 "Libraries|import step" = "Biblioteki"
+"the file it was started from is closed" = "plik, z którego uruchomiono import, jest zamknięty"
+
 [commands]
 "align.bottom" = "Wyrównaj do dołu"
 "align.hcenter" = "Wyrównaj poziomo do środka"

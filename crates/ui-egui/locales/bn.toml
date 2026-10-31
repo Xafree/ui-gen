@@ -2020,6 +2020,8 @@ status = "draft — needs native review"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: সংস্করণ অবশ্যই সঠিক semver MAJOR.MINOR.PATCH হতে হবে, কোনো পরিসর বা ট্যাগ নয়"
 "Default|state" = "ডিফল্ট"
 "Libraries|import step" = "লাইব্রেরিসমূহ"
+"the file it was started from is closed" = "যে ফাইল থেকে এটি শুরু হয়েছিল তা বন্ধ হয়ে গেছে"
+
 [commands]
 "board.connector" = "সংযোগকারী"
 "board.ink" = "মার্কারের টান"

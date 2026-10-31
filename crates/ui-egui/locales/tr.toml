@@ -1987,6 +1987,8 @@ name = "Türkçe"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: sürüm tam bir semver MAJOR.MINOR.PATCH olmalı, aralık veya etiket olmamalı"
 "Default|state" = "Varsayılan"
 "Libraries|import step" = "Kitaplıklar"
+"the file it was started from is closed" = "başlatıldığı dosya kapalı"
+
 [commands]
 "align.bottom" = "Alta hizala"
 "align.hcenter" = "Yatay merkezleri hizala"

@@ -1987,6 +1987,8 @@ status = "draft — needs native review"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: versi harus berupa semver tepat MAJOR.MINOR.PATCH, tanpa rentang atau tag"
 "Default|state" = "Default"
 "Libraries|import step" = "Pustaka"
+"the file it was started from is closed" = "berkas tempat memulainya sudah ditutup"
+
 [commands]
 "align.bottom" = "Ratakan bawah"
 "align.hcenter" = "Ratakan tengah horizontal"

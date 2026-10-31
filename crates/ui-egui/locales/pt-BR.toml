@@ -2043,6 +2043,8 @@ status = "draft — needs native review"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: a versão deve ser um semver exato MAJOR.MINOR.PATCH, sem intervalo nem tag"
 "Default|state" = "Padrão"
 "Libraries|import step" = "Bibliotecas"
+"the file it was started from is closed" = "o arquivo de onde começou está fechado"
+
 [commands]
 "align.bottom" = "Alinhar embaixo"
 "align.hcenter" = "Alinhar centros horizontalmente"

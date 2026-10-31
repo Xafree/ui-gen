@@ -1962,6 +1962,8 @@ status = "draft — needs native review"
 "{token}: version must be an exact semver MAJOR.MINOR.PATCH, no range or tag" = "{token}: phiên bản phải là semver chính xác MAJOR.MINOR.PATCH, không dùng khoảng hay thẻ"
 "Default|state" = "Mặc định"
 "Libraries|import step" = "Thư viện"
+"the file it was started from is closed" = "tệp khởi đầu đã bị đóng"
+
 [commands]
 "align.bottom" = "Căn dưới"
 "align.hcenter" = "Căn tâm ngang"
