@@ -174,3 +174,15 @@ fn children_that_do_not_overlap_keep_the_document_order() {
     let order = stacking_order(serde_json::json!([stacked("over", 0.0, positioned), stacked("plain", 20.0, plain)]));
     assert_eq!(order, ["over", "plain"]);
 }
+
+#[test]
+fn a_scaled_element_keeps_its_fractional_box() {
+    let child = serde_json::json!({ "type": "element", "tag": "div", "label": "scaled", "box": super::support::bounds(0.6, 0.5, 65.2, 31.0),
+        "style": { "transform": "matrix(0.97, 0, 0, 0.97, 0, 0)", "backgroundColor": "rgb(1, 1, 1)" } });
+    let run = super::support::import(
+        serde_json::json!({ "type": "element", "tag": "div", "box": super::support::bounds(0.0, 0.0, 68.0, 32.0), "style": {}, "children": [child] }),
+    );
+    let node = run.child(0);
+    let [.., e, f] = node.transform.as_coeffs();
+    assert_eq!((e, f, node.width, node.height), (0.6, 0.5, 65.2, 31.0));
+}

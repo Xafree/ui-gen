@@ -154,6 +154,12 @@ struct Snapped {
 }
 
 impl Snapped {
+    /// A scaled element is not on the pixel grid: the browser paints its edges where they fall.
+    fn exact(dom_box: &DomBox) -> Self {
+        let [x, y] = [dom_box.x, dom_box.y].map(finite_or_zero);
+        Self { x, y, width: finite_or_zero(dom_box.width).max(0.0), height: finite_or_zero(dom_box.height).max(0.0) }
+    }
+
     fn of(dom_box: &DomBox) -> Self {
         let (x, y) = (finite_or_zero(dom_box.x.round()), finite_or_zero(dom_box.y.round()));
         let right = finite_or_zero((dom_box.x + dom_box.width).round());
@@ -187,7 +193,10 @@ struct Pending<'s> {
 
 impl Pending<'_> {
     fn place(&self, dom_box: &DomBox) -> Placement {
-        let snapped = Snapped::of(dom_box);
+        self.placed(Snapped::of(dom_box))
+    }
+
+    fn placed(&self, snapped: Snapped) -> Placement {
         let offset = self.at.unwrap_or((snapped.x - self.origin.0, snapped.y - self.origin.1));
         Placement { offset, snapped }
     }
@@ -254,7 +263,7 @@ impl<'d, 's> Walk<'d, 's> {
         let (parent, origin, id) = if item.at.is_none() && css::is_contents(&element.style) {
             (item.parent, item.origin, None)
         } else {
-            let placement = item.place(&element.r#box);
+            let placement = if effects::is_scaled(&element.style) { item.placed(Snapped::exact(&element.r#box)) } else { item.place(&element.r#box) };
             let mut node = frame::build(self.doc.alloc_id(), element, &placement, &mut self.warnings);
             node.annotations = self.take_notes();
             let id = self.doc.insert(node, item.parent, None)?;

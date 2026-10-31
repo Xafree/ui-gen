@@ -140,6 +140,11 @@ fn transform(style: &Style, report: &mut Report) {
     }
 }
 
+pub(super) fn is_scaled(style: &Style) -> bool {
+    get(style, "transform").is_some_and(|value| !is_translation(value))
+        || get(style, "scale").is_some_and(|value| !value.eq_ignore_ascii_case("none"))
+}
+
 fn is_translation(value: &str) -> bool {
     if value.eq_ignore_ascii_case("none") {
         return true;
