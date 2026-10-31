@@ -269,9 +269,17 @@ fn fill_children(doc: &mut Document, id: NodeId, layout: &AutoLayout, sources: &
     let vertical = layout.mode == LayoutMode::Vertical;
     let [top, right, bottom, left] = layout.padding;
     let inner_cross = if vertical { frame.width - left - right } else { frame.height - top - bottom };
-    let stretches = sources.get(&id).is_some_and(|element| matches!(keyword(&element.style, "alignItems").as_deref(), None | Some("stretch" | "normal")));
-    let in_flow: Vec<NodeId> = frame.children.iter().copied().filter(|child| sources.get(child).is_some_and(|element| !is_out_of_flow(&element.style))).collect();
-    let grows = |child: &NodeId| sources.get(child).and_then(|element| get(&element.style, "flexGrow")).and_then(|value| value.parse::<f64>().ok()).is_some_and(|grow| grow > 0.0);
+    let stretches =
+        sources.get(&id).is_some_and(|element| matches!(keyword(&element.style, "alignItems").as_deref(), None | Some("stretch" | "normal")));
+    let in_flow: Vec<NodeId> =
+        frame.children.iter().copied().filter(|child| sources.get(child).is_some_and(|element| !is_out_of_flow(&element.style))).collect();
+    let grows = |child: &NodeId| {
+        sources
+            .get(child)
+            .and_then(|element| get(&element.style, "flexGrow"))
+            .and_then(|value| value.parse::<f64>().ok())
+            .is_some_and(|grow| grow > 0.0)
+    };
     let lone_grower = in_flow.iter().filter(|child| grows(child)).count() == 1;
     for child in in_flow.iter().copied() {
         let self_align = sources.get(&child).and_then(|element| keyword(&element.style, "alignSelf"));

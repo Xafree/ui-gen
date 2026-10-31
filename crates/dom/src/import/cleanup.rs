@@ -43,7 +43,9 @@ fn fate(doc: &Document, id: NodeId, element: &Element, sources: &BTreeMap<NodeId
     }
     match node.children.as_slice() {
         [] => Fate::Drop,
-        [only] if doc.node(*only).is_some_and(|child| fills_box_of(node, child)) || (!lays_out(element) && !parent_lays_out(node, sources)) => Fate::Dissolve(*only),
+        [only] if doc.node(*only).is_some_and(|child| fills_box_of(node, child)) || (!lays_out(element) && !parent_lays_out(node, sources)) => {
+            Fate::Dissolve(*only)
+        }
         _ => Fate::Keep,
     }
 }

@@ -38,7 +38,8 @@ fn with_role_names(id: &str, mut params: Value) -> Value {
             ("Item", i18n::tr("Item")),
             ("Heading", i18n::tr("Heading")),
         ];
-        let names: serde_json::Map<String, Value> = names.into_iter().map(|(role, name)| (role.to_string(), Value::String(name.to_string()))).collect();
+        let names: serde_json::Map<String, Value> =
+            names.into_iter().map(|(role, name)| (role.to_string(), Value::String(name.to_string()))).collect();
         map.insert("roleNames".into(), Value::Object(names));
     }
     params

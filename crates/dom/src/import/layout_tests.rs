@@ -161,7 +161,9 @@ fn a_grid_of_one_row_becomes_an_auto_layout_and_a_grid_of_several_tracks_stays_w
     assert_eq!(run.root().layout.as_ref().map(|layout| layout.gap), Some(12.0));
 
     let child = |label: &str, x: f64, y: f64| json!({ "type": "element", "tag": "span", "label": label, "box": bounds(x, y, 40.0, 20.0), "style": { "backgroundColor": "rgb(0, 128, 0)" } });
-    let tracks = snapshot(json!({ "type": "element", "tag": "div", "label": "Tracks", "box": bounds(0.0, 0.0, 100.0, 60.0), "style": { "display": "grid" }, "children": [child("A", 0.0, 0.0), child("B", 50.0, 30.0)] }));
+    let tracks = snapshot(
+        json!({ "type": "element", "tag": "div", "label": "Tracks", "box": bounds(0.0, 0.0, 100.0, 60.0), "style": { "display": "grid" }, "children": [child("A", 0.0, 0.0), child("B", 50.0, 30.0)] }),
+    );
     let run = translate(&tracks);
     assert!(run.root().layout.is_none());
     assert!(run.note_labels(run.root()).iter().any(|label| label.starts_with(&format!("{NOTE_PREFIX}display grid"))));
@@ -169,7 +171,10 @@ fn a_grid_of_one_row_becomes_an_auto_layout_and_a_grid_of_several_tracks_stays_w
 
 #[test]
 fn a_border_takes_room_like_padding_even_when_it_draws_nothing() {
-    let run = translate(&flex_row(json!({ "borderLeftStyle": "solid", "borderLeftWidth": "2px", "borderLeftColor": "rgba(0, 0, 0, 0)", "paddingLeft": "14px" }), 88.0));
+    let run = translate(&flex_row(
+        json!({ "borderLeftStyle": "solid", "borderLeftWidth": "2px", "borderLeftColor": "rgba(0, 0, 0, 0)", "paddingLeft": "14px" }),
+        88.0,
+    ));
 
     assert_eq!(run.root().layout.as_ref().map(|layout| layout.padding[3]), Some(16.0));
 }
@@ -177,8 +182,10 @@ fn a_border_takes_room_like_padding_even_when_it_draws_nothing() {
 #[test]
 fn a_stretched_or_grown_child_fills_its_frame() {
     let child = |label: &str, y: f64, height: f64, style: Value| json!({ "type": "element", "tag": "span", "label": label, "box": bounds(0.0, y, 100.0, height), "style": style });
-    let column = snapshot(json!({ "type": "element", "tag": "div", "label": "Column", "box": bounds(0.0, 0.0, 100.0, 60.0), "style": { "display": "flex", "flexDirection": "column", "alignItems": "stretch" },
-        "children": [child("Head", 0.0, 20.0, json!({ "backgroundColor": "rgb(0, 128, 0)" })), child("Body", 20.0, 40.0, json!({ "backgroundColor": "rgb(0, 0, 255)", "flexGrow": "1" }))] }));
+    let column = snapshot(
+        json!({ "type": "element", "tag": "div", "label": "Column", "box": bounds(0.0, 0.0, 100.0, 60.0), "style": { "display": "flex", "flexDirection": "column", "alignItems": "stretch" },
+        "children": [child("Head", 0.0, 20.0, json!({ "backgroundColor": "rgb(0, 128, 0)" })), child("Body", 20.0, 40.0, json!({ "backgroundColor": "rgb(0, 0, 255)", "flexGrow": "1" }))] }),
+    );
 
     let run = translate(&column);
 
