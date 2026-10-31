@@ -425,12 +425,15 @@ impl Bench {
             .collect()
     }
 
-    /// `(done, total)` of the "Importing… {done} of {total}" line on screen.
     pub(crate) fn progress(&mut self) -> Option<(usize, usize)> {
-        let line = self.shown().into_iter().find_map(|text| text.strip_prefix("Importing… ").map(str::to_string))?;
-        let (done, total) = line.split_once(" of ")?;
-        Some((done.trim().parse().ok()?, total.trim().parse().ok()?))
+        components_done(&self.shown())
     }
+}
+
+pub(crate) fn components_done(shown: &[String]) -> Option<(usize, usize)> {
+    let line = shown.iter().find_map(|text| text.split_once(" · component ").map(|(_, rest)| rest))?;
+    let (current, total) = line.split_once(" of ")?;
+    Some((current.trim().parse::<usize>().ok()?.checked_sub(1)?, total.trim().parse().ok()?))
 }
 
 pub(crate) fn mentions(shown: &[String], needle: &str) -> bool {
@@ -693,7 +696,7 @@ fn keys_in(src: &str) -> BTreeSet<String> {
     found
 }
 
-const NEW_KEYS: [&str; 18] = [
+const NEW_KEYS: [&str; 19] = [
     "Search components",
     "Reading the components of {package}…",
     "Couldn't read the components of {package}: {cause}",
@@ -705,7 +708,8 @@ const NEW_KEYS: [&str; 18] = [
     "Already taken in {package}",
     "Choose at least one component.",
     "Choose at least one value in each group.",
-    "Importing… {done} of {total}",
+    "{name}: {done} of {total} renders · component {current} of {components}",
+    "{name}: {done} renders · component {current} of {components}",
     "Imported {done} of {total} components",
     "Couldn't import {name}: {cause}",
     "Hover",
@@ -761,7 +765,8 @@ fn every_language_translates_the_surface_texts_and_the_four_command_labels() {
         "Search components",
         "This package exports no component.",
         "Your selection",
-        "Importing… {done} of {total}",
+        "{name}: {done} of {total} renders · component {current} of {components}",
+        "{name}: {done} renders · component {current} of {components}",
         "Imported {done} of {total} components",
     ] {
         assert!(text_of(fr, key).is_some_and(|text| text != key), "fr translates {key:?}");

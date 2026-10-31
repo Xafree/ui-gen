@@ -1,7 +1,11 @@
+use std::fmt::Display;
+
 use egui::text::{LayoutJob, TextFormat};
 use egui::{
     Align, Align2, CornerRadius, Frame, Label, Layout, Margin, Rect, RichText, ScrollArea, Sense, Stroke, StrokeKind, Ui, UiBuilder, pos2, vec2,
 };
+
+use figcraft_engine::ImportProgress;
 
 use crate::a11y;
 use crate::dialogs::project_settings::page::{
@@ -46,7 +50,7 @@ pub(super) enum Status {
 
 pub(super) enum Progress {
     Idle,
-    Importing { done: usize, total: usize },
+    Importing { name: String, renders: ImportProgress, component: usize, components: usize },
     Stopping,
     Summary { done: usize, total: usize, failures: Vec<String> },
 }
@@ -379,7 +383,8 @@ fn panel(ui: &mut Ui, t: &Tokens, model: &mut Model, acts: &mut Vec<Act>) {
             acts.push(Act::Animations);
         }
         let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::hover());
-        if button_at(ui, t, rect, tr("Import"), Look::Primary, true).clicked() {
+        let running = matches!(model.progress, Progress::Importing { .. } | Progress::Stopping);
+        if button_at(ui, t, rect, tr("Import"), Look::Primary, !running).clicked() {
             acts.push(Act::Import);
         }
         status(ui, t, model, acts);
@@ -448,7 +453,17 @@ fn status(ui: &mut Ui, t: &Tokens, model: &Model, acts: &mut Vec<Act>) {
     }
     match &model.progress {
         Progress::Idle => {}
-        Progress::Importing { done, total } => note(ui, &trf("Importing… {done} of {total}", &[("done", done), ("total", total)]), 13.5, t.text),
+        Progress::Importing { name, renders, component, components } => {
+            let total = renders.total.unwrap_or_default();
+            let args: [(&str, &dyn Display); 5] =
+                [("name", name), ("done", &renders.rendered), ("total", &total), ("current", component), ("components", components)];
+            let line = if renders.total.is_some() {
+                trf("{name}: {done} of {total} renders · component {current} of {components}", &args)
+            } else {
+                trf("{name}: {done} renders · component {current} of {components}", &args)
+            };
+            note(ui, &line, 13.5, t.text);
+        }
         Progress::Stopping => note(ui, tr("Stopping… the component in progress finishes first"), 13.5, t.text),
         Progress::Summary { done, total, failures } => {
             note(ui, &trf("Imported {done} of {total} components", &[("done", done), ("total", total)]), 13.5, t.text);

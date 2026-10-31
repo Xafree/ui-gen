@@ -57,6 +57,12 @@ enum Stage {
     Rendering(Rendering),
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ImportProgress {
+    pub rendered: usize,
+    pub total: Option<usize>,
+}
+
 pub(crate) struct PendingImport {
     head: JobId,
     jobs: Vec<JobId>,
@@ -99,6 +105,17 @@ pub(crate) fn advance(s: &mut Session, job: JobId, outcome: CaptureOutcome) -> O
 /// The jobs the import started by `head` has submitted so far (its inspect, then its renders).
 pub(crate) fn jobs_of(s: &Session, head: JobId) -> Vec<JobId> {
     s.capture.imports.iter().find(|pending| pending.head == head).map_or_else(Vec::new, |pending| pending.jobs.clone())
+}
+
+pub(crate) fn progress_of(s: &Session, head: JobId) -> Option<ImportProgress> {
+    let pending = s.capture.imports.iter().find(|pending| pending.head == head)?;
+    Some(match &pending.stage {
+        Stage::Inspecting => ImportProgress::default(),
+        Stage::Rendering(rendering) => {
+            let total = pending.jobs.len() - 1;
+            ImportProgress { rendered: total - rendering.waiting.len(), total: Some(total) }
+        }
+    })
 }
 
 /// Write the imports that were waiting for their tab to be free again.

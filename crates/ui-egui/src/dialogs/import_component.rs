@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use egui::Ui;
 use figcraft_engine::capture::{CaptureErrorKind, CaptureEvent, CaptureOutcome};
-use figcraft_engine::{EngineError, Inspected, InspectedComponent, MAX_RENDERS, PropKind, file_access, render_count};
+use figcraft_engine::{EngineError, Inspected, InspectedComponent, MAX_RENDERS, PropKind, Session, file_access, render_count};
 use serde_json::{Value, json};
 
 use crate::FigApp;
@@ -475,11 +475,17 @@ fn notes_of(app: &FigApp, sources: &[Source]) -> Vec<String> {
     sources.iter().filter_map(|s| app.session.inspected(&s.package)).flat_map(|found| found.notes.clone()).collect()
 }
 
-fn progress_of(run: &Run) -> Progress {
+fn progress_of(session: &Session, run: &Run) -> Progress {
     match run {
         Run::Idle => Progress::Idle,
         Run::Importing(batch) if batch.stopping => Progress::Stopping,
-        Run::Importing(batch) => Progress::Importing { done: batch.done, total: batch.total },
+        Run::Importing(batch) => match &batch.current {
+            Some((name, job)) => {
+                let renders = session.import_progress(*job).unwrap_or_default();
+                Progress::Importing { name: name.clone(), renders, component: batch.done + 1, components: batch.total }
+            }
+            None => Progress::Idle,
+        },
         Run::Summary { done, total, failures, .. } => Progress::Summary { done: *done, total: *total, failures: failures.clone() },
     }
 }
@@ -554,7 +560,7 @@ fn draw(app: &mut FigApp, ui: &mut Ui) -> Vec<Act> {
             dark: state.dark,
             animations: state.animations,
             search: &mut state.search,
-            progress: progress_of(&state.run),
+            progress: progress_of(&app.session, &state.run),
             message: state.message.clone(),
             at_top: std::mem::take(&mut state.just_opened),
             focus_first: state.focus_first,
@@ -703,7 +709,6 @@ fn import(app: &mut FigApp) {
 
 fn plan(app: &FigApp, state: &mut ImportWindow) -> Option<Batch> {
     if matches!(state.run, Run::Importing(_)) {
-        state.message = Some(tr("The import is already running.").to_string());
         return None;
     }
     let (root, sources) = active_sources(app)?;
