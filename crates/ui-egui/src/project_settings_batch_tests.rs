@@ -125,3 +125,12 @@ fn a_finished_install_forgets_what_was_read() {
     b.settle();
     assert_eq!(crate::source_family::dependencies_of(&root, HEAD, "3.0.0"), [SAME]);
 }
+
+#[test]
+fn an_install_line_goes_through_the_way_every_command_of_the_ui_goes() {
+    let mut b = Bench::nominal("add-through-run", &["Alert"]);
+    b.open_settings();
+    crate::FigApp::clear_run_log();
+    add_packages(&mut b.ui.app, "other-lib");
+    assert_eq!(crate::FigApp::runs_of("project.addSources").len(), 1, "it is in the run log");
+}

@@ -412,7 +412,7 @@ pub fn add_packages(app: &mut FigApp, line: &str) {
     let parsed = npm::parse_install_line(line);
     let refusal = match &parsed {
         Err(error) => Some(refusal_text(error)),
-        Ok(_) => match app.session.execute(ADD_MANY, &json!({"line": line})) {
+        Ok(_) => match app.run_quietly(ADD_MANY, json!({"line": line})).0 {
             Ok(_) => None,
             Err(EngineError::BadParams { msg, .. }) => Some(msg),
             Err(other) => Some(other.to_string()),
