@@ -7,6 +7,7 @@ import { startBudget } from './deadline.mjs';
 import { insideRoot, readInstalledPackage } from './installed-package.mjs';
 import { ServiceError } from './protocol.mjs';
 import { captureSnapshot } from './snapshot.mjs';
+import { findStylesheets } from './stylesheets.mjs';
 
 const ROOT_SELECTOR = '[data-uigen-root]';
 const RENDERABLE = ['react', 'web-components'];
@@ -21,8 +22,10 @@ const BACKGROUNDS = { light: '#ffffff', dark: '#1e1e1e' };
 
 const invalid = (message) => new ServiceError('invalidRequest', message);
 
+const htmlAttributes = (theme) => (theme === 'dark' ? 'class="dark" data-theme="dark"' : 'data-theme="light"');
+
 const pageHtml = (theme) => `<!doctype html>
-<html><head><meta charset="utf-8"><style>
+<html ${htmlAttributes(theme)}><head><meta charset="utf-8"><style>
 html { background: ${BACKGROUNDS[theme]}; color-scheme: ${theme}; }
 body { margin: 20px; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 [data-uigen-root] { display: inline-block; }
@@ -117,10 +120,10 @@ function pngSegments(installed, { component, props, state, theme }) {
   return ['.uigen', 'captures', safeSegment(installed.name), safeSegment(installed.version), name];
 }
 
-async function renderInPage(page, installed, params, code, budget) {
+async function renderInPage(page, installed, params, { code, styles }, budget) {
   const { component, props, state, theme } = params;
   page.setDefaultTimeout(Math.max(1, budget.remaining()));
-  const errors = await loadBundle(page, { code, html: pageHtml(theme) });
+  const errors = await loadBundle(page, { code, html: pageHtml(theme), styles });
   const failure = errors[0] ?? (await page.evaluate(() => window.__uigenError));
   if (failure !== undefined) {
     throw new ServiceError('render', failure);
@@ -149,11 +152,16 @@ export async function render(params) {
   const props = params.state === 'disabled' ? { ...params.props, disabled: true } : params.props;
   const bundle = (sampleText) =>
     budget.bound(bundleEntry({ contents: buildEntry(installed, params.component, props, sampleText), resolveDir: installed.sources }));
+  const { styles, notes } = await budget.bound(findStylesheets(installed));
+  const withNotes = (result, extra = []) => {
+    const all = [...notes, ...extra];
+    return all.length === 0 ? result : { ...result, note: all.join('; ') };
+  };
   const inPage = async (code) => {
     try {
       return await budget.bound(
         withPage({ viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: params.theme }, (page) =>
-          budget.bound(renderInPage(page, installed, params, code, budget)),
+          budget.bound(renderInPage(page, installed, params, { code, styles }, budget)),
         ),
       );
     } catch (error) {
@@ -165,12 +173,12 @@ export async function render(params) {
   };
   const withText = await bundle(params.sampleText);
   try {
-    return await inPage(withText);
+    return withNotes(await inPage(withText));
   } catch (error) {
     const refusedText = params.sampleText !== undefined && error instanceof ServiceError && error.kind === 'render' && budget.remaining() > 0;
     if (!refusedText) {
       throw error;
     }
   }
-  return { ...(await inPage(await bundle(undefined))), note: SAMPLE_TEXT_IGNORED };
+  return withNotes(await inPage(await bundle(undefined)), [SAMPLE_TEXT_IGNORED]);
 }

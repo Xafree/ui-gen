@@ -70,10 +70,13 @@ export async function closeBrowser() {
   await browser?.close();
 }
 
-export async function loadBundle(page, { code, html }) {
+export async function loadBundle(page, { code, html, styles = [] }) {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.setContent(html);
+  for (const content of styles) {
+    await page.addStyleTag({ content });
+  }
   await page.addScriptTag({ content: code });
   await page.evaluate(() => undefined);
   return errors;
