@@ -38,7 +38,7 @@ function walkInPage({ rootSelector, limits }) {
   const NO_SPECIFICITY = [0, 0, 0];
   const TEXT_KEYS = [
     'color', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing',
-    'textTransform', 'textAlign',
+    'textTransform', 'textAlign', 'textDecorationLine',
   ];
   const SKIPPED_TAGS = new Set(['script', 'style', 'noscript', 'template', 'link', 'meta', 'title']);
   const LABEL_MAX = 40;
@@ -324,6 +324,13 @@ function walkInPage({ rootSelector, limits }) {
     return Number.isFinite(px) ? px : normalLineHeight(parent);
   };
 
+  const metricsCanvas = document.createElement('canvas').getContext('2d');
+
+  const fontAscentOf = (computed) => {
+    metricsCanvas.font = `${computed.fontStyle} ${computed.fontWeight} ${computed.fontSize} ${computed.fontFamily}`;
+    return Math.round(metricsCanvas.measureText('').fontBoundingBoxAscent);
+  };
+
   const isSingleLine = (range) => new Set([...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => Math.round(rect.top))).size <= 1;
 
   const markParent = (parent) => {
@@ -344,7 +351,7 @@ function walkInPage({ rootSelector, limits }) {
     const box = boxOf(range.getBoundingClientRect());
     const parent = node.parentElement;
     const computed = getComputedStyle(parent);
-    const result = { type: 'text', text, box, style: pick(computed, TEXT_KEYS), markId: markParent(parent) };
+    const result = { type: 'text', text, box, style: pick(computed, TEXT_KEYS), markId: markParent(parent), baseline: box.y + fontAscentOf(computed) };
     if (isSingleLine(range)) {
       const height = lineHeightOf(parent, computed);
       if (Number.isFinite(height) && height > 0) {

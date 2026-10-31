@@ -2,6 +2,7 @@
 //! layer, an `<svg>` an imported vector layer. A value that cannot be read is left out and named
 //! in the warnings; nothing is made up in its place.
 
+mod baseline;
 mod cleanup;
 mod css;
 mod faces;
@@ -225,7 +226,7 @@ impl<'d, 's> Walk<'d, 's> {
             DomNode::Element(element) => self.element(element, item, pending),
             DomNode::Text(run) => {
                 let id = self.doc.alloc_id();
-                let placement = item.place(run.line_box.as_ref().unwrap_or(&run.r#box));
+                let placement = item.place(baseline::line_box(run).as_ref().unwrap_or(&run.r#box));
                 let mut node = text::layer(id, run, &placement, &mut self.warnings);
                 node.annotations = self.take_notes();
                 Ok(Some(self.doc.insert(node, item.parent, None)?))

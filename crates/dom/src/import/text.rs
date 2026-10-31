@@ -2,10 +2,10 @@
 
 use figcraft_color::{Color, Paint};
 use figcraft_doc::geom::Affine;
-use figcraft_doc::{LetterSpacing, LineHeight, Node, NodeId, NodeKind, TextAlignH, TextAutoResize, TextCase, TextData, TextStyle};
+use figcraft_doc::{LetterSpacing, LineHeight, Node, NodeId, NodeKind, TextAlignH, TextAutoResize, TextCase, TextData, TextDecoration, TextStyle};
 
 use super::css::{DEFAULT_FONT_SIZE, Style, get, length, read};
-use super::{Placement, Report, Warnings, capped, fonts};
+use super::{Placement, Report, Warnings, baseline, capped, fonts};
 use crate::model::TextRun;
 
 const NAME_CHARS: usize = 64;
@@ -31,6 +31,7 @@ pub(super) fn layer(id: NodeId, run: &TextRun, placement: &Placement, warnings: 
         }
         None => {}
     }
+    data.baseline_nudge = baseline::nudge(run, &data);
     let (width, height) = placement.size();
     let mut node = Node::new(id, NodeKind::Text(data), &name, width, height);
     node.transform = Affine::translate(placement.offset);
@@ -61,7 +62,19 @@ fn text_style(style: &Style, report: &mut Report) -> TextStyle {
     if let Some(spacing) = read(style, "letterSpacing", report, |value| letter_spacing(value, size)) {
         text.letter_spacing = spacing;
     }
+    if let Some(decoration) = read(style, "textDecorationLine", report, text_decoration) {
+        text.decoration = decoration;
+    }
     text
+}
+
+fn text_decoration(value: &str) -> Option<TextDecoration> {
+    match value.to_ascii_lowercase().split_whitespace().next()? {
+        "none" => Some(TextDecoration::None),
+        "underline" => Some(TextDecoration::Underline),
+        "line-through" => Some(TextDecoration::Strikethrough),
+        _ => None,
+    }
 }
 
 struct Face {
@@ -78,6 +91,9 @@ fn family_of(style: &Style, report: &mut Report) -> Option<Face> {
         let installed = fonts::is_installed(&family);
         if !installed && let Some((base, face_style)) = fonts::face_of_platform_name(platform) {
             return Some(Face { family: base, installed: true, style: Some(face_style) });
+        }
+        if !installed {
+            report.note(&format!("font {family} is not installed: it is drawn with a fallback until it is"));
         }
         return Some(Face { family, installed, style: None });
     }

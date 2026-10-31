@@ -65,7 +65,7 @@ pub(super) fn installed_style(family: &str, weight: u16, italic: bool) -> Option
 }
 
 /// A filter that keeps nothing keeps everything: the family has no such style to prefer.
-fn preferring<'a>(styles: Vec<&'a str>, keep: impl Fn(&str) -> bool) -> Vec<&'a str> {
+fn preferring(styles: Vec<&str>, keep: impl Fn(&str) -> bool) -> Vec<&str> {
     let kept: Vec<&str> = styles.iter().copied().filter(|style| keep(style)).collect();
     if kept.is_empty() { styles } else { kept }
 }

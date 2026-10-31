@@ -222,6 +222,12 @@ fn natural_ratio(face: &Face) -> f64 {
 
 /// A line's height: whole pixels (halves round up), whatever unit it was given in. Heights under a
 /// pixel stay as they are, so tiny text keeps its lines apart.
+const MAX_BASELINE_NUDGE: f64 = 1_000.0;
+
+fn baseline_nudge(text: &TextData) -> f64 {
+    if text.baseline_nudge.is_finite() { text.baseline_nudge.clamp(-MAX_BASELINE_NUDGE, MAX_BASELINE_NUDGE) } else { 0.0 }
+}
+
 fn whole_px(line_height: f64) -> f64 {
     if line_height >= 1.0 { (line_height + 0.5).floor() } else { line_height }
 }
@@ -809,7 +815,7 @@ pub fn layout(text: &TextData, box_width: Option<f64>, box_height: Option<f64>) 
             let gap = if in_list(*para) && para.checked_sub(1).is_some_and(in_list) { text.list_spacing } else { text.paragraph_spacing };
             y += if gap.is_finite() { gap.clamp(0.0, 10_000.0) } else { 0.0 };
         }
-        let baseline = y + (lh - (asc + desc)) / 2.0 + asc;
+        let baseline = y + (lh - (asc + desc)) / 2.0 + asc + baseline_nudge(text);
         // Trailing spaces don't count for width/alignment.
         let mut vis_end = *e;
         while vis_end > *s && items.get(vis_end - 1).is_some_and(|it| it.is_space() || is_line_break(it.ch)) {
