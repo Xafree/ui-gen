@@ -372,7 +372,7 @@ fn pages(app: &mut FigApp, ui: &mut Ui) {
                 reorder.row_by(&resp, k, r, || if divider { tr("Divider").to_string() } else { name.clone() });
             }
             a11y::list_item(&resp, if divider { tr("Divider") } else { &name }, id == cur);
-            let r = r.shrink2(vec2(if lib { lt::SIDE } else { 8.0 }, 0.0));
+            let r = r.shrink2(vec2(row_side(lib), 0.0));
             a11y::ring_around(ui, r, &resp);
             let renaming = app.ui.rename_page.as_ref().is_some_and(|(i, _)| *i == id);
             if divider && !renaming {
@@ -1122,8 +1122,13 @@ fn paint_row_bg(ui: &Ui, t: &Tokens, rr: Rect, state: [bool; 3], hovered: bool) 
     }
 }
 
-/// A row's background in a library tab.
-fn paint_library_row_bg(ui: &Ui, t: &Tokens, rr: Rect, selected: bool, in_selected: bool, hovered: bool) {
+/// A row's background in its tab; `state` is [selected, in_selected, component].
+fn paint_layer_row_bg(ui: &Ui, t: &Tokens, rr: Rect, lib: bool, state: [bool; 3], hovered: bool) {
+    let [selected, in_selected, _] = state;
+    if !lib {
+        paint_row_bg(ui, t, rr, state, hovered);
+        return;
+    }
     let colour = if selected {
         t.selected_row
     } else if in_selected {
@@ -1134,6 +1139,16 @@ fn paint_library_row_bg(ui: &Ui, t: &Tokens, rr: Rect, selected: bool, in_select
         return;
     };
     ui.painter().rect_filled(rr, CornerRadius::same(lt::RADIUS), colour);
+}
+
+/// The margin of a row's background on each side.
+fn row_side(lib: bool) -> f32 {
+    if lib { lt::SIDE } else { 8.0 }
+}
+
+/// A row's chevron centre, icon centre and name start in its tab (`x0`: left of its contents).
+fn row_columns(lib: bool, left: f32, x0: f32, depth: usize, has_kids: bool) -> (f32, f32, f32) {
+    if lib { library_columns(left, depth, has_kids) } else { (x0 + 6.0, x0 + 22.0, x0 + 36.0) }
 }
 
 /// Where a row's chevron and icon centres and its name start in a library tab: a row without
@@ -1150,18 +1165,8 @@ fn library_columns(left: f32, depth: usize, has_kids: bool) -> (f32, f32, f32) {
     }
 }
 
-/// Draw the layer tree with search, cached rows, reveal-selection expansion and scrolling,
-/// rename/Tab navigation, selection and drag/drop, sweep toggles and Dev Mode restrictions.
-fn layers(app: &mut FigApp, ui: &mut Ui) {
-    let t = Tokens::get(ui.ctx());
-    // Dev Mode only inspects: rows select and expand, but don't rename, reorder, hide or lock.
-    let dev = app.ui.right_tab == crate::RightTab::Inspect;
-    if dev {
-        app.ui.rename = None;
-    }
-    let w = ui.available_width();
-    let lib = app.session.in_lib_project();
-    let row_h = if lib { lt::ROW } else { ROW };
+/// The title of the layers with its search button and, when open, the search row.
+fn layers_title(app: &mut FigApp, ui: &mut Ui, t: &Tokens, w: f32, lib: bool) {
     if lib {
         ui.add_space(lt::SECTION_PAD);
     }
@@ -1183,8 +1188,67 @@ fn layers(app: &mut FigApp, ui: &mut Ui) {
         app.ui.layer_filter.clear();
     }
     if app.ui.layer_search {
-        search_field(ui, &t, w, search_id, tr("Find layers"), &mut app.ui.layer_filter, &mut app.ui.layer_search, sresp.clicked());
+        search_field(ui, t, w, search_id, tr("Find layers"), &mut app.ui.layer_filter, &mut app.ui.layer_search, sresp.clicked());
     }
+}
+
+/// A row's chevron colour.
+fn chevron_colour(t: &Tokens, lib: bool, selected: bool) -> Color32 {
+    match (lib, selected) {
+        (true, true) => t.text,
+        (true, false) => t.text_secondary,
+        (false, _) => t.icon_secondary,
+    }
+}
+
+/// A row's icon, in the marks and colours of its tab.
+fn paint_row_icon(ui: &Ui, t: &Tokens, rect: Rect, icon: Icon, lib: bool, component: bool, shown: bool) {
+    let component = component || icon == Icon::Slot;
+    let colour = match (lib, component, shown) {
+        (true, _, false) => t.text_tertiary,
+        (true, true, true) => t.component,
+        (true, false, true) => t.text_secondary,
+        (false, component, shown) => row_color(component, shown, t.icon, t.text_tertiary),
+    };
+    if lib && matches!(icon, Icon::Component | Icon::ComponentSet) {
+        lt::paint_component_mark(ui.painter(), rect, colour);
+    } else {
+        icons::paint(ui.painter(), rect, icon, colour);
+    }
+}
+
+/// A row's name colour: in a library tab, a parent is muted unless selected.
+fn name_colour(t: &Tokens, lib: bool, component: bool, shown: bool, emphasised: bool) -> Color32 {
+    match (lib, shown) {
+        (true, false) => t.text_tertiary,
+        (true, true) if emphasised => t.text,
+        (true, true) => t.text_secondary,
+        (false, shown) => row_color(component, shown, t.text, t.text_tertiary),
+    }
+}
+
+/// A row's name font; `heading`: a top level frame or section outside a library tab.
+fn name_font(lib: bool, heading: bool) -> egui::FontId {
+    match (lib, heading) {
+        (true, _) => regular(lt::FONT_SIZE),
+        (false, true) => semibold(11.0),
+        (false, false) => regular(11.0),
+    }
+}
+
+/// Draw the layer tree with search, cached rows, reveal-selection expansion and scrolling,
+/// rename/Tab navigation, selection and drag/drop, sweep toggles and Dev Mode restrictions.
+fn layers(app: &mut FigApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    // Dev Mode only inspects: rows select and expand, but don't rename, reorder, hide or lock.
+    let dev = app.ui.right_tab == crate::RightTab::Inspect;
+    if dev {
+        app.ui.rename = None;
+    }
+    let w = ui.available_width();
+    let lib = app.session.in_lib_project();
+    let row_h = if lib { lt::ROW } else { ROW };
+    layers_title(app, ui, &t, w, lib);
     let Ok(ds) = app.session.ds() else { return };
     let doc = ds.doc.clone();
     let page = ds.page;
@@ -1282,20 +1346,16 @@ fn layers(app: &mut FigApp, ui: &mut Ui) {
             a11y::tree_item(&resp, if n.name.is_empty() { tr(n.kind.label()) } else { &n.name }, &info);
             let in_selected = !selected && doc.ancestors(row.id).iter().any(|a| sel.contains(a));
             let is_comp = matches!(n.kind, NodeKind::Component { .. } | NodeKind::ComponentSet { .. } | NodeKind::Instance { .. });
-            let rr = r.shrink2(vec2(if lib { lt::SIDE } else { 8.0 }, 0.0));
+            let rr = r.shrink2(vec2(row_side(lib), 0.0));
             a11y::ring_around(ui, rr, &resp);
             // Over the row, its eye and padlock included (they sit on top of it).
             let over = resp.contains_pointer();
-            if lib {
-                paint_library_row_bg(ui, &t, rr, selected, in_selected, over || hover == Some(row.id));
-            } else {
-                paint_row_bg(ui, &t, rr, [selected, in_selected, is_comp], over || hover == Some(row.id));
-            }
+            paint_layer_row_bg(ui, &t, rr, lib, [selected, in_selected, is_comp], over || hover == Some(row.id));
             if over {
                 hovered_row = Some(row.id);
             }
             let x0 = row_x0(rr, row.depth);
-            let (tri_x, icon_x, name_x) = if lib { library_columns(r.min.x, row.depth, row.has_kids) } else { (x0 + 6.0, x0 + 22.0, x0 + 36.0) };
+            let (tri_x, icon_x, name_x) = row_columns(lib, r.min.x, x0, row.depth, row.has_kids);
             let shown = n.visible && !row.dimmed;
             // Expand triangle.
             if row.has_kids {
@@ -1303,14 +1363,12 @@ fn layers(app: &mut FigApp, ui: &mut Ui) {
                 let tresp = ui.interact(tri, ui.scope_id().with(("tri", row.id)), Sense::click());
                 let open = app.ui.expanded.contains(&row.id);
                 a11y::button(&tresp, if open { tr("Collapse") } else { tr("Expand") });
-                let tri_col = if lib && selected {
-                    t.text
-                } else if lib {
-                    t.text_secondary
-                } else {
-                    t.icon_secondary
-                };
-                icons::paint(ui.painter(), if lib { tri } else { tri.shrink(1.0) }, if open { Icon::Chevron } else { Icon::ChevronRight }, tri_col);
+                icons::paint(
+                    ui.painter(),
+                    tri.shrink(if lib { 0.0 } else { 1.0 }),
+                    if open { Icon::Chevron } else { Icon::ChevronRight },
+                    chevron_colour(&t, lib, selected),
+                );
                 if tresp.clicked() {
                     if ui.input(|i| i.modifiers.alt) {
                         deep = Some((row.id, !open));
@@ -1320,37 +1378,15 @@ fn layers(app: &mut FigApp, ui: &mut Ui) {
                 }
             }
             let icon = node_icon(&doc, row.id);
-            let icon_col = match (lib, is_comp || icon == Icon::Slot, shown) {
-                (true, _, false) => t.text_tertiary,
-                (true, true, true) => t.component,
-                (true, false, true) => t.text_secondary,
-                (false, comp, shown) => row_color(comp, shown, t.icon, t.text_tertiary),
-            };
-            let icon_rect = Rect::from_center_size(pos2(icon_x, r.center().y), vec2(14.0, 14.0));
-            if lib && matches!(icon, Icon::Component | Icon::ComponentSet) {
-                lt::paint_component_mark(ui.painter(), icon_rect, icon_col);
-            } else {
-                icons::paint(ui.painter(), icon_rect, icon, icon_col);
-            }
+            paint_row_icon(ui, &t, Rect::from_center_size(pos2(icon_x, r.center().y), vec2(14.0, 14.0)), icon, lib, is_comp, shown);
             if app.ui.rename.is_some_and(|rn| rn.id == row.id) {
                 if let Some(new) = rename_field(app, ui, row.id, row.depth, &n.name, r) {
                     rename_done = Some((row.id, new));
                 }
             } else {
-                let col = match (lib, shown) {
-                    (true, false) => t.text_tertiary,
-                    (true, true) if selected || !row.has_kids => t.text,
-                    (true, true) => t.text_secondary,
-                    (false, shown) => row_color(is_comp, shown, t.text, t.text_tertiary),
-                };
+                let col = name_colour(&t, lib, is_comp, shown, selected || !row.has_kids);
                 let top_level = doc.node(n.parent.unwrap_or(page)).is_some_and(|p| p.is_page());
-                let font = if lib {
-                    regular(lt::FONT_SIZE)
-                } else if top_level && (n.kind.is_frame_like() || matches!(n.kind, NodeKind::Section { .. })) {
-                    semibold(11.0)
-                } else {
-                    regular(11.0)
-                };
+                let font = name_font(lib, top_level && (n.kind.is_frame_like() || matches!(n.kind, NodeKind::Section { .. })));
                 let name =
                     if n.name.is_empty() { tr(n.kind.label()).to_string() } else { variant_row_label(&doc, n).unwrap_or_else(|| n.name.clone()) };
                 // Room left of the lock and eye buttons.
