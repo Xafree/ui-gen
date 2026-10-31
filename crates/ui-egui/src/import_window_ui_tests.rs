@@ -136,6 +136,7 @@ pub(crate) struct Shared {
     pub(crate) inspects: Vec<(String, Outcome)>,
     pub(crate) failing_render: Option<FailingRender>,
     pub(crate) failing_component: Option<(String, CaptureError)>,
+    pub(crate) failing_install: Option<CaptureError>,
 }
 
 struct FakeBackend {
@@ -162,11 +163,16 @@ impl CaptureBackend for FakeBackend {
             CaptureJob::Install { package, version, .. } => {
                 Ok(json!({"package": package, "version": version, "framework": "react", "license": "MIT"}))
             }
-            CaptureJob::InstallMany { packages, .. } => {
-                let installed: Vec<Value> =
-                    packages.iter().map(|spec| json!({"package": spec.name, "version": VERSION, "framework": "react", "license": "MIT"})).collect();
-                Ok(json!({"packages": installed}))
-            }
+            CaptureJob::InstallMany { packages, .. } => match &shared.failing_install {
+                Some(error) => Err(error.clone()),
+                None => {
+                    let installed: Vec<Value> = packages
+                        .iter()
+                        .map(|spec| json!({"package": spec.name, "version": VERSION, "framework": "react", "license": "MIT"}))
+                        .collect();
+                    Ok(json!({"packages": installed}))
+                }
+            },
             CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
         };
         shared.submitted.push(job);
@@ -217,6 +223,7 @@ impl Bench {
             inspects,
             failing_render: None,
             failing_component: None,
+            failing_install: None,
         }));
         ui.app.session.set_capture_backend(Box::new(FakeBackend { shared: Arc::clone(&shared) }));
         ui.app.ui.toast = None;
@@ -254,7 +261,7 @@ impl Bench {
         self.settle();
     }
 
-    fn set_inspect(&mut self, package: &str, outcome: Outcome) {
+    pub(crate) fn set_inspect(&mut self, package: &str, outcome: Outcome) {
         let mut shared = self.shared.lock().unwrap();
         shared.inspects.retain(|(name, _)| name != package);
         shared.inspects.push((package.to_string(), outcome));
@@ -268,7 +275,7 @@ impl Bench {
         self.shared.lock().unwrap().failing_component = Some((name.to_string(), failure(message)));
     }
 
-    fn submitted(&self) -> Vec<CaptureJob> {
+    pub(crate) fn submitted(&self) -> Vec<CaptureJob> {
         self.shared.lock().unwrap().submitted.clone()
     }
 
@@ -646,18 +653,18 @@ fn a_package_with_no_component_says_so_shows_the_notes_of_the_reading_and_gets_n
 
 // covers: E4-6.2
 #[test]
-fn without_a_source_the_surface_sends_the_user_to_the_project_settings() {
-    let mut b = Bench::with("no-source", &[], vec![]);
-    b.open(None);
-    let shown = b.shown();
-    assert!(mentions(&shown, "No source library yet. Add one in the project settings."), "{shown:?}");
-    assert!(b.inspected_packages().is_empty(), "there is nothing to read");
-    assert!(b.ui.app.ui.project_settings.is_none());
+fn without_a_source_the_command_opens_the_project_settings_for_a_user_only() {
+    let mut b = Bench::with("no-source", &[source(GONE, "3.0.0", true)], vec![]);
+    let ctx = b.ui.ctx.clone();
+    crate::control::handle(&mut b.ui.app, &ctx, "engine.execute", &json!({"command": WINDOW, "params": {}})).unwrap();
+    b.settle();
+    assert!(!b.window_open() && b.ui.app.ui.project_settings.is_none(), "a call by the control channel opens nothing");
 
-    let mark = b.mark();
-    b.click("Open project settings");
-    assert_eq!(b.ran_since(mark, "project.settings").len(), 1, "the button runs project.settings");
+    b.open(None);
+    assert!(!b.window_open(), "the surface does not open");
     assert!(b.ui.app.ui.project_settings.is_some(), "the project settings open");
+    assert!(b.inspected_packages().is_empty(), "there is nothing to read");
+    assert!(b.shows("Source libraries"), "{:?}", b.shown());
 }
 
 // E4-6.6 — catalogs
@@ -686,13 +693,11 @@ fn keys_in(src: &str) -> BTreeSet<String> {
     found
 }
 
-const NEW_KEYS: [&str; 20] = [
+const NEW_KEYS: [&str; 18] = [
     "Search components",
     "Reading the components of {package}…",
     "Couldn't read the components of {package}: {cause}",
     "This package exports no component.",
-    "No source library yet. Add one in the project settings.",
-    "Open project settings",
     "States",
     "Themes",
     "Animations",

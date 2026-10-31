@@ -343,7 +343,7 @@ Le moteur (L5) garde toute la logique ; l'interface (L6) affiche et relaie, chaq
   n'existe pas (elle casserait le geste) : l'ancien contenu reste dans la lib et le remplacement s'annule.
 - **Fenêtre « Import a component ».** Menu Fichier, palette (« Actions ») et bouton du panneau ; Échap la
   ferme. Elle lit la liste des composants par `Session::inspected` et traite chargement, erreur (« Try
-  again »), vide, sans source (« Open project settings ») et succès (« Show in Components », « Import
+  again »), vide et succès ; sans source, la page « Source libraries » s'ouvre à la place. Mêmes états de succès : (« Show in Components », « Import
   another »). Choisir un composant règle les options depuis ses props ; une ligne « {variants} variants ·
   {renders} renders » suit les cases (`render_count`), et l'import est refusé au-delà de `MAX_RENDERS`
   (128). Elle envoie toujours `stage: true`.

@@ -41,7 +41,7 @@ replaced.
 ### The capture port
 
 The engine (L5) never starts a process: it declares the port `CaptureBackend` (`submit`, `poll`, `shutdown`) and the
-job and error types in `crates/engine/src/capture.rs`. `project.addSource`, `project.addSources`, `project.setSourceVersion` and
+job and error types in `crates/engine/src/capture.rs`. `project.addSource`, `project.addSources`, `project.setSourceVersion`, `project.reinstallSources` and
 `project.removeSource` validate, check the project folder may be written, submit a job and return `{job}` at once;
 `Session::pump_capture()` (every frame in the app, a wait loop in the CLI) applies the finished jobs, which writes
 `uigen.json` and raises an event for the toast. `capture.status` lists the jobs. The desktop app and the CLI install
