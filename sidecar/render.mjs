@@ -114,15 +114,32 @@ const settle = (page, budget) =>
     await Promise.race([settled, new Promise((resolve) => setTimeout(resolve, capMs))]);
   }, Math.min(SETTLE_CAP_MS, budget.remaining()));
 
-async function forceState(page, state, budget) {
-  const target = page.locator(`${ROOT_SELECTOR} > :not(style, script)`).first();
-  if (state === 'hover') {
-    await target.hover();
-  } else if (state === 'pressed') {
-    await target.hover();
-    await page.mouse.down();
-  } else if (state === 'focus') {
-    await target.focus();
+function findStateTarget({ captured, state }) {
+  const INTERACTIVE =
+    'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"]), [role="button"], [role="combobox"], [role="switch"], [role="checkbox"], [role="radio"], [role="slider"], [role="tab"]';
+  const MIN_POINTER_SIDE = 4;
+  const IGNORED = new Set(['style', 'script', 'link', 'meta', 'template', 'noscript']);
+  const hasBox = (element) => {
+    const { width, height } = element.getBoundingClientRect();
+    return width >= MIN_POINTER_SIDE && height >= MIN_POINTER_SIDE;
+  };
+  const owner = document.querySelector(captured);
+  const candidates = [owner, ...owner.querySelectorAll(INTERACTIVE)].filter((element) => element.matches(INTERACTIVE));
+  const interactive = state === 'focus' ? candidates[0] : candidates.find(hasBox);
+  return interactive ?? [...owner.children].find((child) => !IGNORED.has(child.localName) && hasBox(child)) ?? owner;
+}
+
+async function forceState(page, captured, state, budget) {
+  if (state === 'hover' || state === 'pressed' || state === 'focus') {
+    const target = (await page.evaluateHandle(findStateTarget, { captured, state })).asElement();
+    if (state === 'focus') {
+      await target.focus();
+    } else {
+      await target.hover();
+    }
+    if (state === 'pressed') {
+      await page.mouse.down();
+    }
   }
   await settle(page, budget);
 }
@@ -193,7 +210,7 @@ async function renderInPage(page, installed, params, { code, styles }, budget) {
   if (captured === ROOT_SELECTOR) {
     await refuseEmptyRoot(page, component);
   }
-  await forceState(page, state, budget);
+  await forceState(page, captured, state, budget);
   const source = { package: installed.name, version: installed.version, component, props, state };
   const snapshot = await captureSnapshot(page, captured, source);
   const segments = pngSegments(installed, { component, props, state, theme });
