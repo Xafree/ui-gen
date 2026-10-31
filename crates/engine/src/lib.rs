@@ -560,6 +560,8 @@ mod uigen_compare_background_tests;
 #[cfg(test)]
 mod uigen_compare_command_tests;
 #[cfg(test)]
+mod uigen_compare_phase_tests;
+#[cfg(test)]
 mod uigen_compare_pixels_tests;
 #[cfg(test)]
 mod uigen_compare_raster_tests;

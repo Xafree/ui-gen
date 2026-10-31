@@ -17,11 +17,11 @@ pub(super) fn line_box(run: &TextRun) -> Option<DomBox> {
 }
 
 /// What `data`, its style final, must add to its natural baseline to draw on the browser's; nothing for a baseline out of reason.
-pub(super) fn nudge(run: &TextRun, data: &TextData) -> f64 {
+pub(super) fn nudge(run: &TextRun, data: &TextData, on_grid: bool) -> f64 {
     let Some(baseline) = run.baseline else { return 0.0 };
     let top = line_box(run).map_or(run.r#box.y, |line| line.y);
     let Some(natural) = figcraft_text::layout_cached(data, None, None).lines.first().map(|line| line.baseline) else { return 0.0 };
-    let wanted = baseline.round() - top.round() - natural;
+    let wanted = baseline.round() - if on_grid { top.round() } else { top } - natural;
     if wanted.is_finite() && wanted.abs() <= data.style.font_size { wanted } else { 0.0 }
 }
 

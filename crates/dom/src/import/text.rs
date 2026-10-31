@@ -31,7 +31,7 @@ pub(super) fn layer(id: NodeId, run: &TextRun, placement: &Placement, warnings: 
         }
         None => {}
     }
-    data.baseline_nudge = baseline::nudge(run, &data);
+    data.baseline_nudge = baseline::nudge(run, &data, placement.on_grid);
     data.hug_nudge = baseline::hug_nudge(placement.size().0, &data) as f32;
     data.browser_gamma = true;
     let (width, height) = placement.size();

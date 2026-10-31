@@ -21,6 +21,7 @@ const MAX_BYTES: usize = 16 * 1024;
 const MAX_PNG_CHARS: usize = 512;
 const CAPTURES_DIR: &str = ".uigen/captures/";
 const SHORT_FAMILY_CHARS: usize = 64;
+const MAX_PHASE: f64 = 0.5;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ThemeReference {
@@ -30,6 +31,12 @@ pub struct ThemeReference {
     pub height: u32,
     pub distinct: bool,
     pub texts: Vec<RefText>,
+    #[serde(default, skip_serializing_if = "is_on_the_grid")]
+    pub phase: [f64; 2],
+}
+
+fn is_on_the_grid(phase: &[f64; 2]) -> bool {
+    *phase == [0.0, 0.0]
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -49,7 +56,10 @@ impl RefText {
 
 impl ThemeReference {
     fn is_sound(&self) -> bool {
-        self.png.as_deref().is_none_or(is_capture_path) && self.texts.len() <= MAX_TEXTS && self.texts.iter().all(RefText::is_finite)
+        self.png.as_deref().is_none_or(is_capture_path)
+            && self.texts.len() <= MAX_TEXTS
+            && self.texts.iter().all(RefText::is_finite)
+            && self.phase.iter().all(|fraction| fraction.abs() <= MAX_PHASE)
     }
 }
 
@@ -141,7 +151,8 @@ pub(super) fn keep(request: &Request, variant: &Variant) -> Kept {
         let root = root_box(&snapshot.root);
         let (width, height) = (pixels(root.width), pixels(root.height));
         let distinct = index == 0 || differs_where_it_paints(&variant.snapshot, snapshot);
-        themes.insert(name.to_string(), ThemeReference { png: png.map(str::to_string), width, height, distinct, texts });
+        let phase = figcraft_dom::capture_phase(snapshot);
+        themes.insert(name.to_string(), ThemeReference { png: png.map(str::to_string), width, height, distinct, texts, phase });
     }
     let mut reference = Reference {
         package: request.package.clone(),

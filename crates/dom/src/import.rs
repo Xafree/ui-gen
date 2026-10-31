@@ -86,6 +86,18 @@ pub fn import_snapshot(doc: &mut Document, snapshot: &Snapshot, parent: NodeId, 
     Ok(Imported { root, warnings: walk.warnings.into_messages() })
 }
 
+/// Where the root layer of `snapshot` falls in a capture cut on the rounded edges of its box, top-left corner first:
+/// nowhere but the corner for a box on the pixel grid, at a fraction of a pixel for a box the browser scaled.
+pub fn capture_phase(snapshot: &Snapshot) -> [f64; 2] {
+    match &snapshot.root {
+        DomNode::Element(element) if effects::is_scaled(&element.style) => {
+            let exact = Snapped::exact(&element.r#box);
+            [exact.x - exact.x.round(), exact.y - exact.y.round()]
+        }
+        _ => [0.0, 0.0],
+    }
+}
+
 #[derive(Default)]
 struct Warnings {
     messages: Vec<String>,
@@ -178,6 +190,7 @@ impl Snapped {
 struct Placement {
     offset: (f64, f64),
     snapped: Snapped,
+    on_grid: bool,
 }
 
 impl Placement {
@@ -191,16 +204,17 @@ struct Pending<'s> {
     parent: NodeId,
     origin: (f64, f64),
     at: Option<(f64, f64)>,
+    under_scale: bool,
 }
 
 impl Pending<'_> {
     fn place(&self, dom_box: &DomBox) -> Placement {
-        self.placed(Snapped::of(dom_box))
+        if self.under_scale { self.placed(Snapped::exact(dom_box), false) } else { self.placed(Snapped::of(dom_box), true) }
     }
 
-    fn placed(&self, snapped: Snapped) -> Placement {
+    fn placed(&self, snapped: Snapped, on_grid: bool) -> Placement {
         let offset = self.at.unwrap_or((snapped.x - self.origin.0, snapped.y - self.origin.1));
-        Placement { offset, snapped }
+        Placement { offset, snapped, on_grid }
     }
 }
 
@@ -223,7 +237,7 @@ impl<'d, 's> Walk<'d, 's> {
     }
 
     fn run(&mut self, root: &'s DomNode, parent: NodeId, at: (f64, f64)) -> Result<NodeId, ImportError> {
-        let mut pending = vec![Pending { node: root, parent, origin: (0.0, 0.0), at: Some(at) }];
+        let mut pending = vec![Pending { node: root, parent, origin: (0.0, 0.0), at: Some(at), under_scale: false }];
         let mut root_id = None;
         while let Some(item) = pending.pop() {
             let id = self.visit(&item, &mut pending)?;
@@ -262,17 +276,25 @@ impl<'d, 's> Walk<'d, 's> {
         if css::is_hidden(&element.style) {
             return Ok(None);
         }
+        let under_scale = item.under_scale || effects::is_scaled(&element.style);
         let (parent, origin, id) = if item.at.is_none() && css::is_contents(&element.style) {
             (item.parent, item.origin, None)
         } else {
-            let placement = if effects::is_scaled(&element.style) { item.placed(Snapped::exact(&element.r#box)) } else { item.place(&element.r#box) };
+            let placement =
+                if effects::is_scaled(&element.style) { item.placed(Snapped::exact(&element.r#box), false) } else { item.place(&element.r#box) };
             let mut node = frame::build(self.doc.alloc_id(), element, &placement, &mut self.warnings);
             node.annotations = self.take_notes();
             let id = self.doc.insert(node, item.parent, None)?;
             self.elements.push((id, element));
             (id, (placement.snapped.x, placement.snapped.y), Some(id))
         };
-        pending.extend(stacking::painting_order(&element.children).into_iter().rev().map(|child| Pending { node: child, parent, origin, at: None }));
+        pending.extend(stacking::painting_order(&element.children).into_iter().rev().map(|child| Pending {
+            node: child,
+            parent,
+            origin,
+            at: None,
+            under_scale,
+        }));
         Ok(id)
     }
 }
