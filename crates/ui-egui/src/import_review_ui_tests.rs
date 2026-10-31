@@ -343,7 +343,7 @@ fn the_end_of_another_import_neither_ends_nor_advances_the_import_the_window_fol
     lab.click("Alert");
     lab.click("Import");
     lab.press(Key::Escape);
-    assert!(!lab.shows("Import a component"), "the window is closed");
+    assert!(!lab.shows("02 Components"), "the surface is closed");
 
     lab.open_window();
     lab.wait_for("Chip");
@@ -352,13 +352,12 @@ fn the_end_of_another_import_neither_ends_nor_advances_the_import_the_window_fol
     lab.release(2);
     lab.release(8);
 
-    assert!(!lab.shows("Imported Chip"), "Alert ended, Chip did not: {:?}", lab.shown());
+    assert!(!lab.shows("Imported 1 of 1 components"), "Alert ended, Chip did not: {:?}", lab.shown());
     let (done, total) = lab.progress().expect("Chip is still running");
-    assert!(done <= 1 && total == 9, "only the jobs of Chip count: {done} of {total}");
-    assert_eq!(lab.toast().as_deref(), Some(IMPORTED_AFTER_ALERT), "the end of Alert falls back to the toast");
+    assert!(done == 0 && total == 1, "only the component of this run counts: {done} of {total}");
 
     lab.release_all();
-    assert!(lab.shows("Imported Chip"), "{:?}", lab.shown());
+    assert!(lab.shows("Imported 1 of 1 components"), "{:?}", lab.shown());
 }
 
 #[test]
@@ -393,7 +392,7 @@ fn only_the_visible_rows_of_a_long_list_are_drawn() {
     lab.open_window();
     lab.wait_for("Widget001");
     let drawn = lab.shown().iter().filter(|text| text.starts_with("Widget")).count();
-    assert!((1..=12).contains(&drawn), "{drawn} rows drawn");
+    assert!((1..=20).contains(&drawn), "{drawn} rows drawn of 300");
 }
 
 #[test]

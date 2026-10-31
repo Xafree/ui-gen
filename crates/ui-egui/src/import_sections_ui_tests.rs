@@ -724,6 +724,8 @@ fn the_search_row_button_opens_the_import_window_for_any_source_and_a_section_bu
     assert_eq!(calls.len(), 1, "the search row runs uigen.importWindow: {calls:?}");
     assert!(calls[0].get("package").is_none_or(Value::is_null), "without a package: {:?}", calls[0]);
 
+    lab.ui.app.ui.import_window = None;
+    lab.show();
     let mark = lab.mark();
     let buttons = lab.centres_of(Role::Button, IMPORT_BUTTON);
     lab.click(buttons[1]);
