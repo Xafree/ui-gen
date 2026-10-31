@@ -143,6 +143,7 @@ fn copy_field(field: Field, to: &mut Node, from: &Node) {
                 into.leading_trim = source.leading_trim;
                 into.baseline_nudge = source.baseline_nudge;
                 into.hug_nudge = source.hug_nudge;
+                into.browser_gamma = source.browser_gamma;
                 into.auto_resize = source.auto_resize;
             }
             to.styles.text.clone_from(&from.styles.text);

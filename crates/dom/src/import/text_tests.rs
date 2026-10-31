@@ -257,3 +257,9 @@ fn an_imported_text_hugs_the_width_the_browser_snapped_it_to() {
     let (text, _) = styled(json!({ "fontFamily": "Arial", "fontSize": "13px" }));
     assert!((natural(&text) + text.hug_nudge - 50.0).abs() < 1e-9, "{} {}", natural(&text), text.hug_nudge);
 }
+
+#[test]
+fn an_imported_text_is_drawn_on_the_browser_curve() {
+    let (data, _) = styled(json!({}));
+    assert!(data.browser_gamma);
+}
