@@ -396,7 +396,7 @@ fn a_job_that_is_forgotten_or_never_ran_is_answered_by_name_not_by_an_empty_list
     let mut session = Session::empty();
     backend(&mut session);
     let oldest = finished_job(&mut session, false);
-    for _ in 0..300 {
+    for _ in 0..600 {
         finished_job(&mut session, false);
     }
     session.pump_capture();
