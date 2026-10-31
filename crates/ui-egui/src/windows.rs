@@ -492,11 +492,7 @@ fn save_then_close(app: &mut FigApp, ctx: &Context) {
     for uid in files {
         let Some(i) = app.session.docs.iter().position(|d| d.uid == uid) else { continue };
         app.session.active = i;
-        let native =
-            app.session.docs.get(i).and_then(|d| d.path.as_deref()).is_some_and(|p| {
-                !std::path::Path::new(p).extension().and_then(std::ffi::OsStr::to_str).is_some_and(|e| e.eq_ignore_ascii_case("fig"))
-            });
-        if !native {
+        if !saves_in_place(app.session.docs.get(i).and_then(|d| d.path.as_deref())) {
             app.ui.close_after_save_as = Some(uid);
             app.save_as_dialog();
             if app.pending_dialog.is_none() {
@@ -511,6 +507,12 @@ fn save_then_close(app: &mut FigApp, ctx: &Context) {
         }
     }
     close_current(app, ctx);
+}
+
+/// Whether a file at `path` saves where it is: it has a path, and not a .fig, which is never
+/// overwritten silently.
+pub(crate) fn saves_in_place(path: Option<&str>) -> bool {
+    path.is_some_and(|p| !std::path::Path::new(p).extension().and_then(std::ffi::OsStr::to_str).is_some_and(|e| e.eq_ignore_ascii_case("fig")))
 }
 
 /// Before the main window draws: windows asked to close close, closed files leave their windows
