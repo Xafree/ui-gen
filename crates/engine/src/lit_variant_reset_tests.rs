@@ -149,3 +149,60 @@ fn a_variant_without_a_layer_of_the_default_variant_hides_it() {
     let def = definition(&mut s, vec![on, off]);
     assert!(body_of(&def, ":host([icon=\"off\"]) .glyph").contains("display: none;"), "{def}");
 }
+
+const SOURCE: &str = "{\"package\":\"@acme/ui\",\"version\":\"1.0.0\",\"component\":\"Button\"}";
+
+fn imported_button(s: &mut Session, frame: Value, label: Value) -> String {
+    let f = variant(s, "Size=md", 0.0, frame, label);
+    let set = idv(&ex(s, "component.combineVariants", json!({"ids": [f]})));
+    ex(s, "node.set", json!({"id": set, "props": {"name": "Button", "pluginData": {"uigen.source": SOURCE}}}));
+    ex(s, "layout.add", json!({"ids": [f]}));
+    ex(s, "node.set", json!({"id": f, "props": {"sizingH": "fixed", "sizingV": "fixed", "width": 100, "height": 40}}));
+    ex(s, "inspect.componentCode", json!({"id": set, "language": "lit"}))["definition"].as_str().unwrap_or_default().to_string()
+}
+
+#[test]
+fn an_imported_button_grows_with_a_longer_text_and_is_never_smaller_than_captured() {
+    let mut s = Session::new();
+    let def = imported_button(&mut s, json!({"fill": "#cc0000"}), json!({"name": "Label", "fill": "#111111"}));
+    let body = body_of(&def, ".button");
+    assert!(body.contains("min-width: 100px;") && body.contains("min-height: 40px;"), "{body}");
+    assert!(!body.contains(" width: 100px;") && !body.starts_with("width:"), "{body}");
+    assert!(compact(&def).contains(":host { display: inline-block; }"), "{def}");
+}
+
+#[test]
+fn a_layer_of_a_fixed_size_that_was_not_imported_keeps_it() {
+    let mut s = Session::new();
+    let f = variant(&mut s, "Size=md", 0.0, json!({"fill": "#cc0000"}), json!({"name": "Label", "fill": "#111111"}));
+    ex(&mut s, "layout.add", json!({"ids": [f]}));
+    ex(&mut s, "node.set", json!({"id": f, "props": {"sizingH": "fixed", "sizingV": "fixed", "width": 100}}));
+    let def = compact(&definition(&mut s, vec![f]));
+    assert!(!def.contains("min-width"), "{def}");
+}
+
+#[test]
+fn a_full_pill_stays_a_pill_at_any_height_and_a_rounded_box_keeps_its_radius() {
+    let mut s = Session::new();
+    let pill = variant(&mut s, "Shape=pill", 0.0, json!({"fill": "#cc0000", "cornerRadius": 20}), json!({"name": "Label", "fill": "#111111"}));
+    let round = variant(&mut s, "Shape=round", 200.0, json!({"fill": "#cc0000", "cornerRadius": 8}), json!({"name": "Label", "fill": "#111111"}));
+    let def = definition(&mut s, vec![pill, round]);
+    assert!(body_of(&def, ".chip").contains("border-radius: 9999px;"), "{def}");
+    assert!(body_of(&def, ":host([shape=\"round\"]) .chip").contains("border-radius: 8px;"), "{def}");
+}
+
+#[test]
+fn a_text_takes_the_font_stack_of_its_library_and_a_hostile_one_is_ignored() {
+    let mut s = Session::new();
+    let stack = "system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif";
+    let label = json!({"name": "Label", "fill": "#111111", "pluginData": {"uigen.fontStack": stack}});
+    let f = variant(&mut s, "Size=md", 0.0, json!({"fill": "#cc0000"}), label);
+    let def = definition(&mut s, vec![f]);
+    assert!(compact(&def).contains(&format!("font-family: {stack};")), "{def}");
+
+    let mut s = Session::new();
+    let label = json!({"name": "Label", "fill": "#111111", "pluginData": {"uigen.fontStack": "Arial; } body { display: none"}});
+    let f = variant(&mut s, "Size=md", 0.0, json!({"fill": "#cc0000"}), label);
+    let def = definition(&mut s, vec![f]);
+    assert!(!def.contains("display: none"), "{def}");
+}

@@ -418,6 +418,12 @@ impl<'c, 'a> Markup<'c, 'a> {
         if n.layout.is_none() && !n.children.is_empty() && !root && in_flow {
             own.push_str("position: relative;\n");
         }
+        if root && self.lang == CodeLang::Lit && self.ctx.comp.is_some_and(|c| crate::lit::grows_with_content(doc, c)) {
+            own = own
+                .lines()
+                .map(|line| if line.starts_with("width: ") || line.starts_with("height: ") { format!("min-{line}\n") } else { format!("{line}\n") })
+                .collect();
+        }
         decls.push_str(&own);
         self.rule(path, &class, decls);
         // The root's variant attributes, and a Vue `v-if` guard, ride on the open tag.

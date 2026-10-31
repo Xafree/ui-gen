@@ -246,6 +246,9 @@ pub(super) fn css(doc: &Document, id: NodeId) -> String {
     format!("/* {} */\n{decls}", n.name.replace("*/", "* /"))
 }
 
+const FONT_STACK_KEY: &str = "uigen.fontStack";
+const FULL_PILL: &str = "9999px";
+
 /// The CSS declarations for `n`'s own look and size, one per line; `hug` leaves out the width
 /// and/or height (they follow the content). Bound variables become `var(--name, value)`.
 pub(crate) fn css_decls(doc: &Document, n: &Node, t: &mut Tokens, hug: (bool, bool)) -> String {
@@ -264,7 +267,8 @@ pub(crate) fn css_decls(doc: &Document, n: &Node, t: &mut Tokens, hug: (bool, bo
     if matches!(n.kind, NodeKind::Ellipse { .. }) {
         put("border-radius", "50%".into());
     } else if let Some(r) = n.corners.uniform().filter(|r| *r > 0.0) {
-        put("border-radius", tok(doc, n, &["cornerRadius"], px(r), t));
+        let pill = t.is_lit() && r * 2.0 >= n.width.min(n.height);
+        put("border-radius", tok(doc, n, &["cornerRadius"], if pill { FULL_PILL.to_string() } else { px(r) }, t));
     } else if n.corners.radii.iter().any(|r| *r > 0.0) {
         let fields = ["topLeftRadius", "topRightRadius", "bottomRightRadius", "bottomLeftRadius"];
         let corners: Vec<String> = n.corners.radii.iter().zip(fields).map(|(r, f)| tok(doc, n, &[f, "cornerRadius"], px(*r), t)).collect();
@@ -403,11 +407,19 @@ fn effect_decls(n: &Node, t: &mut Tokens, put: &mut impl FnMut(&str, String)) {
     }
 }
 
+/// The font stack the source of `n` asked for, if it can only be a list of families in a declaration.
+fn font_stack(n: &Node) -> Option<String> {
+    let stack = n.plugin_data.get(FONT_STACK_KEY)?;
+    let safe = |c: char| c.is_alphanumeric() || matches!(c, ' ' | ',' | '-' | '_' | '"' | '\'' | '.');
+    (!stack.trim().is_empty() && stack.chars().all(safe)).then(|| stack.clone())
+}
+
 /// The type declarations of text layer `n`.
 fn text_decls(doc: &Document, n: &Node, tx: &figcraft_doc::TextData, t: &mut Tokens, put: &mut impl FnMut(&str, String)) {
     let px = |v: f64| format!("{}px", num(v));
     let s = &tx.style;
-    put("font-family", tok(doc, n, &["fontFamily"], format!("\"{}\"", s.font_family.replace('"', "'")), t));
+    let family = font_stack(n).filter(|_| t.is_lit()).unwrap_or_else(|| format!("\"{}\"", s.font_family.replace('"', "'")));
+    put("font-family", tok(doc, n, &["fontFamily"], family, t));
     put("font-size", tok(doc, n, &["fontSize"], px(s.font_size), t));
     put("font-weight", s.weight().to_string());
     if s.italic() {

@@ -781,6 +781,14 @@ fn state_rank(kind: StateKind) -> u8 {
     }
 }
 
+/// Whether the root of `c` hugs its content whatever size it was captured at: an import freezes sizes that the page
+/// it came from let the content decide, so a longer text must still fit.
+pub(crate) fn grows_with_content(doc: &Document, c: &Component) -> bool {
+    let imported =
+        c.set.and_then(|set| doc.node(set)).or_else(|| doc.node(c.comp)).is_some_and(|n| n.plugin_data.contains_key(crate::uigen_import::SOURCE_KEY));
+    imported && doc.node(c.comp).is_some_and(|n| n.layout.is_some())
+}
+
 /// How a layer that only some variants have stays out of the others.
 pub(crate) const HIDDEN: &str = "display: none;";
 
@@ -1047,7 +1055,8 @@ pub fn definition(doc: &Document, c: &Component, opts: &LitOptions) -> LitOutput
     let tag = tag_for(doc, c, opts);
     let class = class_of(&tag);
     let (_, markup, css, tokens) = web_tokens(doc, c, CodeLang::Lit, opts);
-    let hugs = doc.node(c.comp).is_some_and(|n| n.layout.is_some() && n.child_layout.sizing_h == figcraft_doc::Sizing::Hug);
+    let hugs =
+        doc.node(c.comp).is_some_and(|n| n.layout.is_some() && n.child_layout.sizing_h == figcraft_doc::Sizing::Hug) || grows_with_content(doc, c);
     let display = if hugs { "inline-block" } else { "block" };
     let mut out =
         String::from("import { LitElement, css, html, nothing } from \"lit\";\nimport { customElement, property } from \"lit/decorators.js\";\n");
