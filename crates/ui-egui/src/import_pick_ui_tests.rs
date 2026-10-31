@@ -12,6 +12,7 @@
 use std::collections::BTreeSet;
 
 use egui::{Key, Modifiers};
+use figcraft_engine::MAX_RENDERS;
 use figcraft_engine::capture::CaptureJob;
 use serde_json::{Value, json};
 
@@ -22,6 +23,9 @@ use crate::import_window_ui_tests::{Bench, IMPORT, OTHER, OTHER_VERSION, PACKAGE
 const STYLES_ONLY: &str = "styles-ui";
 const STATES: [&str; 5] = ["Default", "Hover", "Focus", "Pressed", "Disabled"];
 const THEMES: [&str; 2] = ["Light", "Dark"];
+const HEROUI_REACT: &str = "@heroui/react";
+const HEROUI_STYLES: &str = "@heroui/styles";
+const FAMILY_VERSION: &str = "3.2.7";
 
 fn at(shown: &[String], needle: &str) -> usize {
     shown.iter().position(|text| text.contains(needle)).unwrap_or_else(|| panic!("{needle:?} is not shown: {shown:?}"))
@@ -379,4 +383,144 @@ fn the_surface_works_from_the_keyboard_alone() {
     let calls = import_calls_since(&b, mark);
     assert_eq!(calls.len(), 1, "Enter on Import starts the import");
     assert_eq!(calls[0]["component"], json!("Alert"));
+}
+
+fn over_limit_reason() -> String {
+    format!("More than {MAX_RENDERS} renders: choose fewer styles, sizes, states or themes")
+}
+
+fn values(prefix: &str, count: usize) -> Vec<String> {
+    (0..count).map(|index| format!("{prefix}{index}")).collect()
+}
+
+fn grid_component(name: &str, styles: usize, sizes: usize) -> Value {
+    let mut props = vec![json!({"name": "label", "type": "string", "values": null})];
+    if styles > 0 {
+        props.push(json!({"name": "variant", "type": "enum", "values": values("style-", styles)}));
+    }
+    if sizes > 0 {
+        props.push(json!({"name": "size", "type": "enum", "values": values("size-", sizes)}));
+    }
+    json!({"name": name, "props": props})
+}
+
+fn grid_open(tag: &str, grid: &[(&str, usize, usize)]) -> Bench {
+    let components: Vec<Value> = grid.iter().map(|(name, styles, sizes)| grid_component(name, *styles, *sizes)).collect();
+    let inspected = json!({"package": PACKAGE, "version": VERSION, "framework": "react", "components": components, "notes": []});
+    let mut b = Bench::with(tag, &[source(PACKAGE, VERSION, false)], vec![(PACKAGE.to_string(), Ok(inspected))]);
+    b.open(None);
+    let first = grid[0].0;
+    b.wait_until("the components are listed", |b| b.has(first));
+    assert!(b.window_open(), "the Choose your components surface is showing: {:?}", b.shown());
+    b
+}
+
+fn started_jobs(b: &Bench) -> usize {
+    b.shared.lock().unwrap().submitted.iter().filter(|job| !matches!(job, CaptureJob::Inspect { .. })).count()
+}
+
+fn assert_refused_for_the_limit(b: &mut Bench, mark: usize) {
+    assert!(import_calls_since(b, mark).is_empty(), "nothing is imported over the limit");
+    assert_eq!(started_jobs(b), 0, "no job but the readings was submitted");
+    let reason = over_limit_reason();
+    let shown = b.shown();
+    assert!(mentions(&shown, &reason), "the reason names the limit {MAX_RENDERS}: {shown:?}");
+    let import = b.control("Import").expect("an Import button");
+    assert!(!import.is_disabled(), "Import stays enabled");
+}
+
+// covers: PICK-8
+#[test]
+fn escape_on_the_surface_returns_to_the_source_libraries_page_and_starts_nothing() {
+    let mut b = Bench::pair("escape", &["Alert", "Button", "Chip"], &["Button", "Slider"]);
+    b.open_settings();
+    b.click("Import components");
+    b.wait_until("both cards are listed", |b| b.has("Slider") && b.has("Alert"));
+    assert!(b.window_open(), "the surface is showing");
+    b.click("Alert");
+    assert!(b.checked("Alert"), "a component is ticked");
+
+    let mark = b.mark();
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.window_open(), "Escape closes the surface: {:?}", b.shown());
+    assert!(b.flat().contains("Installed in this project"), "and returns to the Source libraries page: {:?}", b.shown());
+    assert!(import_calls_since(&b, mark).is_empty(), "nothing is imported");
+    assert_eq!(started_jobs(&b), 0, "no job but the readings was submitted");
+}
+
+// covers: PICK-9
+#[test]
+fn a_selection_over_the_render_limit_is_refused_on_import_naming_the_limit_and_a_small_one_goes_on() {
+    let mut b = grid_open("over-limit", &[("Slim", 0, 0), ("Wide", 9, 4)]);
+    b.click("Wide");
+    let mark = b.mark();
+    b.click("Import");
+    assert_refused_for_the_limit(&mut b, mark);
+
+    b.click("Wide");
+    b.click("Slim");
+    b.click("Import");
+    let calls = import_calls_since(&b, mark);
+    assert_eq!(calls.len(), 1, "a selection within the limit starts: {:?}", b.shown());
+    assert_eq!(calls[0]["component"], json!("Slim"));
+}
+
+// covers: PICK-9
+#[test]
+fn the_limit_counts_the_renders_of_every_ticked_component_together() {
+    let mut b = grid_open("sum", &[("Left", 4, 2), ("Right", 4, 2)]);
+    b.click("Left");
+    b.click("Right");
+    let mark = b.mark();
+    b.click("Import");
+    assert_refused_for_the_limit(&mut b, mark);
+
+    b.click("Right");
+    b.click("Import");
+    let calls = import_calls_since(&b, mark);
+    assert_eq!(calls.len(), 1, "each alone is within the limit: {:?}", b.shown());
+    assert_eq!(calls[0]["component"], json!("Left"));
+}
+
+// covers: PICK-9
+#[test]
+fn exactly_the_render_limit_is_allowed_and_one_more_state_is_not() {
+    let mut b = grid_open("boundary", &[("Grid", 4, 4)]);
+    b.click("Grid");
+    let mark = b.mark();
+    b.click("Import");
+    assert_refused_for_the_limit(&mut b, mark);
+
+    b.click("Hover");
+    b.click("Import");
+    let calls = import_calls_since(&b, mark);
+    assert_eq!(calls.len(), 1, "4 styles x 4 sizes x 4 states x 2 themes is {MAX_RENDERS}: {:?}", b.shown());
+    assert_eq!(calls[0]["component"], json!("Grid"));
+}
+
+// covers: PICK-10
+#[test]
+fn a_component_of_a_family_shows_under_one_card_named_after_the_family() {
+    let sources = [
+        json!({"package": HEROUI_STYLES, "version": FAMILY_VERSION, "license": "MIT", "removed": false}),
+        json!({"package": HEROUI_REACT, "version": FAMILY_VERSION, "framework": "react", "license": "MIT", "removed": false}),
+    ];
+    let inspects = vec![
+        (HEROUI_STYLES.to_string(), inspect_of(HEROUI_STYLES, FAMILY_VERSION, &[], &[])),
+        (HEROUI_REACT.to_string(), inspect_of(HEROUI_REACT, FAMILY_VERSION, &["Alert", "Button"], &[])),
+    ];
+    let mut b = Bench::with("family-card", &sources, inspects);
+    b.open(None);
+    b.wait_until("the components are listed", |b| b.has("Alert") && b.has("Button"));
+    assert!(b.window_open(), "the Choose your components surface is showing");
+
+    let shown = b.shown();
+    let cards = shown.iter().filter(|text| text.contains("heroui 3.2.7")).count();
+    assert_eq!(cards, 1, "one card for the two packages, named after the family: {shown:?}");
+    assert!(at(&shown, "heroui 3.2.7") < at(&shown, "Alert"), "the component is under the family card: {shown:?}");
+    assert!(!mentions(&shown, "@heroui/"), "no package name is a card heading: {shown:?}");
+    assert!(mentions(&shown, "0 of 2"), "the card counts the components of the family: {shown:?}");
+
+    b.click("Alert");
+    assert!(mentions(&b.shown(), "1 of 2"), "{:?}", b.shown());
 }

@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use egui::accesskit::{Node, Role};
-use egui::{Event, Pos2, pos2};
+use egui::{Event, Key, Modifiers, Pos2, pos2};
 use figcraft_engine::capture::{CaptureBackend, CaptureError, CaptureErrorKind, CaptureJob, JobId};
 use figcraft_engine::catalog::MENU;
 use serde_json::{Value, json};
@@ -23,6 +23,7 @@ static NEXT: AtomicUsize = AtomicUsize::new(0);
 const MUI: &str = "@mui/material";
 const HEROUI_STYLES: &str = "@heroui/styles";
 const HEROUI_REACT: &str = "@heroui/react";
+const FAMILY_VERSION: &str = "3.2.7";
 
 type Outcome = Result<Value, CaptureError>;
 
@@ -56,6 +57,7 @@ impl Drop for Dir {
 struct Calls {
     submitted: Vec<CaptureJob>,
     ready: Vec<(JobId, Outcome)>,
+    answered: usize,
 }
 
 struct FakeBackend {
@@ -220,6 +222,73 @@ impl Bench {
         self.ui.button(at, true);
         self.ui.button(at, false);
         self.settle();
+    }
+
+    fn count_label(&mut self, label: &str) -> usize {
+        self.nodes().iter().filter(|n| n.label().is_some_and(|l| l.trim() == label)).count()
+    }
+
+    fn answer_all(&mut self, version: &str) {
+        for _ in 0..8 {
+            let jobs = self.submitted();
+            let answered = self.calls.lock().unwrap().answered;
+            if answered == jobs.len() {
+                return;
+            }
+            for (index, job) in jobs.iter().enumerate().skip(answered) {
+                let outcome = match job {
+                    CaptureJob::Uninstall { package, .. } => Ok(json!({"package": package})),
+                    CaptureJob::Install { package, .. } => Ok(family_member(package, version)),
+                    CaptureJob::InstallMany { packages, .. } => {
+                        Ok(json!({"packages": packages.iter().map(|spec| family_member(&spec.name, version)).collect::<Vec<Value>>()}))
+                    }
+                    other => panic!("unexpected job {other:?}"),
+                };
+                self.calls.lock().unwrap().ready.push((u64::try_from(index + 1).unwrap(), outcome));
+            }
+            self.calls.lock().unwrap().answered = jobs.len();
+            self.settle();
+        }
+        panic!("the jobs never stopped: {:?}", self.submitted());
+    }
+
+    fn type_version(&mut self, version: &str) {
+        let fields = self.text_inputs();
+        let field = fields.iter().find(|n| n.label().is_some_and(|l| l.trim() == "Version")).expect("the version field is on screen");
+        let b = field.bounds().expect("the version field has bounds");
+        let at = pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32);
+        self.ui.button(at, true);
+        self.ui.button(at, false);
+        self.settle();
+        self.key(Key::End);
+        for _ in 0..8 {
+            self.key(Key::Backspace);
+        }
+        self.ui.frame(vec![Event::Text(version.to_string())]);
+        self.settle();
+        self.key(Key::Enter);
+    }
+
+    fn key(&mut self, key: Key) {
+        let event = |pressed| Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: Modifiers::NONE };
+        self.ui.frame(vec![event(true), event(false)]);
+        self.settle();
+    }
+}
+
+fn react_source(version: &str) -> Value {
+    json!({"package": HEROUI_REACT, "version": version, "framework": "react", "license": "MIT", "removed": false})
+}
+
+fn styles_source(version: &str) -> Value {
+    json!({"package": HEROUI_STYLES, "version": version, "license": "MIT", "removed": false})
+}
+
+fn family_member(package: &str, version: &str) -> Value {
+    if package == HEROUI_STYLES {
+        json!({"package": package, "version": version, "license": "MIT"})
+    } else {
+        json!({"package": package, "version": version, "framework": "react", "license": "MIT"})
     }
 }
 
@@ -583,4 +652,89 @@ fn every_language_translates_the_window_strings_and_the_command_label() {
     for (key, expected) in FRENCH {
         assert_eq!(text_of(fr, key), Some(expected), "fr: {key:?}");
     }
+}
+
+// covers: GROUP-2
+#[test]
+fn two_packages_of_one_family_show_as_one_row_named_after_the_family() {
+    let mut b = Bench::new("family-row", &[styles_source(FAMILY_VERSION), react_source(FAMILY_VERSION)]);
+    b.open_window();
+
+    let shown = b.painted();
+    let exact = |text: &str| shown.iter().filter(|t| *t == text).count();
+    assert_eq!(exact("heroui"), 1, "the row is named after the family: {shown:?}");
+    assert_eq!(exact(FAMILY_VERSION), 1, "one version for the family: {shown:?}");
+    assert_eq!(exact("Ready"), 1, "one state tag: {shown:?}");
+    assert_eq!(exact(HEROUI_STYLES) + exact(HEROUI_REACT), 0, "no row is named after a package: {shown:?}");
+    for label in ["Remove", "Change version", "Browse"] {
+        assert_eq!(b.count_label(label), 1, "{label} is offered once, for the family");
+    }
+}
+
+// covers: GROUP-3
+#[test]
+fn removing_a_family_asks_once_then_uninstalls_both_packages() {
+    let mut b = Bench::new("family-remove", &[styles_source(FAMILY_VERSION), react_source(FAMILY_VERSION)]);
+    b.open_window();
+
+    b.click("Remove");
+    assert!(b.has_label("Confirm removal"), "the click only asks");
+    assert!(b.submitted().is_empty(), "nothing is uninstalled before the confirmation");
+    b.click("Cancel");
+    assert!(b.submitted().is_empty());
+    assert!(b.has_label("Remove"), "cancelling brings the row back");
+
+    b.click("Remove");
+    b.click("Confirm removal");
+    b.answer_all(FAMILY_VERSION);
+    let mut shapes = b.submitted_shapes();
+    shapes.sort();
+    assert_eq!(
+        shapes,
+        vec![("uninstall".to_string(), HEROUI_REACT.to_string(), None), ("uninstall".to_string(), HEROUI_STYLES.to_string(), None)],
+        "both packages are uninstalled, nothing else"
+    );
+    let sources = b.dir.manifest_sources();
+    let removed: Vec<bool> = sources.as_array().unwrap().iter().filter_map(|s| s["removed"].as_bool()).collect();
+    assert_eq!(removed, [true, true], "{sources}");
+}
+
+// covers: GROUP-3
+#[test]
+fn changing_the_version_of_a_family_installs_both_packages_at_that_version_in_one_job() {
+    let mut b = Bench::new("family-version", &[styles_source(FAMILY_VERSION), react_source(FAMILY_VERSION)]);
+    b.open_window();
+
+    b.click("Change version");
+    b.type_version("3.3.0");
+    b.click("Apply");
+    assert_eq!(b.submitted().len(), 1, "one job for the family: {:?}", b.submitted());
+    let mut packages = b.install_many_jobs().remove(0);
+    packages.sort();
+    assert_eq!(packages, pairs(&[(HEROUI_REACT, "3.3.0"), (HEROUI_STYLES, "3.3.0")]));
+    let shown = b.painted();
+    assert!(mentions(&shown, FAMILY_VERSION) && !mentions(&shown, "3.3.0"), "the old version stays while the service works: {shown:?}");
+
+    b.answer_all("3.3.0");
+    let shown = b.painted();
+    assert!(mentions(&shown, "3.3.0") && !mentions(&shown, FAMILY_VERSION), "{shown:?}");
+    let sources = b.dir.manifest_sources();
+    let versions: Vec<&str> = sources.as_array().unwrap().iter().filter_map(|s| s["version"].as_str()).collect();
+    assert_eq!(versions, ["3.3.0", "3.3.0"], "{sources}");
+}
+
+// covers: GROUP-4
+#[test]
+fn the_ready_band_after_installing_a_family_names_the_family() {
+    let mut b = Bench::new("family-ready", &[]);
+    b.open_window();
+
+    b.type_line("npm i @heroui/styles @heroui/react");
+    b.click("Run");
+    b.finish_last(Ok(json!({"packages": [family_member(HEROUI_STYLES, FAMILY_VERSION), family_member(HEROUI_REACT, FAMILY_VERSION)]})));
+
+    let shown = b.painted();
+    assert!(shown.iter().any(|t| t == "heroui is ready"), "the band names the family: {shown:?}");
+    assert!(!shown.iter().any(|t| t.contains(HEROUI_REACT) && t.contains("is ready")), "not a package: {shown:?}");
+    assert_eq!(b.count_label("Choose its components"), 1, "one band, one button");
 }
