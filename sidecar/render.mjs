@@ -18,6 +18,7 @@ const STATES = ['default', 'hover', 'focus', 'pressed', 'disabled'];
 const THEMES = ['light', 'dark'];
 const VIEWPORT = { width: 800, height: 600 };
 const RENDER_BUDGET_MS = 25_000;
+const RENDER_TOTAL_MS = 28_000;
 const MAX_SAMPLE_TEXT_CHARS = 256;
 const SAMPLE_TEXT_IGNORED = 'sampleText ignored: the component takes no content';
 const SETTLE_CAP_MS = 3_000;
@@ -190,9 +191,12 @@ async function renderInPage(page, installed, params, { code, styles }, budget) {
   return { snapshot, png: segments.join('/'), ...(parts.length === 0 ? {} : { note: `rendered without its parts: ${parts.join(', ')}` }) };
 }
 
+export const retryBudgetMs = (spentMs) => Math.min(RENDER_BUDGET_MS, Math.max(0, RENDER_TOTAL_MS - spentMs));
+
 export async function render(params) {
-  const newBudget = () => startBudget(RENDER_BUDGET_MS, `rendering did not finish within ${RENDER_BUDGET_MS / 1000} s`);
-  let budget = newBudget();
+  const started = Date.now();
+  const newBudget = (ms) => startBudget(ms, `rendering did not finish within ${RENDER_BUDGET_MS / 1000} s`);
+  let budget = newBudget(RENDER_BUDGET_MS);
   const installed = await readInstalledPackage(params.dir, params.package);
   checkParams(params);
   if (!RENDERABLE.includes(installed.framework)) {
@@ -230,6 +234,6 @@ export async function render(params) {
       throw error;
     }
   }
-  budget = newBudget();
+  budget = newBudget(retryBudgetMs(Date.now() - started));
   return withNotes(await inPage(undefined), [SAMPLE_TEXT_IGNORED]);
 }
