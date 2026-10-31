@@ -2025,6 +2025,8 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Stopping…" = "ჩერდება…"
 "Stopping… the component in progress finishes first" = "ჩერდება… მიმდინარე კომპონენტი ჯერ დასრულდება"
 "Stopped after {done} of {total} components" = "შეჩერდა {total}-დან {done} კომპონენტის შემდეგ"
+"Removes {packages}" = "წაშლის: {packages}"
+"Keeps {packages}: another library needs them" = "ტოვებს: {packages}, სხვა ბიბლიოთეკას სჭირდება"
 
 [commands]
 "align.bottom" = "ქვემოთ სწორება"

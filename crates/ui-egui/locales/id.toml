@@ -1991,6 +1991,8 @@ status = "draft — needs native review"
 "Stopping…" = "Menghentikan…"
 "Stopping… the component in progress finishes first" = "Menghentikan… komponen yang berjalan selesai lebih dulu"
 "Stopped after {done} of {total} components" = "Dihentikan setelah {done} dari {total} komponen"
+"Removes {packages}" = "Menghapus {packages}"
+"Keeps {packages}: another library needs them" = "Mempertahankan {packages}: pustaka lain membutuhkannya"
 
 [commands]
 "align.bottom" = "Ratakan bawah"

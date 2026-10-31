@@ -1945,6 +1945,8 @@ status = "draft — needs native review"
 "Stopping…" = "Wird angehalten …"
 "Stopping… the component in progress finishes first" = "Wird angehalten … die laufende Komponente wird noch beendet"
 "Stopped after {done} of {total} components" = "Angehalten nach {done} von {total} Komponenten"
+"Removes {packages}" = "Entfernt {packages}"
+"Keeps {packages}: another library needs them" = "Behält {packages}: eine andere Bibliothek braucht sie"
 
 [commands]
 "align.bottom" = "Unten ausrichten"

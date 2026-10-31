@@ -2010,6 +2010,8 @@ status = "draft — needs native review"
 "Stopping…" = "停止中…"
 "Stopping… the component in progress finishes first" = "停止中… 処理中のコンポーネントを先に完了します"
 "Stopped after {done} of {total} components" = "{total} 個中 {done} 個のコンポーネントで停止しました"
+"Removes {packages}" = "{packages} を削除します"
+"Keeps {packages}: another library needs them" = "{packages} は残します: 別のライブラリが必要としています"
 
 [commands]
 "align.bottom" = "下揃え"

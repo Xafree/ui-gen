@@ -495,7 +495,8 @@ fn table_row(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &FamilyRow, 
         .iter()
         .find_map(|p| state.failure(p))
         .or_else(|| state.changing.as_ref().filter(|(p, _)| p == row.head()).and_then(|_| state.change_error.clone()));
-    let note_h = if note.is_some() { 24.0 } else { 0.0 };
+    let asked = (state.pending_removal() == Some(row.head())).then(|| state.removal_note(row.head()));
+    let note_h = if note.is_some() || asked.is_some() { 24.0 } else { 0.0 };
     let content_h = if has_actions { ACTIONS_H } else { TAG_ROW_H };
     let height = 2.0 * ROW_PAD_Y + content_h + note_h + if last { 0.0 } else { 1.0 };
     let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
@@ -517,6 +518,9 @@ fn table_row(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &FamilyRow, 
     if let Some(message) = note {
         let at = pos2(rect.min.x + ROW_PAD_X, rect.max.y - ROW_PAD_Y - 6.0);
         ui.painter().text(at, Align2::LEFT_CENTER, message, regular(12.5), t.danger);
+    } else if let Some(message) = asked {
+        let at = pos2(rect.min.x + ROW_PAD_X, rect.max.y - ROW_PAD_Y - 6.0);
+        ui.painter().text(at, Align2::LEFT_CENTER, message, regular(12.5), t.text_secondary);
     }
     if !has_actions {
         return;

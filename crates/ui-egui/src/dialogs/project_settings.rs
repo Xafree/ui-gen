@@ -93,6 +93,7 @@ pub struct ProjectSettings {
     families: Vec<FamilyRow>,
     failures: Vec<Failure>,
     project_name: String,
+    root: String,
     package_input: String,
     last_run: Option<LastRun>,
     add_error: Option<String>,
@@ -126,13 +127,6 @@ impl ProjectSettings {
         &self.families
     }
 
-    fn active_packages(&self, package: &str) -> Vec<String> {
-        match self.families.iter().find(|family| family.packages.iter().any(|p| p == package)) {
-            Some(family) => family.active.clone(),
-            None => vec![package.to_string()],
-        }
-    }
-
     /// What Escape ends before the page: a removal being asked, a version being changed, a typed line.
     pub(in crate::dialogs) fn takes_escape(&mut self, ctx: &egui::Context) -> bool {
         if self.pending_removal.take().is_some() {
@@ -148,6 +142,30 @@ impl ProjectSettings {
             self.add_error = None;
         }
         typed
+    }
+
+    fn removal(&self, package: &str) -> (Vec<String>, Vec<String>) {
+        let Some(family) = self.families.iter().find(|family| family.packages.iter().any(|p| p == package)) else {
+            return (vec![package.to_string()], Vec::new());
+        };
+        let needed: Vec<String> = self
+            .families
+            .iter()
+            .filter(|other| other.name != family.name && other.status != "removed")
+            .filter_map(|other| self.sources.iter().find(|row| row.package == other.head()))
+            .flat_map(|head| dependencies_of(&self.root, &head.package, &head.version))
+            .collect();
+        family.active.iter().cloned().partition(|member| member == family.head() || !needed.contains(member))
+    }
+
+    pub(in crate::dialogs) fn removal_note(&self, package: &str) -> String {
+        let (goes, stays) = self.removal(package);
+        let mut note = trf("Removes {packages}", &[("packages", &goes.join(", "))]);
+        if !stays.is_empty() {
+            note.push_str(" · ");
+            note.push_str(&trf("Keeps {packages}: another library needs them", &[("packages", &stays.join(", "))]));
+        }
+        note
     }
 
     fn version_targets(&self, package: &str) -> Vec<String> {
@@ -220,6 +238,7 @@ impl ProjectSettings {
             }
         }
         self.project_name = binding.config.name.clone();
+        self.root = binding.root.clone();
         if let Some(run) = self.last_run.as_mut()
             && let Some(job) = jobs
                 .iter()
@@ -431,7 +450,7 @@ pub fn change_version(app: &mut FigApp, package: &str, version: &str) {
 }
 
 fn remove_package(app: &mut FigApp, package: &str) {
-    let packages = app.ui.project_settings.as_ref().map_or_else(|| vec![package.to_string()], |state| state.active_packages(package));
+    let packages = app.ui.project_settings.as_ref().map_or_else(|| vec![package.to_string()], |state| state.removal(package).0);
     edit(app, |state| state.pending_removal = None);
     for package in packages {
         app.run(REMOVE, json!({"package": package}));

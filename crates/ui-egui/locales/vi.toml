@@ -1966,6 +1966,8 @@ status = "draft — needs native review"
 "Stopping…" = "Đang dừng…"
 "Stopping… the component in progress finishes first" = "Đang dừng… thành phần đang chạy sẽ hoàn tất trước"
 "Stopped after {done} of {total} components" = "Đã dừng sau {done} trên {total} thành phần"
+"Removes {packages}" = "Xóa {packages}"
+"Keeps {packages}: another library needs them" = "Giữ {packages}: thư viện khác cần chúng"
 
 [commands]
 "align.bottom" = "Căn dưới"

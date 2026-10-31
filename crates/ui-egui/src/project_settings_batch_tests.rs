@@ -45,3 +45,37 @@ fn a_family_version_goes_only_to_the_members_that_share_the_version_of_the_head(
     sent.sort();
     assert_eq!(sent, [(SAME.to_string(), "6.0.0".to_string()), (HEAD.to_string(), "6.0.0".to_string())], "the dependency at another version is left alone");
 }
+
+#[test]
+fn a_package_another_head_depends_on_stays_and_the_confirmation_names_what_goes_and_what_stays() {
+    let other = "@other/kit";
+    let shared = "shared-core";
+    let sources = [row(HEAD, "3.0.0", Some("react"), false), row(other, "1.0.0", Some("react"), false), row(shared, "9.0.0", None, false), row(SAME, "3.0.0", None, false)];
+    let mut b = Bench::with("family-remove-shared", &sources, Vec::new());
+    depends(&b, HEAD, &[shared, SAME]);
+    depends(&b, other, &[shared]);
+    b.open_settings();
+    b.click_nth("Remove", 0);
+    assert!(b.shows(&format!("Removes {HEAD}, {SAME}")), "{:?}", b.shown());
+    assert!(b.shows(&format!("Keeps {shared}: another library needs them")), "{:?}", b.shown());
+    b.click("Confirm removal");
+    let gone: Vec<String> = jobs(&b)
+        .into_iter()
+        .filter_map(|job| match job {
+            CaptureJob::Uninstall { package, .. } => Some(package),
+            _ => None,
+        })
+        .collect();
+    assert!(!gone.contains(&shared.to_string()), "{gone:?}");
+    assert!(gone.contains(&HEAD.to_string()) && gone.contains(&SAME.to_string()), "{gone:?}");
+}
+
+#[test]
+fn a_version_change_on_a_family_left_with_one_active_member_goes_to_that_member() {
+    let sources = [row(HEAD, "3.0.0", Some("react"), true), row(SAME, "3.0.0", None, false)];
+    let mut b = Bench::with("family-single", &sources, Vec::new());
+    b.open_settings();
+    change_version(&mut b.ui.app, HEAD, "4.0.0");
+    let CaptureJob::Install { package, version, .. } = last_job(&b) else { panic!("{:?}", jobs(&b)) };
+    assert_eq!((package.as_str(), version.as_str()), (SAME, "4.0.0"));
+}

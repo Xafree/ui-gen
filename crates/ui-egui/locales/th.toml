@@ -2016,6 +2016,8 @@ status = "draft — needs native review"
 "Stopping…" = "กำลังหยุด…"
 "Stopping… the component in progress finishes first" = "กำลังหยุด… คอมโพเนนต์ที่กำลังทำจะเสร็จก่อน"
 "Stopped after {done} of {total} components" = "หยุดหลังจาก {done} จาก {total} คอมโพเนนต์"
+"Removes {packages}" = "ลบ {packages}"
+"Keeps {packages}: another library needs them" = "คงไว้ {packages}: ไลบรารีอื่นต้องใช้"
 
 [commands]
 "align.bottom" = "จัดแนวชิดล่าง"

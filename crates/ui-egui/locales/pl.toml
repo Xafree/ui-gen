@@ -2040,6 +2040,8 @@ name = "Polski"
 "Stopping…" = "Zatrzymywanie…"
 "Stopping… the component in progress finishes first" = "Zatrzymywanie… bieżący komponent zakończy się najpierw"
 "Stopped after {done} of {total} components" = "Zatrzymano po {done} z {total} komponentów"
+"Removes {packages}" = "Usuwa {packages}"
+"Keeps {packages}: another library needs them" = "Zachowuje {packages}: potrzebuje ich inna biblioteka"
 
 [commands]
 "align.bottom" = "Wyrównaj do dołu"

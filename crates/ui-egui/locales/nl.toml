@@ -2028,6 +2028,8 @@ status = "draft — needs native review"
 "Stopping…" = "Stoppen…"
 "Stopping… the component in progress finishes first" = "Stoppen… het lopende onderdeel wordt eerst afgerond"
 "Stopped after {done} of {total} components" = "Gestopt na {done} van {total} onderdelen"
+"Removes {packages}" = "Verwijdert {packages}"
+"Keeps {packages}: another library needs them" = "Behoudt {packages}: een andere bibliotheek heeft ze nodig"
 
 [commands]
 "align.bottom" = "Onder uitlijnen"

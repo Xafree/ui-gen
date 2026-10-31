@@ -2024,6 +2024,8 @@ status = "draft — needs native review"
 "Stopping…" = "থামানো হচ্ছে…"
 "Stopping… the component in progress finishes first" = "থামানো হচ্ছে… চলমান কম্পোনেন্টটি আগে শেষ হবে"
 "Stopped after {done} of {total} components" = "{total}টির মধ্যে {done}টি কম্পোনেন্টের পরে থামানো হয়েছে"
+"Removes {packages}" = "{packages} সরায়"
+"Keeps {packages}: another library needs them" = "{packages} রাখে: অন্য লাইব্রেরির দরকার"
 
 [commands]
 "board.connector" = "সংযোগকারী"

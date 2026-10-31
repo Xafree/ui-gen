@@ -2050,6 +2050,8 @@ status = "draft — needs native review"
 "Stopping…" = "중지하는 중…"
 "Stopping… the component in progress finishes first" = "중지하는 중… 진행 중인 컴포넌트가 먼저 끝납니다"
 "Stopped after {done} of {total} components" = "컴포넌트 {total}개 중 {done}개 후 중지됨"
+"Removes {packages}" = "{packages} 제거"
+"Keeps {packages}: another library needs them" = "{packages} 유지: 다른 라이브러리에 필요합니다"
 
 [commands]
 "align.bottom" = "아래쪽 정렬"

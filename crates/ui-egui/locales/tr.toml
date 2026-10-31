@@ -1991,6 +1991,8 @@ name = "Türkçe"
 "Stopping…" = "Durduruluyor…"
 "Stopping… the component in progress finishes first" = "Durduruluyor… devam eden bileşen önce biter"
 "Stopped after {done} of {total} components" = "{total} bileşenden {done} tanesinden sonra durduruldu"
+"Removes {packages}" = "{packages} kaldırılır"
+"Keeps {packages}: another library needs them" = "{packages} korunur: başka bir kitaplık gerektiriyor"
 
 [commands]
 "align.bottom" = "Alta hizala"

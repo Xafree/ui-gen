@@ -1944,6 +1944,8 @@ status = "draft — needs native review"
 "Stopping…" = "正在停止…"
 "Stopping… the component in progress finishes first" = "正在停止… 进行中的组件先完成"
 "Stopped after {done} of {total} components" = "已在 {done}/{total} 个组件后停止"
+"Removes {packages}" = "移除 {packages}"
+"Keeps {packages}: another library needs them" = "保留 {packages}：其他库需要它们"
 
 [commands]
 "align.bottom" = "底部对齐"

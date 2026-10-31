@@ -2047,6 +2047,8 @@ status = "draft — needs native review"
 "Stopping…" = "Parando…"
 "Stopping… the component in progress finishes first" = "Parando… o componente em andamento termina primeiro"
 "Stopped after {done} of {total} components" = "Parado após {done} de {total} componentes"
+"Removes {packages}" = "Remove {packages}"
+"Keeps {packages}: another library needs them" = "Mantém {packages}: outra biblioteca precisa deles"
 
 [commands]
 "align.bottom" = "Alinhar embaixo"

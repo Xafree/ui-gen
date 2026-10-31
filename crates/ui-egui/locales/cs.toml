@@ -1987,6 +1987,8 @@ status = "draft — needs native review"
 "Stopping…" = "Zastavuje se…"
 "Stopping… the component in progress finishes first" = "Zastavuje se… rozpracovaná komponenta se nejprve dokončí"
 "Stopped after {done} of {total} components" = "Zastaveno po {done} z {total} komponent"
+"Removes {packages}" = "Odebere {packages}"
+"Keeps {packages}: another library needs them" = "Ponechá {packages}: potřebuje je jiná knihovna"
 
 [commands]
 "align.bottom" = "Zarovnat dolů"

@@ -2040,6 +2040,8 @@ name = "Svenska"
 "Stopping…" = "Stoppar…"
 "Stopping… the component in progress finishes first" = "Stoppar… komponenten som pågår blir klar först"
 "Stopped after {done} of {total} components" = "Stoppad efter {done} av {total} komponenter"
+"Removes {packages}" = "Tar bort {packages}"
+"Keeps {packages}: another library needs them" = "Behåller {packages}: ett annat bibliotek behöver dem"
 
 [commands]
 
