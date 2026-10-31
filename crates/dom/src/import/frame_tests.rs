@@ -255,6 +255,26 @@ fn a_linear_gradient_is_a_paint_on_the_css_gradient_line() {
 }
 
 #[test]
+fn a_corner_gradient_follows_the_magic_corners_of_its_box() {
+    let line = |side: &str| {
+        let run = sized(json!({ "backgroundImage": format!("linear-gradient({side}, rgb(255, 0, 0), rgb(0, 0, 255))") }), 200.0, 100.0);
+        let [Paint { kind: PaintKind::Gradient(gradient), .. }] = &run.root_node().fills[..] else { panic!("{:?}", run.root_node().fills) };
+        (gradient.from, gradient.to)
+    };
+    let close = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9;
+    for (side, from, to) in [
+        ("to top right", (0.3, 1.3), (0.7, -0.3)),
+        ("to right top", (0.3, 1.3), (0.7, -0.3)),
+        ("to bottom right", (0.3, -0.3), (0.7, 1.3)),
+        ("to bottom left", (0.7, -0.3), (0.3, 1.3)),
+        ("to top left", (0.7, 1.3), (0.3, -0.3)),
+    ] {
+        let found = line(side);
+        assert!(close(found.0, from) && close(found.1, to), "{side}: {found:?}");
+    }
+}
+
+#[test]
 fn background_layers_keep_their_order_over_the_colour() {
     let top = "linear-gradient(rgb(255, 0, 0), rgba(0, 0, 0, 0))";
     let under = "radial-gradient(rgb(0, 255, 0), rgb(0, 0, 255) 50%)";

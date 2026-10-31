@@ -5,19 +5,16 @@ use figcraft_color::{Color, ColorStop, Gradient, GradientKind, Paint, PaintKind}
 use super::Report;
 use super::css::{Style, get, length, split_outside, words};
 
-const SIDE_ANGLES: [(&str, f64); 12] = [
-    ("to top", 0.0),
-    ("to top right", 45.0),
-    ("to right top", 45.0),
-    ("to right", 90.0),
-    ("to bottom right", 135.0),
-    ("to right bottom", 135.0),
-    ("to bottom", 180.0),
-    ("to bottom left", 225.0),
-    ("to left bottom", 225.0),
-    ("to left", 270.0),
-    ("to top left", 315.0),
-    ("to left top", 315.0),
+const SIDE_ANGLES: [(&str, f64); 4] = [("to top", 0.0), ("to right", 90.0), ("to bottom", 180.0), ("to left", 270.0)];
+const CORNER_DIRECTIONS: [(&str, f64, f64); 8] = [
+    ("to top right", 1.0, 1.0),
+    ("to right top", 1.0, 1.0),
+    ("to bottom right", 1.0, -1.0),
+    ("to right bottom", 1.0, -1.0),
+    ("to bottom left", -1.0, -1.0),
+    ("to left bottom", -1.0, -1.0),
+    ("to top left", -1.0, 1.0),
+    ("to left top", -1.0, 1.0),
 ];
 const DEFAULT_LAYOUT: [(&str, &[&str]); 3] = [
     ("backgroundSize", &["auto", "auto auto", "100%", "100% 100%"]),
@@ -68,9 +65,13 @@ fn gradient(image: &str, width: f64, height: f64) -> Option<Gradient> {
     radial(image.strip_prefix("radial-gradient(")?.strip_suffix(')')?, width, height)
 }
 
-fn angle_of(word: &str) -> Option<f64> {
+/// A corner keyword aims so that the middle of the gradient runs through the two other corners, whatever the shape of the box.
+fn angle_of(word: &str, width: f64, height: f64) -> Option<f64> {
     if let Some((_, degrees)) = SIDE_ANGLES.iter().find(|(side, _)| *side == word) {
         return Some(*degrees);
+    }
+    if let Some((_, right, up)) = CORNER_DIRECTIONS.iter().find(|(corner, ..)| *corner == word) {
+        return Some((right * height).atan2(up * width).to_degrees());
     }
     let number = |suffix: &str| word.strip_suffix(suffix).and_then(|value| value.parse::<f64>().ok());
     number("deg")
@@ -83,7 +84,7 @@ fn angle_of(word: &str) -> Option<f64> {
 fn linear(inner: &str, width: f64, height: f64) -> Option<Gradient> {
     let parts = split_outside(inner, |c| c == ',');
     let (first, rest) = parts.split_first()?;
-    let (degrees, stops) = match angle_of(first) {
+    let (degrees, stops) = match angle_of(first, width, height) {
         Some(degrees) => (degrees, rest),
         None => (180.0, parts.as_slice()),
     };
