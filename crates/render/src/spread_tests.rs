@@ -142,3 +142,28 @@ fn spread_bands_are_cached_and_hostile_values_are_safe() {
         let _ = render(&d, n);
     }
 }
+
+/// A frame without a fill, its small child in the middle, with a ring around the frame.
+fn ringed_frame() -> (Document, NodeId) {
+    let mut d = Document::new("ring");
+    let p = d.first_page().unwrap();
+    let n = d.create(p, NodeKind::Frame, "F", 100.0, 100.0, 200.0, 200.0).unwrap();
+    let child = d.create(n, NodeKind::Rectangle, "C", 90.0, 90.0, 20.0, 20.0).unwrap();
+    d.get_mut(child).unwrap().fills = vec![Paint::solid(Color::WHITE)];
+    let node = d.get_mut(n).unwrap();
+    node.fills.clear();
+    node.clip = false;
+    node.effects = vec![Effect { kind: EffectKind::DropShadow(Shadow { from_outline: true, show_behind: false, ..shadow(4.0) }), visible: true }];
+    (d, n)
+}
+
+#[test]
+fn a_shadow_from_the_outline_rings_the_box_and_not_what_it_contains() {
+    let (d, n) = ringed_frame();
+    let pix = render(&d, n);
+    assert_eq!(alpha(&pix, 98.0, 200.0), 255, "the ring outside the box");
+    assert_eq!(alpha(&pix, 90.0, 200.0), 0, "past the spread");
+    assert_eq!(alpha(&pix, 110.0, 200.0), 0, "inside the box, without a fill");
+    assert_eq!(alpha(&pix, 187.0, 200.0), 0, "around the child");
+    assert_eq!(alpha(&pix, 200.0, 200.0), 255, "the child");
+}

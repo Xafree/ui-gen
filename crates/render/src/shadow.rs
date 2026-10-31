@@ -157,6 +157,8 @@ pub struct Caster<'a> {
     pub silhouette: Option<Vec<Outline>>,
     /// The node's [`cover`] in the layer's pixels; only when a shadow hides behind the layer.
     pub cover: Option<Pixmap>,
+    /// The node's outline and its coverage in the layer's pixels; only when a shadow is cast from it.
+    pub outline: Option<(Outline, Pixmap)>,
 }
 
 fn drop_shadows(n: &Node) -> impl Iterator<Item = &Shadow> {
@@ -179,7 +181,9 @@ impl<'a> Caster<'a> {
     pub fn new(doc: &Document, n: &Node, layer: &'a Pixmap, xf: Affine, scale: f64) -> Self {
         let silhouette = if drop_shadows(n).any(|s| s.spread != 0.0) { silhouette(doc, n) } else { None };
         let cover = hiding_cover(doc, n).and_then(|c| spread_alpha(&c, 0.0, xf, layer.width(), layer.height()));
-        Caster { layer, xf, scale, silhouette, cover }
+        let outline = if drop_shadows(n).any(|s| s.from_outline) { node_outline(doc, n) } else { None }
+            .and_then(|o| spread_alpha(std::slice::from_ref(&o), 0.0, xf, layer.width(), layer.height()).map(|coverage| (o, coverage)));
+        Caster { layer, xf, scale, silhouette, cover, outline }
     }
 }
 
@@ -190,8 +194,12 @@ pub fn drop_shadow(c: &Caster, s: &Shadow) -> Option<Pixmap> {
     let (w, h) = (c.layer.width(), c.layer.height());
     let (dx, dy) = (s.offset.0 * c.scale, s.offset.1 * c.scale);
     let spread = if s.spread.is_finite() { s.spread } else { 0.0 };
-    let mut sh = match c.silhouette.as_deref() {
-        Some(sil) if spread != 0.0 && dx.is_finite() && dy.is_finite() => spread_alpha(sil, spread, Affine::translate((dx, dy)) * c.xf, w, h)?,
+    let from_outline = c.outline.as_ref().filter(|_| s.from_outline);
+    let mut sh = match (from_outline, c.silhouette.as_deref()) {
+        (Some((outline, _)), _) if dx.is_finite() && dy.is_finite() => {
+            spread_alpha(std::slice::from_ref(outline), spread, Affine::translate((dx, dy)) * c.xf, w, h)?
+        }
+        (_, Some(sil)) if spread != 0.0 && dx.is_finite() && dy.is_finite() => spread_alpha(sil, spread, Affine::translate((dx, dy)) * c.xf, w, h)?,
         _ => {
             let mut base = c.layer.clone();
             fx::morph(&mut base, whole_px(spread * c.scale));
@@ -202,7 +210,9 @@ pub fn drop_shadow(c: &Caster, s: &Shadow) -> Option<Pixmap> {
     };
     fx::blur(&mut sh, s.radius / 2.0 * c.scale);
     fx::tint(&mut sh, color4(s.color));
-    if !s.show_behind {
+    if let Some((_, coverage)) = from_outline {
+        fx::mask_by(&mut sh, coverage, true);
+    } else if !s.show_behind {
         fx::mask_by(&mut sh, c.cover.as_ref().unwrap_or(c.layer), true);
     }
     Some(sh)
