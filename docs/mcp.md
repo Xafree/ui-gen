@@ -898,7 +898,7 @@ Two commands bring the output of the capture service into the document; both are
     render is back: no layer, no collection, no variable, no undo step.
   - **`stage`** (boolean, default `false`): write the set into the **import page** of the package and version
     instead of a page of the document. The page is named `- Imported · <package> <version>` (a name starting with a
-    hyphen is never a component, so the page is not exported to Lit and `project.info` does not list it) and carries
+    hyphen is never a component, so the page is not exported to Lit unless `ids` names one of its sets, and `project.info` does not list it) and carries
     `plugin_data["uigen.importPage"]` = `{"package", "version"}`, by which it is found again whatever its name. It is
     added at the end of the file the first time and created in the same undo step as the set; the current page and
     the selection do not change, and the final event adds `page` (the page's id). Importing the same component again

@@ -6,14 +6,16 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use figcraft_doc::NodeId;
 use figcraft_engine::Session;
 use figcraft_engine::uigen_compare::{Raster, aligned, library_raster, pixel_diff};
 use serde_json::{Value, json};
 
-use crate::locate;
 use crate::service_tests::TempDir;
+use crate::{CaptureService, locate};
 
 pub(crate) struct LitShots {
     folder: PathBuf,
@@ -113,4 +115,54 @@ fn every_variant_of_an_exported_set_looks_like_its_canvas_even_where_a_variant_d
         eprintln!("{name} lit={percent:.2}%");
         assert!(percent >= 90.0, "{name}: lit={percent:.2}%");
     }
+}
+
+fn wait_for_job(session: &mut Session, started: &Value) -> Value {
+    let job = started["job"].as_u64().unwrap_or_else(|| panic!("no job in {started}"));
+    let deadline = Instant::now() + Duration::from_secs(600);
+    while Instant::now() < deadline {
+        if let Some(event) = session.pump_capture().into_iter().find(|event| event.job == job) {
+            return event.outcome.unwrap_or_else(|error| panic!("{error}"));
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    panic!("job {job} did not end");
+}
+
+/// A staged import then a place, the path of a user: the export and the playground must take it.
+/// `UIGEN_BENCH_PROJECT` names a copy of a project holding the package, `UIGEN_BENCH_OUT` where the image goes.
+#[test]
+#[ignore = "needs Node, Chromium and UIGEN_BENCH_PROJECT; run by hand"]
+fn a_staged_then_placed_import_opens_in_the_playground() {
+    let root = std::env::var("UIGEN_BENCH_PROJECT").expect("UIGEN_BENCH_PROJECT");
+    let package = std::env::var("UIGEN_BENCH_PACKAGE").unwrap_or_else(|_| "@heroui/react".to_string());
+    let styles = std::env::var("UIGEN_BENCH_STYLES").unwrap_or_else(|_| "primary,outline,ghost".to_string());
+    let mut session = Session::empty();
+    session.set_capture_backend(Box::new(CaptureService::start(locate().expect("node and the sidecar"), Box::new(|| {}))));
+    command(&mut session, "project.open", json!({"path": root}));
+    let params = json!({"package": package, "component": "Button", "styles": styles.split(',').collect::<Vec<_>>(), "states": ["Default"],
+        "animations": false, "themes": ["light", "dark"], "stage": true});
+    let started = command(&mut session, "uigen.importComponent", params);
+    let imported = wait_for_job(&mut session, &started);
+    command(&mut session, "uigen.placeImported", json!({"set": imported["set"]}));
+    let exported = command(&mut session, "export.lit", json!({}));
+    assert_eq!(exported["ready"], json!(true), "{exported}");
+
+    let started = command(&mut session, "playground.open", json!({"template": "components", "width": 1200, "height": 800}));
+    wait_for_job(&mut session, &started);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut last = None;
+    while Instant::now() < deadline {
+        session.playground_poll();
+        session.pump_capture();
+        last = session.playground_take_frame().or(last);
+        thread::sleep(Duration::from_millis(20));
+    }
+    let frame = last.expect("the playground sent no image");
+    if let Ok(out) = std::env::var("UIGEN_BENCH_OUT") {
+        fs::create_dir_all(&out).expect("the image folder");
+        let image = image::load_from_memory(&frame.data).expect("a decodable image");
+        image.to_rgb8().save(Path::new(&out).join(format!("playground-{}.png", package.replace(['@', '/'], "-")))).expect("the image is saved");
+    }
+    command(&mut session, "playground.close", json!({}));
 }
