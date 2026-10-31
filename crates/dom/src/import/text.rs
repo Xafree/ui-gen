@@ -32,7 +32,7 @@ pub(super) fn layer(id: NodeId, run: &TextRun, placement: &Placement, warnings: 
         None => {}
     }
     data.baseline_nudge = baseline::nudge(run, &data);
-    data.hug_nudge = baseline::hug_nudge(placement.size().0, &data);
+    data.hug_nudge = baseline::hug_nudge(placement.size().0, &data) as f32;
     data.browser_gamma = true;
     let (width, height) = placement.size();
     let mut node = Node::new(id, NodeKind::Text(data), &name, width, height);
