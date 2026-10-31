@@ -252,6 +252,7 @@ fn conclude(app: &mut FigApp) {
         && let Run::Importing(batch) = std::mem::take(&mut state.run)
     {
         let done = batch.total - batch.failures.len();
+        state.message = None;
         state.run = Run::Summary { doc: batch.doc, done, total: batch.total, failures: batch.failures };
     }
     close_if_nothing_can_show_it(app);
@@ -613,6 +614,7 @@ fn import(app: &mut FigApp) {
 
 fn plan(app: &FigApp, state: &mut ImportWindow) -> Option<Batch> {
     if matches!(state.run, Run::Importing(_)) {
+        state.message = Some(tr("The import is already running.").to_string());
         return None;
     }
     let (root, sources) = active_sources(app)?;

@@ -2022,6 +2022,7 @@ status = "draft — needs native review"
 "{name}: two different versions on one line" = "{name}: สองเวอร์ชันที่ต่างกันในบรรทัดเดียว"
 "{package} is already a source of this project" = "{package} เป็นซอร์สของโปรเจกต์นี้อยู่แล้ว"
 "A change to {package} is already in progress" = "การเปลี่ยนแปลง {package} กำลังดำเนินอยู่"
+"The import is already running." = "การนำเข้ากำลังทำงานอยู่แล้ว"
 
 [commands]
 "align.bottom" = "จัดแนวชิดล่าง"

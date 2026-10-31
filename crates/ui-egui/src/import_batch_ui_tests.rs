@@ -203,3 +203,19 @@ fn an_oversized_component_alone_is_named_in_the_refusal() {
     b.click("Import");
     assert!(b.shows("Wide: More than"), "{:?}", b.shown());
 }
+
+#[test]
+fn import_clicked_during_a_run_says_it_is_running_and_starts_nothing() {
+    let mut b = open_pair("import-twice");
+    b.click("Alert");
+    b.click("Slider");
+    b.hold();
+    let mark = b.mark();
+    b.click("Import");
+    b.click("Import");
+    assert!(b.shows("The import is already running."), "{:?}", b.shown());
+    assert_eq!(b.ran_since(mark, IMPORT).len(), 1);
+    b.release_all();
+    b.wait_until("the summary is drawn", |b| b.shows("Imported 2 of 2 components"));
+    assert!(!b.shows("The import is already running."), "the note ends with the run");
+}

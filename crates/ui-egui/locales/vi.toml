@@ -1972,6 +1972,7 @@ status = "draft — needs native review"
 "{name}: two different versions on one line" = "{name}: hai phiên bản khác nhau trên một dòng"
 "{package} is already a source of this project" = "{package} đã là nguồn của dự án này"
 "A change to {package} is already in progress" = "Một thay đổi cho {package} đang diễn ra"
+"The import is already running." = "Quá trình nhập đang chạy."
 
 [commands]
 "align.bottom" = "Căn dưới"

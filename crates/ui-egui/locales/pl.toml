@@ -2046,6 +2046,7 @@ name = "Polski"
 "{name}: two different versions on one line" = "{name}: dwie różne wersje w jednym wierszu"
 "{package} is already a source of this project" = "{package} jest już źródłem tego projektu"
 "A change to {package} is already in progress" = "Zmiana pakietu {package} już trwa"
+"The import is already running." = "Import już trwa."
 
 [commands]
 "align.bottom" = "Wyrównaj do dołu"

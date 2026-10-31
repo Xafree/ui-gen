@@ -2016,6 +2016,7 @@ status = "draft — needs native review"
 "{name}: two different versions on one line" = "{name}: 1 行に異なる 2 つのバージョン"
 "{package} is already a source of this project" = "{package} はすでにこのプロジェクトのソースです"
 "A change to {package} is already in progress" = "{package} の変更はすでに進行中です"
+"The import is already running." = "インポートはすでに実行中です。"
 
 [commands]
 "align.bottom" = "下揃え"

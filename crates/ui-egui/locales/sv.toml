@@ -2046,6 +2046,7 @@ name = "Svenska"
 "{name}: two different versions on one line" = "{name}: två olika versioner på en rad"
 "{package} is already a source of this project" = "{package} är redan en källa i det här projektet"
 "A change to {package} is already in progress" = "En ändring av {package} pågår redan"
+"The import is already running." = "Importen pågår redan."
 
 [commands]
 

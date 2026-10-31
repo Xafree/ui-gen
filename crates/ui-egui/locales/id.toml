@@ -1997,6 +1997,7 @@ status = "draft — needs native review"
 "{name}: two different versions on one line" = "{name}: dua versi berbeda dalam satu baris"
 "{package} is already a source of this project" = "{package} sudah menjadi sumber proyek ini"
 "A change to {package} is already in progress" = "Perubahan pada {package} sedang berlangsung"
+"The import is already running." = "Impor sudah berjalan."
 
 [commands]
 "align.bottom" = "Ratakan bawah"

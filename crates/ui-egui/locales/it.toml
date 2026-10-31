@@ -1971,6 +1971,7 @@ status = "draft — needs native review"
 "{name}: two different versions on one line" = "{name}: due versioni diverse su una riga"
 "{package} is already a source of this project" = "{package} è già una sorgente di questo progetto"
 "A change to {package} is already in progress" = "Una modifica a {package} è già in corso"
+"The import is already running." = "L’importazione è già in corso."
 
 [commands]
 "align.bottom" = "Allinea in basso"

@@ -2035,6 +2035,7 @@ status = "draft — needs native review"
 "{name}: two different versions on one line" = "{name}: kaksi eri versiota yhdellä rivillä"
 "{package} is already a source of this project" = "{package} on jo tämän projektin lähde"
 "A change to {package} is already in progress" = "Muutos pakettiin {package} on jo käynnissä"
+"The import is already running." = "Tuonti on jo käynnissä."
 
 [commands]
 "align.bottom" = "Tasaa alas"
