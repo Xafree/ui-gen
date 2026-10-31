@@ -26,6 +26,8 @@ function walkInPage({ rootSelector, limits }) {
     'flexGrow', 'flexShrink', 'flexBasis', 'rowGap', 'columnGap',
     'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
     'position', 'boxSizing', 'gridTemplateColumns',
+    'backgroundSize', 'backgroundPosition', 'backgroundClip', 'backgroundBlendMode',
+    'transform', 'rotate', 'scale', 'filter', 'backdropFilter', 'mixBlendMode', 'clipPath', 'maskImage', 'zIndex',
   ];
   const SHORTHANDS = new Map([
     ['padding', ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft']],
@@ -40,6 +42,8 @@ function walkInPage({ rootSelector, limits }) {
     'color', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing',
     'textTransform', 'textAlign',
   ];
+  const SVG_PRESENTATION = ['stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-dasharray', 'fill-opacity', 'stroke-opacity', 'fill-rule', 'opacity'];
+  const PSEUDOS = ['::before', '::after'];
   const SKIPPED_TAGS = new Set(['script', 'style', 'noscript', 'template', 'link', 'meta', 'title']);
   const LABEL_MAX = 40;
   const encoder = new TextEncoder();
@@ -277,6 +281,19 @@ function walkInPage({ rootSelector, limits }) {
     return text.length > LABEL_MAX ? `${text.slice(0, LABEL_MAX)}…` : text;
   };
 
+  const colorProbe = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
+
+  const asRgb = (color) => {
+    if (/^(rgba?\(|#|none$|url\(|context-)/i.test(color) || color === '') {
+      return color;
+    }
+    colorProbe.clearRect(0, 0, 1, 1);
+    colorProbe.fillStyle = color;
+    colorProbe.fillRect(0, 0, 1, 1);
+    const [red, green, blue, alpha] = colorProbe.getImageData(0, 0, 1, 1).data;
+    return alpha === 255 ? `rgb(${red}, ${green}, ${blue})` : `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`;
+  };
+
   const resolveSvgColors = (source) => {
     const clone = source.cloneNode(true);
     const originals = [source, ...source.querySelectorAll('*')];
@@ -286,14 +303,112 @@ function walkInPage({ rootSelector, limits }) {
       const computed = getComputedStyle(original);
       for (const attribute of [...target.attributes]) {
         if (/currentcolor/i.test(attribute.value)) {
-          target.setAttribute(attribute.name, attribute.value.replace(/currentcolor/gi, computed.color));
+          target.setAttribute(attribute.name, attribute.value.replace(/currentcolor/gi, asRgb(computed.color)));
         }
       }
-      target.setAttribute('color', computed.color);
-      target.setAttribute('fill', computed.fill);
-      target.setAttribute('stroke', computed.stroke);
+      target.setAttribute('color', asRgb(computed.color));
+      target.setAttribute('fill', asRgb(computed.fill));
+      target.setAttribute('stroke', asRgb(computed.stroke));
+      for (const property of SVG_PRESENTATION) {
+        target.setAttribute(property, computed.getPropertyValue(property));
+      }
     });
     return clone.outerHTML;
+  };
+
+  const matrixOf = (computed) => (computed.transform === 'none' ? new DOMMatrixReadOnly() : new DOMMatrixReadOnly(computed.transform));
+
+  const rotationOf = (computed) => {
+    const { a, b } = matrixOf(computed);
+    const own = /(-?[\d.]+)deg$/.exec(computed.rotate)?.[1];
+    return (Math.atan2(b, a) * 180) / Math.PI + (own === undefined ? 0 : Number.parseFloat(own));
+  };
+
+  const scaleOf = (computed) => {
+    const { a, b } = matrixOf(computed);
+    const own = Number.parseFloat(computed.scale);
+    return Math.hypot(a, b) * (Number.isFinite(own) ? own : 1);
+  };
+
+  const inheritedScale = (element) => {
+    let scale = 1;
+    for (let at = element; at !== null; at = at.parentElement) {
+      scale *= scaleOf(getComputedStyle(at));
+    }
+    return scale;
+  };
+
+  const scaleText = (style, scale) => {
+    if (Math.abs(scale - 1) > 1e-3 && scale > 0) {
+      for (const key of ['fontSize', 'lineHeight', 'letterSpacing']) {
+        if (style[key].endsWith('px')) {
+          style[key] = `${Number.parseFloat(style[key]) * scale}px`;
+        }
+      }
+    }
+    return style;
+  };
+
+  const paintsAlone = (computed) =>
+    computed.backgroundColor !== 'rgba(0, 0, 0, 0)' ||
+    computed.backgroundImage !== 'none' ||
+    computed.boxShadow !== 'none' ||
+    ['Top', 'Right', 'Bottom', 'Left'].some((side) => computed[`border${side}Style`] !== 'none' && computed[`border${side}Width`] !== '0px');
+
+  const containingBox = (element) => {
+    for (let at = element; at !== null; at = at.parentElement) {
+      const computed = getComputedStyle(at);
+      if (computed.position !== 'static' || computed.transform !== 'none') {
+        const rect = at.getBoundingClientRect();
+        return { x: rect.x + at.clientLeft, y: rect.y + at.clientTop };
+      }
+    }
+    return { x: 0, y: 0 };
+  };
+
+  const transformedBox = (x, y, width, height, computed) => {
+    const matrix = matrixOf(computed);
+    const scale = Number.parseFloat(computed.scale);
+    const corners = [[0, 0], [width, 0], [0, height], [width, height]].map(([left, top]) => {
+      const point = new DOMPoint(left - width / 2, top - height / 2).matrixTransform(matrix);
+      const own = Number.isFinite(scale) ? scale : 1;
+      return [x + width / 2 + point.x * own, y + height / 2 + point.y * own];
+    });
+    const xs = corners.map(([left]) => left);
+    const ys = corners.map(([, top]) => top);
+    return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
+  };
+
+  const pseudoNode = (element, pseudo) => {
+    const computed = getComputedStyle(element, pseudo);
+    if (computed.content === 'none' || computed.content === 'normal' || computed.display === 'none' || computed.visibility === 'hidden') {
+      return undefined;
+    }
+    const hasText = computed.content !== '""';
+    const positioned = computed.position === 'absolute' || computed.position === 'fixed';
+    const [left, top, width, height] = [computed.left, computed.top, computed.width, computed.height].map(Number.parseFloat);
+    const placed = positioned && [left, top, width, height].every(Number.isFinite);
+    if (!placed || hasText) {
+      if (!paintsAlone(computed) && !hasText) {
+        return undefined;
+      }
+      return { lost: `${pseudo} ${computed.content.slice(0, 32)} ${placed ? 'holds text' : 'is in the flow'}` };
+    }
+    if (!paintsAlone(computed)) {
+      return undefined;
+    }
+    countNode();
+    const origin = computed.position === 'fixed' ? { x: 0, y: 0 } : containingBox(element);
+    const box = transformedBox(origin.x + left, origin.y + top, width, height, computed);
+    return {
+      node: {
+        type: 'element',
+        tag: pseudo,
+        box: { x: box.x + window.scrollX, y: box.y + window.scrollY, width: box.width, height: box.height },
+        style: pick(computed, ELEMENT_KEYS),
+        children: [],
+      },
+    };
   };
 
   const svgNode = (svg) => {
@@ -302,6 +417,10 @@ function walkInPage({ rootSelector, limits }) {
       fail(`snapshot refused: svg markup larger than ${limits.maxMarkupBytes} bytes`);
     }
     const node = { type: 'svg', markup, box: boxOf(svg.getBoundingClientRect()) };
+    const degrees = rotationOf(getComputedStyle(svg));
+    if (degrees !== 0) {
+      node.rotation = degrees;
+    }
     const animations = animationsOf(svg);
     if (animations.length > 0) {
       node.animations = animations;
@@ -344,7 +463,7 @@ function walkInPage({ rootSelector, limits }) {
     const box = boxOf(range.getBoundingClientRect());
     const parent = node.parentElement;
     const computed = getComputedStyle(parent);
-    const result = { type: 'text', text, box, style: pick(computed, TEXT_KEYS), markId: markParent(parent) };
+    const result = { type: 'text', text, box, style: scaleText(pick(computed, TEXT_KEYS), inheritedScale(parent)), markId: markParent(parent) };
     if (isSingleLine(range)) {
       const height = lineHeightOf(parent, computed);
       if (Number.isFinite(height) && height > 0) {
@@ -390,6 +509,14 @@ function walkInPage({ rootSelector, limits }) {
     if (animations.length > 0) {
       node.animations = animations;
     }
+    const [before, after] = PSEUDOS.map((pseudo) => pseudoNode(element, pseudo));
+    const lost = [before, after].flatMap((pseudo) => pseudo?.lost ?? []);
+    if (lost.length > 0) {
+      node.style.uigenLostPseudo = lost.join('; ');
+    }
+    if (before?.node) {
+      node.children.push(before.node);
+    }
     for (const child of element.childNodes) {
       if (child.nodeType === Node.TEXT_NODE) {
         const text = textNode(child);
@@ -406,6 +533,9 @@ function walkInPage({ rootSelector, limits }) {
           node.children.push(converted);
         }
       }
+    }
+    if (after?.node) {
+      node.children.push(after.node);
     }
     return node;
   };

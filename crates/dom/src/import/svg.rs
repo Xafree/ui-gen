@@ -20,6 +20,7 @@ pub(super) fn layer(doc: &mut Document, svg: &SvgNode, parent: NodeId, placement
                 report.note(note);
             }
             stretch(doc, imported.frame, offset, (width, height));
+            rotate(doc, imported.frame, svg.rotation);
             Some(imported.frame)
         }
         Err(error) => {
@@ -27,6 +28,13 @@ pub(super) fn layer(doc: &mut Document, svg: &SvgNode, parent: NodeId, placement
             None
         }
     }
+}
+
+/// A transformed icon turns about the centre of its box, which keeps its place for the quarter turns icons use.
+fn rotate(doc: &mut Document, frame: NodeId, degrees: f64) {
+    let Some(node) = doc.node_mut(frame).filter(|_| degrees.is_finite() && degrees != 0.0) else { return };
+    let center = (node.width / 2.0, node.height / 2.0);
+    node.transform = node.transform * Affine::translate(center) * Affine::rotate(degrees.to_radians()) * Affine::translate((-center.0, -center.1));
 }
 
 /// The browser scales an icon, strokes included, to the box the page gave it.
