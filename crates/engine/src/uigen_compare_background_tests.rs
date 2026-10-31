@@ -122,7 +122,7 @@ fn the_library_raster_is_opaque_and_clear_areas_take_the_page_background() {
 #[test]
 fn the_page_backgrounds_are_those_of_the_capture_service() {
     let source = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../sidecar/render.mjs")).unwrap();
-    let line = source.lines().find(|line| line.starts_with("const BACKGROUNDS")).expect("the capture service declares its backgrounds");
+    let line = source.lines().find(|line| line.starts_with("export const BACKGROUNDS")).expect("the capture service declares its backgrounds");
     let hex = |color: [u8; 3]| format!("#{:02x}{:02x}{:02x}", color[0], color[1], color[2]);
     assert!(line.contains(&format!("light: '{}'", hex(page_background(Theme::Light)))), "{line}");
     assert!(line.contains(&format!("dark: '{}'", hex(page_background(Theme::Dark)))), "{line}");

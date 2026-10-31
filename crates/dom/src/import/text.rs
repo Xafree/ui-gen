@@ -40,8 +40,15 @@ pub(super) fn layer(id: NodeId, run: &TextRun, placement: &Placement, warnings: 
     if let Some(color) = read(style, "color", &mut report, Color::parse_css) {
         node.fills = if color.a > 0.0 { vec![Paint::solid(color)] } else { Vec::new() };
     }
+    if let Some(stack) = get(style, "fontFamily").filter(|stack| stack.len() <= MAX_FONT_STACK_BYTES) {
+        node.plugin_data.insert(FONT_STACK_KEY.to_owned(), stack.to_owned());
+    }
     node
 }
+
+/// The computed `font-family` of a text, kept for the code generated from it: the canvas draws one face, a page chooses.
+pub(super) const FONT_STACK_KEY: &str = "uigen.fontStack";
+const MAX_FONT_STACK_BYTES: usize = 512;
 
 fn text_style(style: &Style, report: &mut Report) -> TextStyle {
     let mut text = TextStyle::default();

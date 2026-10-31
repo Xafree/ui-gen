@@ -213,6 +213,8 @@ mod text_enter_tests;
 mod titlebar_tests;
 #[cfg(test)]
 mod toast_action_tests;
+#[cfg(test)]
+mod variant_labels_tests;
 
 #[cfg(test)]
 mod compare_review_ui_tests;

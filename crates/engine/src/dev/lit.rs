@@ -781,8 +781,52 @@ fn state_rank(kind: StateKind) -> u8 {
     }
 }
 
+/// Whether the root of `c` hugs its content whatever size it was captured at: an import freezes sizes that the page
+/// it came from let the content decide, so a longer text must still fit.
+pub(crate) fn grows_with_content(doc: &Document, c: &Component) -> bool {
+    let imported =
+        c.set.and_then(|set| doc.node(set)).or_else(|| doc.node(c.comp)).is_some_and(|n| n.plugin_data.contains_key(crate::uigen_import::SOURCE_KEY));
+    imported && doc.node(c.comp).is_some_and(|n| n.layout.is_some())
+}
+
+/// How a layer that only some variants have stays out of the others.
+pub(crate) const HIDDEN: &str = "display: none;";
+
 fn declared_property(line: &str) -> Option<&str> {
     line.split_once(':').map(|(property, _)| property)
+}
+
+/// The declaration that takes back a property a rule further up sets, for a layer that has nothing of the kind:
+/// no paint, no border, no effect. A property with no such value goes back to what the element has by itself.
+fn reset_of(property: &str) -> String {
+    let value = match property {
+        "background" | "color" => "transparent",
+        "box-shadow" | "filter" | "backdrop-filter" | "transform" | "text-decoration" | "text-transform" | "outline" => "none",
+        "opacity" => "1",
+        "border-radius" => "0",
+        "mix-blend-mode" => "normal",
+        "width" | "height" => "auto",
+        border if border.starts_with("border") => "none",
+        _ => "revert",
+    };
+    format!("{property}: {value};")
+}
+
+/// What `decls` must add to the rules it comes after: what differs from `base`, a property an `earlier` state of the same
+/// variant set again when `stacked`, and a reset of each of their properties it does not declare itself.
+fn differences(decls: &str, base: &str, earlier: &[String], stacked: bool) -> Vec<String> {
+    let base_lines: Vec<&str> = base.lines().collect();
+    let declared: Vec<&str> = decls.lines().filter_map(declared_property).collect();
+    let set_earlier = |property: &str| stacked && earlier.iter().any(|e| e == property);
+    let kept = decls.lines().filter(|l| !base_lines.contains(l) || declared_property(l).is_some_and(set_earlier)).map(str::to_string);
+    let inherited = base_lines.iter().filter_map(|l| declared_property(l)).chain(earlier.iter().map(String::as_str).filter(|_| stacked));
+    let mut resets: Vec<&str> = Vec::new();
+    for property in inherited {
+        if !declared.contains(&property) && !resets.contains(&property) {
+            resets.push(property);
+        }
+    }
+    kept.chain(resets.into_iter().map(reset_of)).collect()
 }
 
 /// The rules of the other variants of a set, on the host: what differs from the default variant,
@@ -839,15 +883,36 @@ pub(crate) fn variant_rules(doc: &Document, c: &Component, main: &[Rule], pass: 
         let reference = at_rest.map(pass);
         let reference: &[Rule] = reference.as_deref().unwrap_or(main);
         let stacked = state_rank(kind) > 0;
-        for (path, _, decls) in pass(*v) {
+        let own = pass(*v);
+        let mut gone: Vec<&str> = Vec::new();
+        for (path, class, _) in main.iter().filter(|(path, ..)| !own.iter().any(|(p, ..)| p == path)) {
+            if gone.iter().any(|parent| path.strip_prefix(parent).is_some_and(|rest| rest.starts_with('/'))) {
+                continue;
+            }
+            gone.push(path);
+            let shown = reference.iter().find(|(p, ..)| p == path).is_some_and(|(_, _, decls)| !decls.lines().any(|l| l == HIDDEN));
+            let earlier = touched.entry((attributes(pairs), path.clone())).or_default();
+            if (shown || (stacked && earlier.iter().any(|e| e == "display"))) && !written.contains(&(selector.clone(), class.clone())) {
+                written.push((selector.clone(), class.clone()));
+                out.push_str(&format!("{selector} .{class} {{\n  {HIDDEN}\n}}\n"));
+            }
+        }
+        for (path, _, decls) in own {
             let Some((_, class, base)) = main.iter().find(|(p, _, _)| *p == path) else { continue };
             let base = reference.iter().find(|(p, _, _)| *p == path).map_or(base, |(_, _, d)| d);
-            let base_lines: Vec<&str> = base.lines().collect();
-            let earlier = touched.entry((attributes(pairs), path.clone())).or_default();
-            let lines: Vec<&str> = decls
+            let added_for_motion = motion.base.get(&path).map_or("", String::as_str);
+            let base: String = base
                 .lines()
-                .filter(|l| !base_lines.contains(l) || (stacked && declared_property(l).is_some_and(|p| earlier.iter().any(|e| e == p))))
+                .filter(|l| !added_for_motion.lines().any(|m| m == *l))
+                .map(|l| {
+                    format!(
+                        "{l}
+"
+                    )
+                })
                 .collect();
+            let earlier = touched.entry((attributes(pairs), path.clone())).or_default();
+            let lines = differences(&decls, &base, earlier, stacked);
             if lines.is_empty() || written.contains(&(selector.clone(), class.clone())) {
                 continue;
             }
@@ -856,7 +921,7 @@ pub(crate) fn variant_rules(doc: &Document, c: &Component, main: &[Rule], pass: 
                 earlier.extend(lines.iter().filter_map(|l| declared_property(l)).map(str::to_string));
             }
             let transition = motion.state(*v, &path).into_iter();
-            let lines = lines.iter().copied().chain(transition);
+            let lines = lines.iter().map(String::as_str).chain(transition);
             out.push_str(&format!(
                 "{selector} .{class} {{
 {}}}
@@ -990,7 +1055,8 @@ pub fn definition(doc: &Document, c: &Component, opts: &LitOptions) -> LitOutput
     let tag = tag_for(doc, c, opts);
     let class = class_of(&tag);
     let (_, markup, css, tokens) = web_tokens(doc, c, CodeLang::Lit, opts);
-    let hugs = doc.node(c.comp).is_some_and(|n| n.layout.is_some() && n.child_layout.sizing_h == figcraft_doc::Sizing::Hug);
+    let hugs =
+        doc.node(c.comp).is_some_and(|n| n.layout.is_some() && n.child_layout.sizing_h == figcraft_doc::Sizing::Hug) || grows_with_content(doc, c);
     let display = if hugs { "inline-block" } else { "block" };
     let mut out =
         String::from("import { LitElement, css, html, nothing } from \"lit\";\nimport { customElement, property } from \"lit/decorators.js\";\n");
@@ -1013,9 +1079,15 @@ pub fn definition(doc: &Document, c: &Component, opts: &LitOptions) -> LitOutput
     if !fields.is_empty() {
         out.push('\n');
     }
-    out.push_str(&format!("  static styles = css`\n    :host {{ display: {display}; }}\n"));
+    out.push_str(&format!("  static styles = css`\n    :host {{ display: {display}; }}\n    * {{ box-sizing: border-box; margin: 0; }}\n"));
     for line in template_text(&css).lines() {
         out.push_str(&if line.is_empty() { "\n".to_string() } else { format!("    {line}\n") });
+    }
+    if lay.state.as_ref().is_some_and(|state| state.has(StateKind::FocusVisible)) {
+        out.push_str(
+            "    :host(:focus-visible) { outline: none; }
+",
+        );
     }
     out.push_str("  `;\n\n");
     out.push_str(&focus_methods(&lay));

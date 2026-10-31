@@ -31,7 +31,7 @@ pub(crate) use css::{LitNames, Tokens, Unreproducible};
 use css::{css, tok};
 pub use css::{css_var_name, css_var_of};
 use html::html;
-pub(crate) use html::{Markup, class_name, html_escape};
+pub(crate) use html::{Guest, Markup, class_name, html_escape};
 pub(crate) use swift::swift;
 
 pub fn specs() -> Vec<CommandSpec> {

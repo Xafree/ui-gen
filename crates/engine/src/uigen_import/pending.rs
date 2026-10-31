@@ -184,6 +184,7 @@ impl PendingImport {
                     theme: theme.render().to_string(),
                 };
                 let id = s.submit_capture(COMMAND, &self.request.package, job)?;
+                s.capture.mark_chained(id);
                 self.jobs.push(id);
                 waiting.insert(id, (index, theme_index));
             }

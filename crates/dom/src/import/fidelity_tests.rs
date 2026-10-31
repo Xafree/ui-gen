@@ -293,3 +293,11 @@ fn a_box_thinner_than_a_pixel_collapses_to_zero_never_below() {
     assert_eq!(offset(node), (10.0, 30.0));
     assert_eq!((node.width, node.height), (0.0, 10.0));
 }
+
+#[test]
+fn a_text_remembers_the_font_stack_the_library_asked_for() {
+    let stack = "system-ui, \"Segoe UI\", sans-serif";
+    let placed = place(parent_of(json!([text_node(bounds(0.0, 0.0, 40.0, 17.0), None, json!({"fontFamily": stack}))])));
+    let label = placed.child(placed.root_node(), 0);
+    assert_eq!(label.plugin_data.get(super::text::FONT_STACK_KEY).map(String::as_str), Some(stack));
+}

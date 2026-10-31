@@ -828,7 +828,7 @@ The manifest is read and written only through the automation roots, and the comm
   package, root (the project folder), state: "queued" | "running" | "done" | "failed", error?}]}`; `error` carries the service's message of a
   failed job. The service runs one job at a time, and a package with a job in flight refuses another change
   (`already in progress`). The folder sent to the service is always absolute. A result naming another package, an unknown framework or
-  a license over 128 bytes or with control characters is refused (`Protocol`) and writes nothing. The last hundred finished jobs are kept.
+  a license over 128 bytes or with control characters is refused (`Protocol`) and writes nothing. The last hundred finished jobs are kept, the renders of an import going first so that a job a command returned outlives them; a `job` that never ran or is forgotten is refused (`job N is unknown`), so a poll ends.
 - `project.openFolder {}` and `project.newFolder {}`: ask the interface for a folder to open as a project, or to
   start one in (Home's "Open project" and "New library project"); a programmatic call opens no dialog.
 - `project.settings {}`: ask the interface to open the settings window of the current tab's library project, whose
@@ -900,7 +900,7 @@ Two commands bring the output of the capture service into the document; both are
     render is back: no layer, no collection, no variable, no undo step.
   - **`stage`** (boolean, default `false`): write the set into the **import page** of the package and version
     instead of a page of the document. The page is named `- Imported · <package> <version>` (a name starting with a
-    hyphen is never a component, so the page is not exported to Lit and `project.info` does not list it) and carries
+    hyphen is never a component, so the page is not exported to Lit unless `ids` names one of its sets, and `project.info` does not list it) and carries
     `plugin_data["uigen.importPage"]` = `{"package", "version"}`, by which it is found again whatever its name. It is
     added at the end of the file the first time and created in the same undo step as the set; the current page and
     the selection do not change, and the final event adds `page` (the page's id). Importing the same component again
