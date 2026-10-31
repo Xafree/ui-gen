@@ -242,6 +242,19 @@ fn the_scale_tool_only_acts_on_handles() {
 }
 
 #[test]
+fn scale_node_scales_the_nudges_of_a_text_and_keeps_them_held() {
+    use figcraft_doc::{NodeKind, TextData};
+    let mut doc = figcraft_doc::Document::new("scale");
+    let page = doc.pages[0];
+    let mut data = TextData::new("Button".to_owned());
+    data.set_nudges(0.5, 0.25);
+    let id = doc.create(page, NodeKind::Text(data), "Label", 0.0, 0.0, 100.0, 20.0).unwrap();
+    crate::cmd::arrange::scale_node(&mut doc, id, 2.0).unwrap();
+    let NodeKind::Text(scaled) = &doc.node(id).unwrap().kind else { panic!("not a text") };
+    assert_eq!((scaled.held_baseline_nudge(), scaled.held_hug_nudge()), (1.0, 0.5));
+}
+
+#[test]
 fn scale_node_scales_vector_point_corner_radius() {
     let mut s = Session::new();
     let v = id_of(&ex(&mut s, "vector.create", json!({"points": [[0, 0], [100, 0], [100, 100], [0, 100]], "closed": true}))["id"]).unwrap();

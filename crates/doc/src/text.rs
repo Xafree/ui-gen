@@ -434,6 +434,12 @@ pub struct TextData {
     /// line's baseline).
     #[serde(skip_serializing_if = "crate::node::is_default")]
     pub leading_trim: LeadingTrim,
+    /// Where an imported text sits against its browser; boxed to keep text data small.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nudges: Option<Box<TextNudges>>,
+    /// Glyph edges follow a browser's luminance curve: an imported text keeps the weight its browser drew it at.
+    #[serde(skip_serializing_if = "crate::node::is_default")]
+    pub browser_gamma: bool,
     /// Max lines when truncating, or before an auto-height text ends in an ellipsis (0 = as many
     /// as fit).
     #[serde(skip_serializing_if = "crate::node::is_default")]
@@ -445,6 +451,22 @@ pub struct TextData {
     /// data small.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<Box<TextPath>>,
+}
+
+/// What an import measured against the browser, and what it measured it on: see [`TextData::held_baseline_nudge`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct TextNudges {
+    /// Px added to every line's baseline: an imported text sits where its browser drew it, whose
+    /// rounded font metrics and floored half leading differ from the natural line.
+    pub baseline: f64,
+    /// Px added to the natural width of a width-hugging box, which then rounds instead of growing to hold the last
+    /// fraction: an imported text keeps the width its browser snapped it to, so its frame leaves it in place.
+    pub hug: f32,
+    /// Fingerprint of the metrics the nudges were measured on.
+    pub metrics: u32,
+    /// Fingerprint of the characters `hug` was measured on.
+    pub characters: u32,
 }
 
 /// Text on a path: the baseline follows `d`. The text starts at `start` (aligned there by the
@@ -498,7 +520,46 @@ pub fn valid_axis_tag(tag: &str) -> bool {
     valid_feature_tag(tag)
 }
 
+fn fingerprint(text: &str) -> u32 {
+    const OFFSET: u32 = 0x811c_9dc5;
+    const PRIME: u32 = 0x0100_0193;
+    text.bytes().fold(OFFSET, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(PRIME))
+}
+
+fn style_metrics(style: &TextStyle) -> String {
+    let TextStyle { font_family, font_style, font_size, line_height, letter_spacing, case, variations, .. } = style;
+    format!("{font_family}|{font_style}|{}|{line_height:?}|{letter_spacing:?}|{case:?}|{variations:?}", font_size.to_bits())
+}
+
 impl TextData {
+    fn metrics_fingerprint(&self) -> u32 {
+        let mut metrics: Vec<String> = std::iter::once(&self.style).chain(self.runs.iter().map(|run| &run.style)).map(style_metrics).collect();
+        metrics.sort_unstable();
+        metrics.dedup();
+        fingerprint(&metrics.join("\n"))
+    }
+
+    fn held_nudges(&self) -> Option<&TextNudges> {
+        self.nudges.as_deref().filter(|nudges| nudges.metrics == self.metrics_fingerprint())
+    }
+
+    /// Records the nudges measured on the text as it is now.
+    pub fn set_nudges(&mut self, baseline: f64, hug: f32) {
+        let measured = baseline != 0.0 || hug != 0.0;
+        self.nudges =
+            measured.then(|| Box::new(TextNudges { baseline, hug, metrics: self.metrics_fingerprint(), characters: fingerprint(&self.characters) }));
+    }
+
+    /// The baseline nudge, while the metrics it was measured on still stand; every edit that changes them voids it.
+    pub fn held_baseline_nudge(&self) -> f64 {
+        self.held_nudges().map_or(0.0, |nudges| nudges.baseline)
+    }
+
+    /// The width nudge, while the metrics and the characters it was measured on still stand.
+    pub fn held_hug_nudge(&self) -> f32 {
+        self.held_nudges().filter(|nudges| nudges.characters == fingerprint(&self.characters)).map_or(0.0, |nudges| nudges.hug)
+    }
+
     pub fn new(characters: impl Into<String>) -> Self {
         Self { characters: characters.into(), ..Default::default() }
     }

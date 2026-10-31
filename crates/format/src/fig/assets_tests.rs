@@ -117,6 +117,7 @@ fn themed() -> Document {
                 spread: 0.0,
                 blend: BlendMode::Normal,
                 show_behind: false,
+                from_outline: false,
             }),
             visible: true,
         }];
@@ -395,6 +396,7 @@ fn styled() -> Document {
             spread: 1.0,
             blend: BlendMode::Normal,
             show_behind: false,
+            from_outline: false,
         }),
         visible: true,
     };

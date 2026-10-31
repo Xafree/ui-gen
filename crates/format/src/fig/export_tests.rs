@@ -87,6 +87,7 @@ fn effect(r: &mut Lcg) -> Effect {
         spread: r.f(-2.0, 2.0),
         blend: r.pick(&BLENDS),
         show_behind: r.chance(30),
+        from_outline: false,
     };
     let blur = |r: &mut Lcg| {
         let mut b = Blur { radius: r.f(1.0, 10.0), ..Blur::default() };
@@ -865,6 +866,21 @@ fn written_files_decode_and_list_parents_first() {
         let mut z = zip::ZipArchive::new(std::io::Cursor::new(&bytes[..])).unwrap();
         assert!(crate::read_member(&mut z, "thumbnail.png", 1 << 20).is_ok());
     }
+}
+
+#[test]
+fn a_shadow_cast_by_the_box_hides_behind_it_and_says_so() {
+    let mut doc = Document::new("box shadow");
+    let page = doc.first_page().unwrap();
+    let frame = doc.create(page, NodeKind::Frame, "Card", 0.0, 0.0, 100.0, 50.0).unwrap();
+    let shadow = Shadow { from_outline: true, show_behind: true, ..Shadow::default() };
+    doc.get_mut(frame).unwrap().effects = vec![Effect { kind: EffectKind::DropShadow(shadow), visible: true }];
+    let (bytes, warnings) = export(&doc, None).unwrap();
+    let (back, _) = import(&bytes, "x").unwrap();
+    let card = back.nodes().find(|node| node.name == "Card").unwrap();
+    let [Effect { kind: EffectKind::DropShadow(read), .. }] = &card.effects[..] else { panic!("{:?}", card.effects) };
+    assert!(!read.show_behind);
+    assert!(warnings.iter().any(|warning| warning.contains("cast by")), "{warnings:?}");
 }
 
 #[test]

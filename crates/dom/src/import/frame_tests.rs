@@ -1,4 +1,5 @@
-use figcraft_color::Color;
+use figcraft_color::{BlendMode, Color, GradientKind, Paint, PaintKind};
+use figcraft_doc::{Effect, EffectKind};
 use serde_json::{Map, Value, json};
 
 use super::support::{Run, bounds, frame, import, mentions};
@@ -42,10 +43,10 @@ fn every_computed_colour_form_gives_the_same_fill() {
     }
 }
 
-// covers: T2
+// covers: T9
 #[test]
-fn a_gradient_background_is_reported_not_flattened() {
-    let run = frame(json!({ "backgroundColor": "rgb(0, 0, 0)", "backgroundImage": "linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))" }));
+fn a_background_image_no_paint_can_hold_is_reported_not_flattened() {
+    let run = frame(json!({ "backgroundColor": "rgb(0, 0, 0)", "backgroundImage": "conic-gradient(rgb(255, 0, 0), rgb(0, 0, 255))" }));
     assert_eq!(fills(&run), [[0, 0, 0, 255]]);
     assert!(mentions(&run.warnings, "Bouton", "backgroundImage"), "{:?}", run.warnings);
     assert!(frame(json!({ "backgroundImage": "none" })).warnings.is_empty());
@@ -85,9 +86,9 @@ fn one_drawn_side_keeps_the_others_at_zero() {
 
 // covers: T9
 #[test]
-fn borders_that_are_not_solid_are_reported_and_not_drawn() {
-    let run = frame(borders([("2px", "dashed", "red"), ("2px", "dotted", "red"), ("2px", "double", "red"), ("2px", "wavy", "red")]));
-    assert!(run.root_node().strokes.is_empty());
+fn border_styles_a_stroke_cannot_draw_are_reported_and_drawn_solid() {
+    let run = frame(borders([("2px", "groove", "red"), ("2px", "ridge", "red"), ("2px", "double", "red"), ("2px", "wavy", "red")]));
+    assert_eq!(run.root_node().strokes.len(), 1);
     for side in ["Top", "Right", "Bottom", "Left"] {
         assert!(mentions(&run.warnings, "Bouton", &format!("border{side}Style")), "{side}: {:?}", run.warnings);
     }
@@ -213,4 +214,149 @@ fn a_frame_is_named_after_its_tag_when_the_label_is_empty_and_names_are_capped()
     assert_eq!(unlabelled.root_node().name, "nav");
     let long = import(json!({ "type": "element", "tag": "div", "label": "é".repeat(1000), "box": bounds(0.0, 0.0, 1.0, 1.0) }));
     assert_eq!(long.root_node().name.chars().count(), 128);
+}
+
+#[test]
+fn a_box_shadow_is_cast_by_the_box() {
+    let run = frame(json!({ "boxShadow": "rgb(0, 0, 0) 0px 0px 0px 2px" }));
+    let [Effect { kind: EffectKind::DropShadow(shadow), .. }] = &run.root_node().effects[..] else { panic!("{:?}", run.root_node().effects) };
+    assert!(shadow.from_outline && !shadow.show_behind);
+}
+
+#[test]
+fn a_solid_outline_is_a_ring_around_the_box() {
+    let run = frame(json!({ "outlineStyle": "solid", "outlineWidth": "2px", "outlineColor": "rgb(255, 0, 0)", "outlineOffset": "0px" }));
+    let [Effect { kind: EffectKind::DropShadow(ring), .. }] = &run.root_node().effects[..] else { panic!("{:?}", run.root_node().effects) };
+    assert!(ring.from_outline);
+    assert_eq!(ring.spread, 2.0);
+    assert!(run.warnings.is_empty(), "{:?}", run.warnings);
+}
+
+#[test]
+fn an_outline_with_a_gap_is_reported() {
+    let run = frame(json!({ "outlineStyle": "solid", "outlineWidth": "2px", "outlineColor": "rgb(255, 0, 0)", "outlineOffset": "3px" }));
+    assert!(mentions(&run.warnings, "Bouton", "outlineOffset"), "{:?}", run.warnings);
+}
+
+#[test]
+fn an_outline_of_style_none_paints_nothing() {
+    let run = frame(json!({ "outlineStyle": "none", "outlineWidth": "3px", "outlineColor": "rgb(255, 0, 0)" }));
+    assert!(run.root_node().effects.is_empty());
+}
+
+#[test]
+fn a_linear_gradient_is_a_paint_on_the_css_gradient_line() {
+    let run = sized(json!({ "backgroundImage": "linear-gradient(90deg, rgb(255, 0, 0) 0%, rgb(0, 0, 255) 100%)" }), 100.0, 50.0);
+    let [Paint { kind: PaintKind::Gradient(gradient), .. }] = &run.root_node().fills[..] else { panic!("{:?}", run.root_node().fills) };
+    assert_eq!(gradient.kind, GradientKind::Linear);
+    assert!((gradient.from.0 - 0.0).abs() < 1e-9 && (gradient.to.0 - 1.0).abs() < 1e-9 && (gradient.from.1 - 0.5).abs() < 1e-9);
+    assert_eq!(gradient.stops.len(), 2);
+    assert!(run.warnings.is_empty(), "{:?}", run.warnings);
+}
+
+#[test]
+fn a_corner_gradient_follows_the_magic_corners_of_its_box() {
+    let line = |side: &str| {
+        let run = sized(json!({ "backgroundImage": format!("linear-gradient({side}, rgb(255, 0, 0), rgb(0, 0, 255))") }), 200.0, 100.0);
+        let [Paint { kind: PaintKind::Gradient(gradient), .. }] = &run.root_node().fills[..] else { panic!("{:?}", run.root_node().fills) };
+        (gradient.from, gradient.to)
+    };
+    let close = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9;
+    for (side, from, to) in [
+        ("to top right", (0.3, 1.3), (0.7, -0.3)),
+        ("to right top", (0.3, 1.3), (0.7, -0.3)),
+        ("to bottom right", (0.3, -0.3), (0.7, 1.3)),
+        ("to bottom left", (0.7, -0.3), (0.3, 1.3)),
+        ("to top left", (0.7, 1.3), (0.3, -0.3)),
+    ] {
+        let found = line(side);
+        assert!(close(found.0, from) && close(found.1, to), "{side}: {found:?}");
+    }
+}
+
+#[test]
+fn background_layers_keep_their_order_over_the_colour() {
+    let top = "linear-gradient(rgb(255, 0, 0), rgba(0, 0, 0, 0))";
+    let under = "radial-gradient(rgb(0, 255, 0), rgb(0, 0, 255) 50%)";
+    let run = frame(json!({ "backgroundColor": "rgb(1, 2, 3)", "backgroundImage": format!("{top}, {under}") }));
+    let kinds: Vec<_> = run
+        .root_node()
+        .fills
+        .iter()
+        .map(|paint| match &paint.kind {
+            PaintKind::Gradient(gradient) => Some(gradient.kind),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(kinds, [None, Some(GradientKind::Radial), Some(GradientKind::Linear)]);
+}
+
+#[test]
+fn a_background_url_and_a_tiled_gradient_are_reported() {
+    let run = frame(json!({ "backgroundImage": "url(\"a.png\")" }));
+    assert!(mentions(&run.warnings, "Bouton", "backgroundImage"), "{:?}", run.warnings);
+    let run = frame(json!({ "backgroundImage": "linear-gradient(rgb(0, 0, 0), rgb(1, 1, 1))", "backgroundSize": "8px 8px" }));
+    assert!(mentions(&run.warnings, "Bouton", "backgroundSize"), "{:?}", run.warnings);
+}
+
+#[test]
+fn filter_blur_and_drop_shadow_are_effects_and_the_others_are_reported() {
+    let run = frame(json!({ "filter": "blur(4px) drop-shadow(rgb(255, 0, 0) 1px 2px 3px) grayscale(1)" }));
+    let [Effect { kind: EffectKind::LayerBlur(blur), .. }, Effect { kind: EffectKind::DropShadow(shadow), .. }] = &run.root_node().effects[..] else {
+        panic!("{:?}", run.root_node().effects)
+    };
+    assert_eq!(blur.radius, 8.0);
+    assert_eq!((shadow.offset, shadow.radius), ((1.0, 2.0), 6.0));
+    assert!(mentions(&run.warnings, "Bouton", "filter"), "{:?}", run.warnings);
+}
+
+#[test]
+fn backdrop_blur_is_a_background_blur_and_saturate_is_reported() {
+    let run = frame(json!({ "backdropFilter": "blur(8px) saturate(1.5)" }));
+    let [Effect { kind: EffectKind::BackgroundBlur(blur), .. }] = &run.root_node().effects[..] else { panic!("{:?}", run.root_node().effects) };
+    assert_eq!(blur.radius, 16.0);
+    assert!(mentions(&run.warnings, "Bouton", "backdropFilter"), "{:?}", run.warnings);
+}
+
+#[test]
+fn mix_blend_mode_sets_the_blend_of_the_layer() {
+    assert_eq!(frame(json!({ "mixBlendMode": "multiply" })).root_node().blend, BlendMode::Multiply);
+    assert!(mentions(&frame(json!({ "mixBlendMode": "plus-darker" })).warnings, "Bouton", "mixBlendMode"));
+}
+
+#[test]
+fn clip_path_mask_rotation_and_scale_are_reported_and_a_translation_is_not() {
+    for (key, value) in [
+        ("clipPath", "circle(50%)"),
+        ("maskImage", "url(\"m.svg\")"),
+        ("transform", "matrix(0, 1, -1, 0, 0, 0)"),
+        ("rotate", "45deg"),
+        ("scale", "0.97"),
+    ] {
+        assert!(mentions(&frame(json!({ key: value })).warnings, "Bouton", key), "{key}");
+    }
+    assert!(frame(json!({ "transform": "matrix(1, 0, 0, 1, 4, 8)", "clipPath": "none", "scale": "none" })).warnings.is_empty());
+}
+
+#[test]
+fn mixed_border_styles_stay_solid_with_a_note() {
+    let black = "rgb(0, 0, 0)";
+    let mixed = frame(borders([("2px", "dashed", black), ("2px", "solid", black), ("2px", "dashed", black), ("2px", "solid", black)]));
+    assert!(mixed.root_node().stroke.dashes.is_empty());
+    assert!(mentions(&mixed.warnings, "Bouton", "borderTopStyle"), "{:?}", mixed.warnings);
+}
+
+#[test]
+fn a_dashed_border_dashes_and_a_double_border_stays_solid_with_a_note() {
+    let dashed = frame(borders([("2px", "dashed", "rgb(0, 0, 0)"); 4]));
+    assert_eq!(dashed.root_node().stroke.dashes, [4.0, 4.0]);
+    assert!(dashed.warnings.is_empty(), "{:?}", dashed.warnings);
+    let double = frame(borders([("3px", "double", "rgb(0, 0, 0)"); 4]));
+    assert_eq!(double.root_node().strokes.len(), 1);
+    assert!(mentions(&double.warnings, "Bouton", "borderTopStyle"), "{:?}", double.warnings);
+}
+
+#[test]
+fn a_scale_to_nothing_needs_no_note() {
+    assert!(frame(json!({ "transform": "matrix(0, 0, 0, 1, 0, 0)" })).warnings.is_empty());
 }

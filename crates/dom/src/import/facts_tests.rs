@@ -88,7 +88,7 @@ fn a_button_gives_one_token_fact_per_value_with_the_field_to_bind_and_the_value_
     fields.dedup();
     assert_eq!(fields.len(), count, "a field has one fact: {fields:?}");
     assert!(root.tokens.iter().all(|fact| fact.exposed.is_none()), "{:?}", root.tokens);
-    assert_eq!(fact(facts_of(&run, "Go"), "fill").value, colour(WHITE), "the text colour binds the fill of the text layer");
+    assert_eq!(fact(facts_of(&run, "Label"), "fill").value, colour(WHITE), "the text colour binds the fill of the text layer");
 }
 
 // covers: E3-4.1
@@ -103,7 +103,7 @@ fn a_variable_named_by_vars_is_exposed_on_the_fact_of_that_value_only() {
     for other in root.tokens.iter().filter(|fact| fact.field != "fill") {
         assert_eq!(other.exposed, None, "{}", other.field);
     }
-    for name in ["Icon", "Go"] {
+    for name in ["Icon", "Label"] {
         assert!(facts_of(&run, name).tokens.iter().all(|fact| fact.exposed.is_none()), "{name}");
     }
 }

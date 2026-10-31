@@ -71,6 +71,17 @@ fn spread_without_an_outline_keeps_the_filter() {
 }
 
 #[test]
+fn a_shadow_cast_by_the_box_needs_no_paint_and_stays_out_of_the_box() {
+    let cast = Shadow { from_outline: true, show_behind: true, ..shadow(0.0) };
+    let (mut d, n) = with_effects(NodeKind::Frame, vec![EffectKind::DropShadow(cast)]);
+    d.get_mut(n).unwrap().fills = Vec::new();
+    let svg = export(&d, n);
+    assert!(!svg.contains("feDropShadow"), "{svg}");
+    assert!(svg.contains("<feComposite in=\"b\" in2=\"cover\" operator=\"out\"/>"), "{svg}");
+    assert!(svg.contains("fill=\"#000000\""), "{svg}");
+}
+
+#[test]
 fn hostile_shadow_values_still_export() {
     for s in [f64::NAN, f64::INFINITY, -1e12, 1e12] {
         let (d, n) = with_effects(

@@ -434,6 +434,26 @@ fn a_dark_theme_that_is_not_distinct_is_not_comparable_with_a_reason() {
 
 // covers: E5-3.4
 #[test]
+fn a_variant_that_looks_the_same_in_dark_is_measured_when_its_set_follows_the_colour_scheme() {
+    let mut lab = lab("compare-dark-partly", &json!({"styles": ["outline"], "themes": ["light", "dark"]}));
+    let set = lab.set;
+    paint_dark_clear(&lab);
+    let follows = document_of(&lab).node(set).unwrap().children[0];
+    let raw = document_of(&lab).node(follows).unwrap().plugin_data.get(REFERENCE_KEY).cloned().unwrap();
+    let mut reference: Value = serde_json::from_str(&raw).unwrap();
+    reference["themes"]["dark"]["distinct"] = json!(true);
+    set_props(&mut lab, follows, &json!({"pluginData": {REFERENCE_KEY: reference.to_string()}}));
+
+    let result = compare_ok(&mut lab, &json!({"set": set, "theme": "dark"}));
+
+    assert_eq!(rows(&result).len(), 2, "{result}");
+    for row in rows(&result) {
+        assert_ne!(status(row), "notComparable", "{row}");
+    }
+}
+
+// covers: E5-3.4
+#[test]
 fn an_unknown_theme_is_refused() {
     let mut lab = lab("compare-theme", &json!({"themes": ["light", "dark"]}));
     let set = lab.set;

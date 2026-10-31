@@ -292,12 +292,26 @@ fn over(background: [u8; 3], rgba: &mut [u8]) {
     }
 }
 
+fn phase_of(doc: &Document, variant: NodeId, theme: Theme) -> [f64; 2] {
+    reference_of(doc, variant).and_then(|reference| reference.themes.get(theme.render()).map(|kept| kept.phase)).unwrap_or_default()
+}
+
+/// The part of the canvas that matches the capture: its rows and columns start where the capture's do, relative to the
+/// variant, and its far edges are the rounded ones the capture was cut on.
+fn captured_area(bounds: Rect, [x, y]: [f64; 2]) -> Rect {
+    if x == 0.0 && y == 0.0 {
+        return bounds;
+    }
+    let (x0, y0) = (bounds.x0 - x, bounds.y0 - y);
+    Rect::new(x0, y0, x0 + (bounds.width() + x).round(), y0 + (bounds.height() + y).round())
+}
+
 pub(crate) fn render_library(scratch: &Document, variant: NodeId, theme: Theme) -> Result<Raster, &'static str> {
     let bounds = scratch.world_bounds(variant).ok_or(NOT_RENDERED)?;
     if !(bounds.width() <= f64::from(MAX_SIDE) && bounds.height() <= f64::from(MAX_SIDE)) {
         return Err(LIBRARY_TOO_LARGE);
     }
-    let pixels = render_area(scratch, &[variant], bounds, 1.0).ok_or(NOT_RENDERED)?;
+    let pixels = render_area(scratch, &[variant], captured_area(bounds, phase_of(scratch, variant, theme)), 1.0).ok_or(NOT_RENDERED)?;
     let mut rgba = to_rgba8(&pixels);
     over(page_background(theme), &mut rgba);
     Raster::new(pixels.width(), pixels.height(), rgba).map_err(|_| NOT_RENDERED)
@@ -345,8 +359,10 @@ pub(crate) fn library_texts(doc: &Document, variant: NodeId) -> Vec<LibText> {
     visible_subtree(doc, variant).into_iter().filter_map(|id| library_text(doc, id, &origin)).take(MAX_LIBRARY_TEXTS).collect()
 }
 
-fn boxes_of(texts: &[RefText]) -> Vec<TextBox> {
-    texts.iter().map(|text| TextBox { box_: text.box_, line: text.line }).collect()
+/// The boxes of `texts`, kept relative to the root, on the rows and columns of its capture.
+pub(crate) fn boxes_of(texts: &[RefText], [x, y]: [f64; 2]) -> Vec<TextBox> {
+    let moved = |[left, top, width, height]: [f64; 4]| [left + x, top + y, width, height];
+    texts.iter().map(|text| TextBox { box_: moved(text.box_), line: text.line.map(moved) }).collect()
 }
 
 struct Context<'a> {
@@ -354,6 +370,7 @@ struct Context<'a> {
     scratch: Document,
     root: &'a str,
     theme: Theme,
+    set_follows_dark: bool,
 }
 
 impl Context<'_> {
@@ -366,7 +383,7 @@ impl Context<'_> {
         };
         let mut row = row;
         row.original = Size { width: kept.width, height: kept.height };
-        if self.theme == Theme::Dark && !kept.distinct {
+        if self.theme == Theme::Dark && !self.set_follows_dark {
             return row.without(Status::NotComparable, NOT_DISTINCT);
         }
         let Some(png) = kept.png.as_deref() else { return row.without(Status::MissingReference, NO_IMAGE) };
@@ -382,14 +399,21 @@ impl Context<'_> {
         };
         row.library = size_of(&library);
         let (shared_original, shared_library) = aligned(&original, &library);
-        let pixels = pixel_diff(&shared_original, &shared_library, &boxes_of(&kept.texts));
+        let pixels = pixel_diff(&shared_original, &shared_library, &boxes_of(&kept.texts, kept.phase));
         let text = text_verdict(&kept.texts, &library_texts(&self.scratch, id));
         row.measured(&pixels, &text)
     }
 }
 
-pub(crate) fn measure(doc: &Document, root: &str, theme: Theme, variants: &[(NodeId, String)]) -> Vec<Row> {
+fn follows_dark(doc: &Document, set: NodeId) -> bool {
+    variants_of(doc, set)
+        .into_iter()
+        .any(|(id, _)| reference_of(doc, id).is_some_and(|reference| reference.themes.get(Theme::Dark.render()).is_some_and(|kept| kept.distinct)))
+}
+
+pub(crate) fn measure(doc: &Document, root: &str, theme: Theme, subject: &Subject) -> Vec<Row> {
     figcraft_text::scan_system_fonts();
-    let mut context = Context { doc, scratch: doc.clone(), root, theme };
+    let variants = &subject.variants;
+    let mut context = Context { doc, scratch: doc.clone(), root, theme, set_follows_dark: follows_dark(doc, subject.set) };
     variants.iter().map(|(id, name)| context.row(*id, name)).collect()
 }

@@ -75,13 +75,45 @@ fn a_wrapper_with_something_visible_stays() {
 
 // covers: E3-3.3
 #[test]
-fn a_wrapper_whose_child_has_another_box_stays() {
+fn a_wrapper_that_lays_out_a_child_of_another_box_stays() {
+    let inner = element("Inner", bounds(12.0, 10.0, 70.0, 30.0), json!({ "backgroundColor": "rgb(25, 118, 210)" }), json!([]));
+    let wrapper = element("Wrapper", bounds(10.0, 10.0, 80.0, 30.0), json!({ "display": "flex", "paddingLeft": "2px" }), json!([inner]));
+
+    let run = translate_root(element("Card", bounds(0.0, 0.0, 200.0, 100.0), json!({}), json!([wrapper])));
+
+    assert_eq!(run.child_names(run.root()), ["Wrapper"]);
+}
+
+#[test]
+fn a_plain_wrapper_in_a_plain_parent_disappears_and_its_child_stays_where_it_was_drawn() {
     let inner = element("Inner", bounds(12.0, 10.0, 70.0, 30.0), json!({ "backgroundColor": "rgb(25, 118, 210)" }), json!([]));
     let wrapper = element("Wrapper", bounds(10.0, 10.0, 80.0, 30.0), json!({}), json!([inner]));
 
     let run = translate_root(element("Card", bounds(0.0, 0.0, 200.0, 100.0), json!({}), json!([wrapper])));
 
-    assert_eq!(run.child_names(run.root()), ["Wrapper"]);
+    assert_eq!(run.child_names(run.root()), ["Inner"]);
+    assert_eq!(offset(run.by_name("Inner")), (12.0, 10.0));
+}
+
+#[test]
+fn a_wrapper_within_a_pixel_of_its_child_disappears_in_a_flex_parent() {
+    let inner = element("Inner", bounds(10.0, 10.0, 80.0, 31.0), json!({ "backgroundColor": "rgb(25, 118, 210)" }), json!([]));
+    let wrapper = element("Wrapper", bounds(10.0, 10.0, 80.0, 30.0), json!({}), json!([inner]));
+    let run = translate_root(element("Card", bounds(0.0, 0.0, 200.0, 100.0), json!({ "display": "flex" }), json!([wrapper])));
+
+    assert_eq!(run.child_names(run.root()), ["Inner"]);
+}
+
+#[test]
+fn a_root_that_only_wraps_a_frame_of_its_box_gives_way_to_it() {
+    let inner = element("Inner", bounds(20.0, 20.0, 80.0, 30.0), json!({ "backgroundColor": "rgb(25, 118, 210)" }), json!([]));
+
+    let run = translate_root(element("Bootstrap", bounds(20.0, 20.0, 80.0, 30.0), json!({ "display": "inline-block" }), json!([inner])));
+
+    assert_eq!(run.root().name, "Inner");
+    assert_eq!(run.root().parent, Some(run.page));
+    assert_eq!(offset(run.root()), (100.0, 50.0), "the variant keeps the place given to the translation");
+    assert_eq!(run.translated.layers.first().map(|layer| layer.path.as_str()), Some("Inner"));
 }
 
 // covers: E3-3.3
@@ -89,9 +121,37 @@ fn a_wrapper_whose_child_has_another_box_stays() {
 fn without_the_cleanup_option_every_element_stays() {
     let snapshot = parse(WRAPPER);
 
-    let run = translate_with(&snapshot, &TranslateOptions { auto_layout: true, cleanup: false });
+    let run = translate_with(&snapshot, &TranslateOptions { cleanup: false, ..TranslateOptions::default() });
 
     assert_eq!(run.child_names(run.root()), ["Wrapper", "Empty", "Ripple", "Filled", "Dim"]);
+}
+
+#[test]
+fn layers_are_named_by_role_not_by_the_text_they_hold() {
+    let label = json!({ "type": "text", "text": "Save it", "box": bounds(30.0, 10.0, 40.0, 20.0), "style": {} });
+    let icon = json!({ "type": "svg", "markup": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><rect width=\"10\" height=\"10\"/></svg>", "box": bounds(10.0, 10.0, 10.0, 10.0) });
+    let paint = json!({ "backgroundColor": "rgb(25, 118, 210)" });
+    let background = element("", bounds(0.0, 0.0, 100.0, 40.0), paint.clone(), json!([]));
+    let dot = element("", bounds(90.0, 2.0, 4.0, 4.0), paint.clone(), json!([]));
+    let row = element("SAVE IT", bounds(5.0, 5.0, 80.0, 30.0), paint, json!([icon, label]));
+    let root = element("SAVE IT", bounds(0.0, 0.0, 100.0, 40.0), json!({}), json!([background, row, dot]));
+
+    let run = translate_root(root);
+
+    assert_eq!(run.child_names(run.root()), ["Background", "Content", "Shape"]);
+    assert_eq!(run.child_names(run.by_name("Content")), ["Icon", "Label"]);
+}
+
+#[test]
+fn an_aria_label_stays_the_name_of_its_layer_and_role_names_follow_the_language() {
+    let close = element("Close", bounds(0.0, 0.0, 10.0, 10.0), json!({ "backgroundColor": "rgb(0, 0, 0)" }), json!([]));
+    let background = element("", bounds(0.0, 0.0, 100.0, 40.0), json!({ "backgroundColor": "rgb(0, 0, 255)" }), json!([]));
+    let snapshot = super::support::snapshot(element("Card", bounds(0.0, 0.0, 100.0, 40.0), json!({}), json!([background, close])));
+    let role_names = [("Background".to_owned(), "Arrière-plan".to_owned())].into_iter().collect();
+
+    let run = translate_with(&snapshot, &TranslateOptions { role_names, ..TranslateOptions::default() });
+
+    assert_eq!(run.child_names(run.root()), ["Arrière-plan", "Close"]);
 }
 
 // covers: E3-3.3

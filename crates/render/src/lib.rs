@@ -21,6 +21,7 @@ pub mod paint;
 pub mod pattern;
 pub mod retained;
 pub mod shadow;
+mod text_gamma;
 
 pub use dots::Dots;
 pub use draw::{node_outline, paint_bounds, stroke_fill, subtree_outline, ts_path};

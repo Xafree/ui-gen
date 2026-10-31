@@ -1,6 +1,7 @@
 use figcraft_doc::{Document, LineHeight, Node, NodeId, NodeKind, TextData};
 use serde_json::{Value, json};
 
+use super::fonts::nearest_style;
 use super::support::{bounds, snapshot};
 use crate::{import_snapshot, nearest_weight};
 
@@ -144,6 +145,58 @@ fn the_style_of_an_installed_family_is_one_of_its_styles() {
     let (_, regular) = text_style_of(json!({ "platformFont": "Segoe UI", "fontWeight": "400" }));
     let (_, bold) = text_style_of(json!({ "platformFont": "Segoe UI", "fontWeight": "700" }));
     assert_eq!((regular.as_str(), bold.as_str()), ("Regular", "Bold"));
+}
+
+fn names(styles: &[&str]) -> Vec<String> {
+    styles.iter().map(|style| (*style).to_owned()).collect()
+}
+
+// covers: P2
+#[test]
+fn a_narrower_or_wider_cut_is_never_chosen_for_a_family_that_has_the_normal_one() {
+    let arial = names(&["Narrow", "Regular", "Italic", "Narrow Italic", "Bold", "Narrow Bold", "Bold Italic", "Black"]);
+    for (weight, italic, expected) in [
+        (400, false, "Regular"),
+        (500, false, "Regular"),
+        (700, false, "Bold"),
+        (400, true, "Italic"),
+        (700, true, "Bold Italic"),
+        (900, false, "Black"),
+    ] {
+        assert_eq!(nearest_style(&arial, weight, italic).as_deref(), Some(expected), "{weight} {italic}");
+    }
+    let wide = names(&["Condensed", "Expanded", "Semi Condensed", "Extra Expanded", "Regular"]);
+    assert_eq!(nearest_style(&wide, 400, false).as_deref(), Some("Regular"));
+}
+
+// covers: P2
+#[test]
+fn a_family_that_only_has_a_narrow_cut_keeps_it() {
+    let only = names(&["Condensed", "Condensed Bold"]);
+    assert_eq!(nearest_style(&only, 700, false).as_deref(), Some("Condensed Bold"));
+    assert_eq!(nearest_style(&[], 700, false), None);
+}
+
+// covers: P2
+#[cfg(windows)]
+#[test]
+fn arial_of_the_platform_is_drawn_in_its_regular_cut() {
+    figcraft_text::scan_system_fonts();
+    let (family, style) =
+        text_style_of(json!({ "fontFamily": "Arial", "platformFont": "Arial", "platformFontPostScript": "ArialMT", "fontWeight": "400" }));
+    assert_eq!((family.as_str(), style.as_str()), ("Arial", "Regular"), "{:?}", figcraft_text::family_styles("Arial"));
+}
+
+// covers: P2
+#[cfg(windows)]
+#[test]
+fn a_bare_button_in_arial_is_as_wide_as_in_the_browser() {
+    figcraft_text::scan_system_fonts();
+    let style = json!({ "fontFamily": "Arial", "platformFont": "Arial", "fontSize": "13.3333px", "fontWeight": "400" });
+    let placed = place(parent_of(json!([text_node(bounds(0.0, 0.0, 38.5, 15.0), None, style)])));
+    let text = text_data(placed.child(placed.root_node(), 0));
+    let width = figcraft_text::layout_cached(&TextData { characters: "Button".to_owned(), ..text.clone() }, None, None).width;
+    assert!((width - 38.5).abs() < 0.5, "Chromium measures 38.5 px, got {width}");
 }
 
 // covers: P3

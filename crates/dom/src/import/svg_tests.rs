@@ -84,3 +84,14 @@ fn an_svg_can_be_the_root() {
     let run = import(svg);
     assert_eq!(run.root_node().transform.as_coeffs(), [1.0, 0.0, 0.0, 1.0, 100.0, 50.0]);
 }
+
+#[test]
+fn a_rotated_icon_turns_about_its_centre() {
+    let markup = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><rect width='24' height='24' fill='red'/></svg>";
+    let run = super::support::import(
+        serde_json::json!({ "type": "svg", "markup": markup, "rotation": 180.0, "box": super::support::bounds(0.0, 0.0, 24.0, 24.0) }),
+    );
+    let [a, b, c, d, e, f] = run.root_node().transform.as_coeffs();
+    assert!((a + 1.0).abs() < 1e-9 && b.abs() < 1e-9 && c.abs() < 1e-9 && (d + 1.0).abs() < 1e-9);
+    assert!((e - 124.0).abs() < 1e-9 && (f - 74.0).abs() < 1e-9, "{e} {f}");
+}

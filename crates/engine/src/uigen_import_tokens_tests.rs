@@ -360,7 +360,7 @@ fn a_variable_named_by_role_is_suffixed_by_the_axes_that_change_its_value_and_eq
     for (name, light, dark) in [
         ("couleur/button/fond/solid", PRIMARY, PRIMARY_DARK),
         ("couleur/button/fond/outline", WHITE, NEAR_BLACK),
-        ("couleur/button/go/texte", WHITE, NEAR_BLACK),
+        ("couleur/button/label/texte", WHITE, NEAR_BLACK),
         ("couleur/button/bordure", BORDER, BORDER_DARK),
     ] {
         let variable = named(doc, name);
@@ -371,7 +371,7 @@ fn a_variable_named_by_role_is_suffixed_by_the_axes_that_change_its_value_and_eq
     assert_eq!(backgrounds, ["couleur/button/fond/outline", "couleur/button/fond/solid"], "neither size nor theme suffixes a name");
 
     let shared = named(doc, "rayon/button/rayon");
-    for name in ["rayon/button/rayon", "couleur/button/bordure", "couleur/button/go/texte"] {
+    for name in ["rayon/button/rayon", "couleur/button/bordure", "couleur/button/label/texte"] {
         assert_eq!(count_named(doc, name), 1, "{name}: the same name and values make one variable");
     }
     let set = set_of(&result);

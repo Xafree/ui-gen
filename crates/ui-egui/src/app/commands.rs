@@ -19,6 +19,32 @@ impl FigApp {
     }
 }
 
+/// An import or an update started from the interface names its layers in the language of the interface.
+fn with_role_names(id: &str, mut params: Value) -> Value {
+    if (id == "uigen.importComponent" || id == "uigen.updateSource")
+        && let Some(map) = params.as_object_mut().filter(|m| !m.contains_key("roleNames"))
+    {
+        let names = [
+            ("Background", i18n::tr("Background")),
+            ("Label", i18n::tr("Label")),
+            ("Icon", i18n::tr("Icon")),
+            ("Content", i18n::tr("Content")),
+            ("Shape", i18n::tr("Shape")),
+            ("Button", i18n::tr("Button")),
+            ("Link", i18n::tr("Link")),
+            ("Input", i18n::tr("Input")),
+            ("Image", i18n::tr("Image")),
+            ("List", i18n::tr("List")),
+            ("Item", i18n::tr("Item")),
+            ("Heading", i18n::tr("Heading")),
+        ];
+        let names: serde_json::Map<String, Value> =
+            names.into_iter().map(|(role, name)| (role.to_string(), Value::String(name.to_string()))).collect();
+        map.insert("roleNames".into(), Value::Object(names));
+    }
+    params
+}
+
 impl FigApp {
     /// Dismiss the composer after a successful switch away from the Comment tool.
     pub(crate) fn clear_comment_draft_after_tool_set(&mut self, id: &str, succeeded: bool) {
@@ -40,7 +66,7 @@ impl FigApp {
 
     /// Run a command, surfacing errors as a toast. Returns the result.
     pub fn run(&mut self, id: &str, params: Value) -> Option<Value> {
-        let params = self.with_component_template(id, params);
+        let params = with_role_names(id, self.with_component_template(id, params));
         #[cfg(test)]
         RUN_LOG.with_borrow_mut(|log| log.push((id.to_string(), params.clone())));
         let layers_generation = self.session.clipboard.layers_generation;
@@ -324,5 +350,19 @@ impl FigApp {
         self.auto_save_tick(ctx, now);
         updates_ui::tick(self, ctx);
         self.logic_ticked = true;
+    }
+}
+
+#[cfg(test)]
+mod role_names_tests {
+    use super::with_role_names;
+    use serde_json::json;
+
+    #[test]
+    fn an_update_from_the_interface_names_its_layers_like_an_import() {
+        for command in ["uigen.importComponent", "uigen.updateSource"] {
+            assert!(with_role_names(command, json!({}))["roleNames"]["Label"].is_string(), "{command}");
+        }
+        assert!(with_role_names("node.set", json!({})).get("roleNames").is_none());
     }
 }

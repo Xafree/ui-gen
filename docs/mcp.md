@@ -988,13 +988,14 @@ Comparing an import with its original, and updating a source:
   A dark render equal to the light one is `notComparable`. **Refused** (`bad`): outside a library project; a `set` that is
   missing, not a component set, without `uigen.source` or of more than 128 variants; an unknown `theme` or variant.
 - `panel.compare {}`: asks the interface to open the Compare tab of the right panel; refused outside a library project.
-- `uigen.updateSource {package, components?}`: captures again every component imported from a source, with the options of its
-  first import, and returns `{jobs, components}` at once (one `uigen.importComponent` event per component). The library
+- `uigen.updateSource {package, components?, roleNames?}`: captures again every component imported from a source, with the
+  options of its first import (`roleNames` shows the layers in another language; the interface passes its own), and returns `{jobs, components}` at once (one `uigen.importComponent` event per component). The library
   never changes. **Refused** (`bad`, no job): outside a library project, a package that is not an active source, nothing
   imported from it, an unknown component, no capture service.
 - `uigen.sourceDiff {copy}`: what changed between the capture a copy comes from and the current one: `{copy, name, from, to,
-  base, latest, differences: [{id, variant, path, kind, field, state}], summary}`; `state` is `clean`, `modified` or `unknown`.
-  Pure.
+  base, latest, differences: [{id, variant, path, label, kind, field, state}], summary}`; `state` is `clean`, `modified` or
+  `unknown`. Layers match by their stable English names (`path`, `id`), the same in every language and for variable names;
+  `label` is the path as the layers show it. Pure.
 - `uigen.applyDifferences {copy, ids?}` (one undo step): takes the named differences into the copy (without `ids`, every
   clean one) and returns `{applied, skipped, version}`.
 

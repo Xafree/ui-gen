@@ -332,6 +332,11 @@ fn ungroup(s: &mut Session, p: &Value) -> Result<Value> {
         let kids = n.children.clone();
         // Ungrouping a group keeps its opacity on the children (multiplied).
         let op = n.opacity;
+        // An old file can hold a group in a component set, which its layers can't join.
+        let (parent, idx) = match doc.node(parent).and_then(|set| set.parent.filter(|_| kids.iter().any(|c| !doc.may_hold(parent, *c)))) {
+            Some(outside) => (outside, doc.index_in_parent(parent).map_or(0, |at| at + 1)),
+            None => (parent, idx),
+        };
         for (k, c) in kids.iter().enumerate() {
             doc.reparent(*c, parent, Some(idx + k))?;
             // Released operands no longer combine with anything.

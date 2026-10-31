@@ -101,6 +101,43 @@ fn nest(s: &mut Session) -> Nest {
     Nest { outer, a, b, inner, x, y }
 }
 
+/// A laid-out component set at the left of the page, with a variant in its top half.
+fn laid_out_set(s: &mut Session) -> (NodeId, NodeId) {
+    let page = s.ds().unwrap().page;
+    let doc = s.doc_mut().unwrap();
+    let set = doc.create(page, figcraft_doc::NodeKind::ComponentSet { description: String::new() }, "Set", 0.0, 0.0, 200.0, 200.0).unwrap();
+    let component = figcraft_doc::NodeKind::Component { description: String::new(), props: Default::default() };
+    let variant = doc.create(set, component, "V", 0.0, 0.0, 200.0, 50.0).unwrap();
+    doc.get_mut(set).unwrap().layout = Some(figcraft_doc::AutoLayout { mode: figcraft_doc::LayoutMode::Vertical, ..Default::default() });
+    (set, variant)
+}
+
+#[test]
+fn a_layer_dragged_over_a_laid_out_set_stays_out_of_it() {
+    let mut s = Session::new();
+    let (set, _) = laid_out_set(&mut s);
+    let a = rect(&mut s, None, 400.0, 0.0, 20.0, 20.0);
+    let page = s.ds().unwrap().page;
+    let to = Point::new(100.0, 150.0);
+    let from = bounds(&s, a).center();
+    drag_to(&mut s, from, to);
+    assert_eq!(parent(&s, a), page, "no slot in the set while dragging");
+    release(&mut s, to);
+    assert_eq!(parent(&s, a), page);
+    assert_eq!(kids(&s, set).len(), 1);
+}
+
+#[test]
+fn a_variant_still_drops_into_a_set_and_a_new_layer_does_not() {
+    let mut s = Session::new();
+    let (set, variant) = laid_out_set(&mut s);
+    let page = s.ds().unwrap().page;
+    let doc = s.doc().unwrap();
+    let over = Point::new(100.0, 150.0);
+    assert_eq!(crate::drop::drop_parent(doc, page, over, &[]), None);
+    assert_eq!(crate::drop::drop_parent(doc, page, over, &[variant]), Some(set));
+}
+
 #[test]
 fn drag_into_a_nested_auto_layout_frame_takes_the_slot_there() {
     let mut s = Session::new();

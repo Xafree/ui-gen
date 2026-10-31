@@ -1,4 +1,4 @@
-use figcraft_doc::{LetterSpacing, LineHeight, NodeKind, TextAlignH, TextAutoResize, TextData};
+use figcraft_doc::{LetterSpacing, LineHeight, NodeKind, TextAlignH, TextAutoResize, TextData, TextDecoration};
 use serde_json::{Value, json};
 
 use super::support::{Run, bounds, element_with, import, mentions, text_run};
@@ -159,6 +159,77 @@ fn a_box_taller_than_one_line_wraps_at_its_width() {
 
 // covers: T7
 #[test]
+fn text_decoration_is_kept_as_a_decoration_of_the_text() {
+    for (value, expected) in [
+        ("none", TextDecoration::None),
+        ("underline", TextDecoration::Underline),
+        ("line-through", TextDecoration::Strikethrough),
+        ("underline line-through", TextDecoration::Underline),
+    ] {
+        let (data, warnings) = styled(json!({ "textDecorationLine": value }));
+        assert_eq!(data.style.decoration, expected, "{value}");
+        assert!(warnings.is_empty(), "{value}: {warnings:?}");
+    }
+    let (data, warnings) = styled(json!({ "textDecorationLine": "overline" }));
+    assert_eq!(data.style.decoration, TextDecoration::None);
+    assert!(mentions(&warnings, "Bouton", "textDecorationLine"), "{warnings:?}");
+}
+
+// covers: T9
+#[test]
+fn a_font_the_browser_used_and_this_machine_lacks_is_named_and_kept() {
+    let (data, warnings) = styled(json!({ "platformFont": "Zzz Web Font Only" }));
+    assert_eq!(data.style.font_family, "Zzz Web Font Only", "the name stays: the layer is right once the font is installed");
+    assert!(warnings.iter().any(|warning| warning.contains("Zzz Web Font Only") && warning.contains("not installed")), "{warnings:?}");
+}
+
+fn baseline_in_parent(run: &Run) -> (f64, f64) {
+    let node = run.child(0);
+    let drawn = figcraft_text::layout_cached(&data(run), None, None);
+    (node.transform.as_coeffs()[5], drawn.lines[0].baseline)
+}
+
+fn drawn_run(box_: Value, line_box: Option<Value>, baseline: Option<f64>) -> Run {
+    let mut text = json!({ "type": "text", "text": "Bouton", "box": box_, "style": { "fontSize": "14px" } });
+    if let Some(line_box) = line_box {
+        text["lineBox"] = line_box;
+    }
+    if let Some(baseline) = baseline {
+        text["baseline"] = json!(baseline);
+    }
+    import(element_with(json!({}), json!([text])))
+}
+
+// covers: T7
+#[test]
+fn the_baseline_lands_on_the_pixel_the_browser_drew_it_on() {
+    let run = drawn_run(bounds(36.0, 29.0, 49.0, 17.0), Some(bounds(36.0, 25.25, 49.0, 24.5)), Some(42.0));
+    let (top, baseline) = baseline_in_parent(&run);
+    assert!((top - 6.0).abs() < 1e-6, "the half leading is floored: the line starts 3 px above the glyph box, got {top}");
+    assert!((top + baseline - 22.0).abs() < 1e-6, "baseline at {}", top + baseline);
+}
+
+// covers: T7
+#[test]
+fn every_line_of_a_wrapped_text_starts_from_the_browser_baseline() {
+    let run = drawn_run(bounds(36.0, 29.0, 49.0, 60.0), None, Some(42.0));
+    let (top, baseline) = baseline_in_parent(&run);
+    assert!((top + baseline - 22.0).abs() < 1e-6, "baseline at {}", top + baseline);
+}
+
+// covers: T7
+#[test]
+fn a_snapshot_without_baseline_or_with_a_senseless_one_keeps_the_natural_line() {
+    let line = || Some(bounds(36.0, 25.25, 49.0, 24.5));
+    let nudge = |run: &Run| data(run).held_baseline_nudge();
+    assert_eq!(nudge(&drawn_run(bounds(36.0, 29.0, 49.0, 17.0), line(), None)), 0.0);
+    assert_eq!(nudge(&drawn_run(bounds(36.0, 29.0, 49.0, 17.0), line(), Some(9000.0))), 0.0);
+    let (top, _) = baseline_in_parent(&drawn_run(bounds(36.0, 29.0, 49.0, 17.0), line(), None));
+    assert!((top - 5.0).abs() < 1e-6, "an older snapshot stays on its line box, got {top}");
+}
+
+// covers: T7
+#[test]
 fn text_colour_may_be_transparent_or_left_at_the_default() {
     let run = text_run(json!({ "color": "rgba(0, 0, 0, 0)" }));
     assert!(run.child(0).fills.is_empty());
@@ -177,4 +248,19 @@ fn a_text_warning_starts_with_the_start_of_the_text() {
     assert_eq!(run.child(0).name, name);
     assert!(mentions(&run.warnings, &name, "color"), "{:?}", run.warnings);
     assert_eq!(run.child(0).fills.len(), 1, "an unreadable colour leaves the default fill");
+}
+
+#[test]
+fn an_imported_text_hugs_the_browser_width_within_a_pixel_and_the_engine_measure_beyond() {
+    figcraft_text::scan_system_fonts();
+    let plain = TextData { characters: "Bouton".to_owned(), ..TextData::new(String::new()) };
+    let natural = figcraft_text::layout_cached(&plain, None, None).width;
+    assert!((super::baseline::hug_nudge(natural + 0.4, &plain) - 0.4).abs() < 1e-9);
+    assert_eq!(super::baseline::hug_nudge(natural + 3.0, &plain), 0.0);
+}
+
+#[test]
+fn an_imported_text_is_drawn_on_the_browser_curve() {
+    let (data, _) = styled(json!({}));
+    assert!(data.browser_gamma);
 }

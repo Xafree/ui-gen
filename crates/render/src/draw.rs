@@ -749,7 +749,11 @@ fn draw_content(ctx: &Ctx, pix: &mut Pixmap, n: &Node, xf: Affine, depth: usize,
             for k in &keys {
                 let fills = layout.styles.get(*k).and_then(|s| s.fills.as_ref()).unwrap_or(&n.fills);
                 if let Some(tp) = by_style.get(k).and_then(ts_path) {
-                    fill_with(pix, &tp, fills, w, h, gxf, FillRule::Winding, ctx, None);
+                    let curve = if t.browser_gamma { crate::text_gamma::curve_of(fills) } else { None };
+                    match curve {
+                        Some(on_curve) => fill_glyphs_on_curve(pix, &tp, fills, (w, h), gxf, on_curve, ctx),
+                        None => fill_with(pix, &tp, fills, w, h, gxf, FillRule::Winding, ctx, None),
+                    }
                 }
                 for (_, item) in ink.iter().filter(|(style, _)| style == k) {
                     match item {
@@ -816,6 +820,26 @@ fn draw_content(ctx: &Ctx, pix: &mut Pixmap, n: &Node, xf: Affine, depth: usize,
             }
         }
     }
+}
+
+fn fill_glyphs_on_curve(
+    pix: &mut Pixmap,
+    path: &tiny_skia::Path,
+    fills: &[Paint],
+    (w, h): (f64, f64),
+    xf: Affine,
+    curve: crate::text_gamma::Curve,
+    ctx: &Ctx,
+) {
+    let area = path
+        .bounds()
+        .transform(ts_transform(xf))
+        .and_then(|b| int_rect(Rect::new(b.left().into(), b.top().into(), b.right().into(), b.bottom().into()), (pix.width(), pix.height())));
+    let Some((area, mut glyphs)) = area.and_then(|area| Some((area, Pixmap::new(area.width(), area.height())?))) else { return };
+    let shifted = Affine::translate((-f64::from(area.x()), -f64::from(area.y()))) * xf;
+    fill_with(&mut glyphs, path, fills, w, h, shifted, FillRule::Winding, ctx, None);
+    crate::text_gamma::lift(&mut glyphs, curve);
+    pix.draw_pixmap(area.x(), area.y(), glyphs.as_ref(), &tiny_skia::PixmapPaint::default(), tiny_skia::Transform::identity(), None);
 }
 
 fn draw_children(ctx: &Ctx, pix: &mut Pixmap, n: &Node, xf: Affine, depth: usize) {

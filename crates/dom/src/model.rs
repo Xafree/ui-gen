@@ -125,6 +125,8 @@ pub struct TextRun {
     #[serde(default, rename = "lineBox")]
     pub line_box: Option<DomBox>,
     #[serde(default)]
+    pub baseline: Option<f64>,
+    #[serde(default)]
     pub style: BTreeMap<String, String>,
 }
 
@@ -133,6 +135,8 @@ pub struct SvgNode {
     pub markup: String,
     #[serde(rename = "box")]
     pub r#box: DomBox,
+    #[serde(default)]
+    pub rotation: f64,
     #[serde(default)]
     pub animations: Vec<DomAnimation>,
 }
