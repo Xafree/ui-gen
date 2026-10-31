@@ -339,6 +339,14 @@ fn clip_path_mask_rotation_and_scale_are_reported_and_a_translation_is_not() {
 }
 
 #[test]
+fn mixed_border_styles_stay_solid_with_a_note() {
+    let black = "rgb(0, 0, 0)";
+    let mixed = frame(borders([("2px", "dashed", black), ("2px", "solid", black), ("2px", "dashed", black), ("2px", "solid", black)]));
+    assert!(mixed.root_node().stroke.dashes.is_empty());
+    assert!(mentions(&mixed.warnings, "Bouton", "borderTopStyle"), "{:?}", mixed.warnings);
+}
+
+#[test]
 fn a_dashed_border_dashes_and_a_double_border_stays_solid_with_a_note() {
     let dashed = frame(borders([("2px", "dashed", "rgb(0, 0, 0)"); 4]));
     assert_eq!(dashed.root_node().stroke.dashes, [4.0, 4.0]);

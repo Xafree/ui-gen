@@ -70,11 +70,20 @@ fn border(node: &mut Node, style: &Style, em_px: f64, report: &mut Report) {
     node.stroke.weight = widths.into_iter().fold(0.0, f64::max);
     node.stroke.sides = (!widths.iter().all(|width| *width == first)).then_some(widths);
     let kinds = SIDES.map(|side| keyword(style, &format!("border{side}Style")));
-    node.stroke.dashes = match (kinds[0].as_deref(), node.stroke.sides) {
-        (Some("dashed"), None) => vec![first * 2.0, first * 2.0],
-        (Some("dotted"), None) => vec![first, first],
+    let uniform = node.stroke.sides.is_none() && kinds.iter().all(|kind| *kind == kinds[0]);
+    node.stroke.dashes = match kinds[0].as_deref().filter(|_| uniform) {
+        Some("dashed") => vec![first * 2.0, first * 2.0],
+        Some("dotted") => vec![first, first],
         _ => Vec::new(),
     };
+    if !uniform {
+        let dashed_sides =
+            SIDES.iter().zip(&kinds).zip(widths).filter(|((_, kind), width)| *width > 0.0 && matches!(kind.as_deref(), Some("dashed" | "dotted")));
+        for ((side, _), _) in dashed_sides {
+            let key = format!("border{side}Style");
+            report.unreadable(&key, get(style, &key).unwrap_or_default());
+        }
+    }
 }
 
 fn border_side(style: &Style, side: &str, em_px: f64, report: &mut Report) -> Option<(f64, Color)> {
