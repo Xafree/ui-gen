@@ -194,7 +194,15 @@ impl Session {
             _ => vec![package.to_string()],
         };
         let id = backend.submit(job);
-        capture.jobs.push(JobRecord { id, command: command.to_string(), package: package.to_string(), packages, root, finished: None, chained: false });
+        capture.jobs.push(JobRecord {
+            id,
+            command: command.to_string(),
+            package: package.to_string(),
+            packages,
+            root,
+            finished: None,
+            chained: false,
+        });
         Ok(id)
     }
 
