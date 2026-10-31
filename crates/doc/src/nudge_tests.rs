@@ -5,6 +5,8 @@ use crate::{LetterSpacing, LineHeight, StyleRun, TextData};
 const BASELINE: f64 = 0.6;
 const HUG: f32 = -0.3;
 
+type Change = fn(&mut TextData);
+
 fn nudged() -> TextData {
     let mut text = TextData::new("Button".to_owned());
     text.set_nudges(BASELINE, HUG);
@@ -18,7 +20,7 @@ fn holds_all(text: &TextData) -> bool {
 #[test]
 fn a_nudge_holds_until_a_metric_changes() {
     assert!(holds_all(&nudged()));
-    let changes: [(&str, fn(&mut TextData)); 7] = [
+    let changes: [(&str, Change); 7] = [
         ("family", |text| text.style.font_family = "Other".to_owned()),
         ("face", |text| text.style.font_style = "Bold".to_owned()),
         ("size", |text| text.style.font_size += 1.0),
@@ -56,12 +58,6 @@ fn what_no_metric_depends_on_keeps_the_nudges() {
     style.fills = Some(Vec::new());
     text.runs.push(StyleRun { start: 0, end: 2, style });
     assert!(holds_all(&text));
-}
-
-#[test]
-fn a_nudge_written_without_its_basis_does_not_hold() {
-    let text = TextData { baseline_nudge: BASELINE, hug_nudge: HUG, ..TextData::new("Button".to_owned()) };
-    assert_eq!((text.held_baseline_nudge(), text.held_hug_nudge()), (0.0, 0.0));
 }
 
 #[test]

@@ -221,7 +221,7 @@ fn every_line_of_a_wrapped_text_starts_from_the_browser_baseline() {
 #[test]
 fn a_snapshot_without_baseline_or_with_a_senseless_one_keeps_the_natural_line() {
     let line = || Some(bounds(36.0, 25.25, 49.0, 24.5));
-    let nudge = |run: &Run| data(run).baseline_nudge;
+    let nudge = |run: &Run| data(run).held_baseline_nudge();
     assert_eq!(nudge(&drawn_run(bounds(36.0, 29.0, 49.0, 17.0), line(), None)), 0.0);
     assert_eq!(nudge(&drawn_run(bounds(36.0, 29.0, 49.0, 17.0), line(), Some(9000.0))), 0.0);
     let (top, _) = baseline_in_parent(&drawn_run(bounds(36.0, 29.0, 49.0, 17.0), line(), None));

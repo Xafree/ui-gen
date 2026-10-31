@@ -132,8 +132,7 @@ fn text_style_differs(x: &TextData, y: &TextData) -> bool {
         || x.hanging_list != y.hanging_list
         || x.max_lines != y.max_lines
         || x.features != y.features
-        || x.baseline_nudge != y.baseline_nudge
-        || x.hug_nudge != y.hug_nudge
+        || x.nudges != y.nudges
         || x.browser_gamma != y.browser_gamma
 }
 
