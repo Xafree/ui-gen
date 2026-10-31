@@ -352,6 +352,8 @@ mod lit_codegen_tests;
 #[cfg(test)]
 mod lit_compare_tests;
 #[cfg(test)]
+mod lit_default_slot_tests;
+#[cfg(test)]
 mod lit_effects_tests;
 #[cfg(test)]
 mod lit_export_disk_tests;
