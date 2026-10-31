@@ -17,6 +17,9 @@ pub(crate) struct Curve {
 /// The curve for text in `paints`; a gradient or layered fill has no single luminance to choose by.
 pub(crate) fn curve_of(paints: &[Paint]) -> Option<Curve> {
     let [paint] = paints else { return None };
+    if paint.blend != figcraft_color::BlendMode::Normal {
+        return None;
+    }
     let PaintKind::Solid { color } = &paint.kind else { return None };
     let luma = 0.2126 * f64::from(color.r) + 0.7152 * f64::from(color.g) + 0.0722 * f64::from(color.b);
     let exponent = BLACK_TEXT_EXPONENT + (WHITE_TEXT_EXPONENT - BLACK_TEXT_EXPONENT) * luma.clamp(0.0, 1.0);
@@ -102,6 +105,13 @@ mod tests {
         let data = pixmap.data();
         assert!(data[0] <= data[3] && data[2] <= data[3]);
         assert_eq!(&data[4..8], &[10, 20, 30, 255]);
+    }
+
+    #[test]
+    fn a_blended_paint_has_no_curve() {
+        let mut paint = Paint::solid(grey(0.5));
+        paint.blend = figcraft_color::BlendMode::Multiply;
+        assert!(curve_of(&[paint]).is_none());
     }
 
     #[test]
