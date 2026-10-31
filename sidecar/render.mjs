@@ -147,6 +147,16 @@ function markRenderedElement({ rootSelector, mark }) {
   return true;
 }
 
+async function refuseEmptyRoot(page, component) {
+  const box = await page.locator(ROOT_SELECTOR).boundingBox();
+  if (box !== null && box.width > 0 && box.height > 0) {
+    return;
+  }
+  const parts = await page.evaluate(() => window.__uigenParts ?? []);
+  const needs = parts.length === 0 ? '' : ` without its parts: ${parts.join(', ')}`;
+  throw new ServiceError('render', `component "${component}" rendered nothing visible${needs}`);
+}
+
 export async function screenshotPainted(page, selector, file) {
   const target = page.locator(selector);
   const box = await target.boundingBox();
@@ -179,9 +189,12 @@ async function renderInPage(page, installed, params, { code, styles }, budget) {
     throw new ServiceError('componentNotFound', `component "${component}" is not exported by ${installed.name}`);
   }
   await settle(page, budget);
+  const captured = await page.evaluate(markRenderedElement, { rootSelector: ROOT_SELECTOR, mark: COMPONENT_MARK }) ? COMPONENT_SELECTOR : ROOT_SELECTOR;
+  if (captured === ROOT_SELECTOR) {
+    await refuseEmptyRoot(page, component);
+  }
   await forceState(page, state, budget);
   const source = { package: installed.name, version: installed.version, component, props, state };
-  const captured = await page.evaluate(markRenderedElement, { rootSelector: ROOT_SELECTOR, mark: COMPONENT_MARK }) ? COMPONENT_SELECTOR : ROOT_SELECTOR;
   const snapshot = await captureSnapshot(page, captured, source);
   const segments = pngSegments(installed, { component, props, state, theme });
   const file = path.join(params.dir, ...segments);
