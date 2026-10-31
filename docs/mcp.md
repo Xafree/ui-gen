@@ -78,7 +78,7 @@ Each may be given more than once, as `--flag DIR` or `--flag=DIR`:
   every command that names a file: `file.open`, `file.openRecent` (recent files outside the roots
   are never listed, opened, removed or named: `index` counts the files listed), `file.import`,
   `file.placeImage`, `image.place`, `file.save`, `file.saveAs`, `file.revert`, `file.recover`,
-  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, `project.open`, `project.update`, `uigen.applyTheme` (the project's `uigen.json`) and the source commands (`project.addSource`, `project.setSourceVersion`, `project.removeSource`: the project folder and its `uigen.json`; `uigen.importComponent`: the project's `.uigen/captures` folder), the playground (`playground.open`, `playground.refresh`: the project's `.uigen/playground` folder), the images and variables JSON read next to an imported REST API
+  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, `project.open`, `project.update`, `uigen.applyTheme` (the project's `uigen.json`) and the source commands (`project.addSource`, `project.addSources`, `project.setSourceVersion`, `project.removeSource`: the project folder and its `uigen.json`; `uigen.importComponent`: the project's `.uigen/captures` folder), the playground (`playground.open`, `playground.refresh`: the project's `.uigen/playground` folder), the images and variables JSON read next to an imported REST API
   file, `library.add` and the library files open documents link to, `variable.import` /
   `variable.export`, `codeConnect.import` / `codeConnect.export`, `component.playground {path}`,
   `plugin.import {path}`, a development plugin's module read again from disk,
@@ -809,7 +809,9 @@ The manifest is read and written only through the automation roots, and the comm
   (`appliedTheme: null` clears it), validate and rewrite it, keeping `sources` and every key it doesn't know; every
   tab of the project sees the change. A value that fails validation is refused naming the field, and the file is
   left alone. Not undoable.
-- `project.addSource {package, version?}`, `project.setSourceVersion {package, version}` and
+- `project.addSource {package, version?}`, `project.addSources {line}` (the names of an install line, `npm install`
+  or `npm i` optional, at most 32 packages, one version per name), `project.setSourceVersion {package, version}` or
+  `{packages, version}` (every listed source in one job, one write of `uigen.json`) and
   `project.removeSource {package}`: manage the source libraries (npm packages) of the project through the capture
   service, which installs them in `<project>/.uigen/sources`. Each validates first (`package` is an npm registry
   name, `version` an exact semver or `latest`, default `latest`; `addSource` refuses a package already in the
@@ -884,7 +886,7 @@ Two commands bring the output of the capture service into the document; both are
     over 128 characters or holds control characters, or the two props being the same; a value in `styles`,
     `sizes`, `states` or `themes` that is unusable (1 to 64 characters, no comma, `=` or control character; a state
     or theme must be one of those above); a `parent` that is neither a frame nor a page; a project whose
-    `.uigen/captures` folder may not be written; more than **128 renders** (variants times themes; the message cites
+    `.uigen/captures` folder may not be written; more than **256 renders** (styles times sizes times states times themes; the message cites
     the number); no capture service (`capture service not available`, `capture service unavailable in the browser`
     in the web build).
   - **Fails after `inspect`** (the event is the failure, nothing is written): the component is not in the package
@@ -912,7 +914,8 @@ Two commands bring the output of the capture service into the document; both are
 
 Two more commands prepare an import; neither edits the document (no undo step).
 
-- `uigen.listComponents {package, refresh?}`: the components a source exports, with their props, as the capture
+- `uigen.listComponents {package, refresh?}`: the components a source exports, with their props (and `partOf`, the
+  export a compound holds it under, when the service could read it), as the capture
   service reads them from the package's types (`inspect`). `package` must be a source of the project that isn't
   removed. It returns `{job}` at once; the only event (`CaptureEvent`, command `uigen.listComponents`, that job)
   carries `{package, version, framework, components: [{name, props: [{name, type, values}]}], notes}`, or the
@@ -924,7 +927,7 @@ Two more commands prepare an import; neither edits the document (no undo step).
   64 values per prop; at most 16 notes of 256 characters. It is kept **in the session** (nothing on disk) for the
   version the source has: a second call returns `{cached: true, package, version, framework, components, notes}` at
   once, with no job and no event; `refresh: true` asks the service again. `Session::inspected(package)` reads what
-  is kept; a finished `project.addSource`, `project.setSourceVersion` or `project.removeSource` forgets it, and a
+  is kept; a finished `project.addSource`, `project.addSources`, `project.setSourceVersion` or `project.removeSource` forgets it, and a
   failed listing keeps nothing (the next call asks the service again). **Refused at once** (`bad`, nothing submitted): outside a library
   project; a `package` that is missing, invalid or not an active source; a `refresh` that is not a boolean; no
   capture service (`capture service not available`).

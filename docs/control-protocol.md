@@ -159,7 +159,7 @@ it and duplicate it:
 The `project.*` commands of [MCP: Library projects](mcp.md#library-projects) run through `engine.execute` like any
 other command. `project.settings`, `project.openFolder` and `project.newFolder` only ask the interface for a window
 or a dialog, which a programmatic call never opens. `project.addSource {package, version?}`,
-`project.setSourceVersion {package, version}` and `project.removeSource {package}` do not wait for npm: they return
+`project.addSources {line}`, `project.setSourceVersion {package, version}` or `{packages, version}` and `project.removeSource {package}` do not wait for npm: they return
 `{job}` at once, the app's capture service installs or removes the package on its own thread, and the app applies
 the finished job (it writes `uigen.json`) on its next frame. Poll `engine.execute {command: "capture.status",
 params: {job?}}` until the job is `done` or `failed` (`error` carries the service's message), then read the result
