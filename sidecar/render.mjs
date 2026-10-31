@@ -149,7 +149,7 @@ export async function render(params) {
   if (!RENDERABLE.includes(installed.framework)) {
     throw new ServiceError('frameworkUnsupported', `${installed.framework} packages cannot be rendered yet (supported: ${RENDERABLE.join(', ')})`);
   }
-  const props = params.state === 'disabled' ? { ...params.props, disabled: true } : params.props;
+  const props = params.state === 'disabled' ? { ...params.props, disabled: true, isDisabled: true } : params.props;
   const bundle = (sampleText) =>
     budget.bound(bundleEntry({ contents: buildEntry(installed, params.component, props, sampleText), resolveDir: installed.sources }));
   const { styles, notes } = await budget.bound(findStylesheets(installed));
