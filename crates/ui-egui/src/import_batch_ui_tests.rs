@@ -3,6 +3,7 @@
 
 use egui::accesskit::{Node, Role};
 use egui::{Key, Modifiers};
+use figcraft_engine::capture::CaptureJob;
 use serde_json::json;
 
 use crate::import_window_ui_tests::{Bench, IMPORT, LIST, OTHER, PACKAGE, VERSION, mentions, source};
@@ -206,19 +207,76 @@ fn an_oversized_component_alone_is_named_in_the_refusal() {
 }
 
 #[test]
-fn import_clicked_during_a_run_says_it_is_running_and_starts_nothing() {
+fn import_is_disabled_during_a_run_and_a_click_on_it_starts_nothing() {
     let mut b = open_pair("import-twice");
     b.click("Alert");
     b.click("Slider");
     b.hold();
     let mark = b.mark();
     b.click("Import");
+    assert!(b.control("Import").is_some_and(|import| import.is_disabled()), "{:?}", b.shown());
     b.click("Import");
-    assert!(b.shows("The import is already running."), "{:?}", b.shown());
     assert_eq!(b.ran_since(mark, IMPORT).len(), 1);
+    assert!(b.window_open() && !mentions(&b.shown(), "already"), "no note: {:?}", b.shown());
     b.release_all();
     b.wait_until("the summary is drawn", |b| b.shows("Imported 2 of 2 components"));
-    assert!(!b.shows("The import is already running."), "the note ends with the run");
+    assert!(b.control("Import").is_some_and(|import| !import.is_disabled()), "it comes back with the end of the run");
+}
+
+fn renders_submitted(b: &Bench) -> usize {
+    b.submitted().iter().filter(|job| matches!(job, CaptureJob::Render { .. })).count()
+}
+
+#[test]
+fn the_line_counts_every_render_of_the_component_and_moves_to_the_next_one() {
+    let mut b = Bench::nominal("render-count", &["Button", "Chip"]);
+    b.open(None);
+    b.wait_until("the rows are listed", |b| b.has("Chip"));
+    b.click("Button");
+    b.click("Chip");
+    b.hold();
+    b.click("Import");
+    assert!(b.shows("Button: 0 renders · component 1 of 2"), "no total before the inspection: {:?}", b.shown());
+
+    b.release(1);
+    let total = renders_submitted(&b);
+    assert!(total > 2, "{total}");
+    assert!(b.shows(&format!("Button: 0 of {total} renders · component 1 of 2")), "{:?}", b.shown());
+    for done in 1..total {
+        b.release(1);
+        assert!(b.shows(&format!("Button: {done} of {total} renders · component 1 of 2")), "render {done}: {:?}", b.shown());
+    }
+
+    b.release(1);
+    assert!(b.shows("Chip: 0 renders · component 2 of 2"), "the count starts over: {:?}", b.shown());
+    assert!(b.control("Import").is_some_and(|import| import.is_disabled()));
+    b.release_all();
+    b.wait_until("the summary is drawn", |b| b.shows("Imported 2 of 2 components"));
+    assert!(!mentions(&b.shown(), " · component "), "{:?}", b.shown());
+}
+
+#[test]
+fn stopping_replaces_the_count_keeps_import_disabled_and_lets_the_running_component_end() {
+    let mut b = Bench::nominal("render-stop", &["Button", "Chip"]);
+    b.open(None);
+    b.wait_until("the rows are listed", |b| b.has("Chip"));
+    b.click("Button");
+    b.click("Chip");
+    b.hold();
+    let mark = b.mark();
+    b.click("Import");
+    b.release(2);
+    assert!(mentions(&b.shown(), "Button: 1 of "), "{:?}", b.shown());
+
+    b.click("Cancel");
+    assert!(b.shows("Stopping… the component in progress finishes first"), "{:?}", b.shown());
+    assert!(!mentions(&b.shown(), " · component "), "{:?}", b.shown());
+    assert!(b.control("Import").is_some_and(|import| import.is_disabled()));
+
+    b.release_all();
+    b.settle();
+    assert!(!b.window_open());
+    assert_eq!(b.ran_since(mark, IMPORT).len(), 1, "Chip never starts");
 }
 
 #[test]

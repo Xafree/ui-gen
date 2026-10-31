@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::Session;
 use crate::cmd::project_sources;
 use crate::playground::PlaygroundState;
-use crate::uigen_import::{self, Cache, PendingImport};
+use crate::uigen_import::{self, Cache, ImportProgress, PendingImport};
 
 pub type JobId = u64;
 
@@ -261,6 +261,10 @@ impl Session {
     /// The jobs of the running import whose first job is `head`; none once it ended.
     pub fn import_jobs(&self, head: JobId) -> Vec<JobId> {
         uigen_import::jobs_of(self, head)
+    }
+
+    pub fn import_progress(&self, head: JobId) -> Option<ImportProgress> {
+        uigen_import::progress_of(self, head)
     }
 
     /// The jobs submitted to the capture service, oldest first, with the project folder each one works in.

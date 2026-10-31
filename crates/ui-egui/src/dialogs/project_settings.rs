@@ -21,6 +21,7 @@ use crate::theme::{Tokens, regular};
 const ADD: &str = "project.addSource";
 const ADD_MANY: &str = "project.addSources";
 const SET_VERSION: &str = "project.setSourceVersion";
+const REINSTALL: &str = "project.reinstallSources";
 const REMOVE: &str = "project.removeSource";
 const IMPORT: &str = "uigen.importComponent";
 
@@ -313,7 +314,7 @@ fn jobs(app: &FigApp, root: &str) -> Vec<Job> {
     app.session
         .capture_jobs()
         .into_iter()
-        .filter(|job| [ADD, ADD_MANY, SET_VERSION, REMOVE].contains(&job.command.as_str()) && file_access::same_file(&job.root, root))
+        .filter(|job| [ADD, ADD_MANY, SET_VERSION, REMOVE, REINSTALL].contains(&job.command.as_str()) && file_access::same_file(&job.root, root))
         .map(|job| {
             let (state, error) = match job.state {
                 JobState::Queued => ("queued", String::new()),
@@ -321,7 +322,7 @@ fn jobs(app: &FigApp, root: &str) -> Vec<Job> {
                 JobState::Done => ("done", String::new()),
                 JobState::Failed(message) => ("failed", message),
             };
-            let command = if job.command == ADD_MANY { ADD.to_string() } else { job.command };
+            let command = if job.command == ADD_MANY || job.command == REINSTALL { ADD.to_string() } else { job.command };
             Job { command, packages: job.packages, state: state.to_string(), error }
         })
         .collect()
@@ -359,7 +360,7 @@ pub(crate) fn pump(app: &mut FigApp) {
             }
             continue;
         }
-        if ![ADD, ADD_MANY, SET_VERSION, REMOVE].contains(&event.command.as_str()) {
+        if ![ADD, ADD_MANY, SET_VERSION, REMOVE, REINSTALL].contains(&event.command.as_str()) {
             continue;
         }
         forget_dependencies();

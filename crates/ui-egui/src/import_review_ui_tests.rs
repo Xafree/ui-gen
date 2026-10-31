@@ -261,9 +261,7 @@ impl Lab {
     }
 
     fn progress(&mut self) -> Option<(usize, usize)> {
-        let line = self.shown().into_iter().find_map(|text| text.strip_prefix("Importing… ").map(str::to_string))?;
-        let (done, total) = line.split_once(" of ")?;
-        Some((done.trim().parse().ok()?, total.trim().parse().ok()?))
+        crate::import_window_ui_tests::components_done(&self.shown())
     }
 
     fn toast(&self) -> Option<String> {

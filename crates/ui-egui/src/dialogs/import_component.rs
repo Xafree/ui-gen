@@ -8,15 +8,15 @@ use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 
 use egui::Ui;
-use figcraft_engine::capture::{CaptureEvent, CaptureOutcome};
-use figcraft_engine::{Inspected, InspectedComponent, MAX_RENDERS, PropKind, file_access, render_count};
+use figcraft_engine::capture::{CaptureErrorKind, CaptureEvent, CaptureOutcome};
+use figcraft_engine::{EngineError, Inspected, InspectedComponent, MAX_RENDERS, PropKind, Session, file_access, render_count};
 use serde_json::{Value, json};
 
 use crate::FigApp;
 use crate::component_parts::parts;
 use crate::dialogs::project_settings::page;
 use crate::i18n::{tr, trf};
-use crate::source_family::{Family, SourceFacts, dependencies_of, group_sources};
+use crate::source_family::{Family, SourceFacts, dependencies_of, forget_dependencies, group_sources};
 use crate::theme::Tokens;
 
 mod view;
@@ -25,8 +25,29 @@ use view::{Act, CardView, Model, Progress, RowView, STATES, Status};
 
 const LIST: &str = "uigen.listComponents";
 const IMPORT: &str = "uigen.importComponent";
+const REINSTALL: &str = "project.reinstallSources";
 const SETTINGS: &str = "project.settings";
 const SHOW: &str = "view.assets";
+
+#[derive(Clone, Debug)]
+struct ReadFailure {
+    kind: Option<CaptureErrorKind>,
+    cause: String,
+}
+
+impl ReadFailure {
+    fn other(cause: String) -> Self {
+        Self { kind: None, cause }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+enum Reinstall {
+    #[default]
+    Idle,
+    Running(u64),
+    Failed(String),
+}
 
 #[derive(Clone, Debug)]
 struct Read {
@@ -34,7 +55,7 @@ struct Read {
     version: String,
     root: String,
     job: Option<u64>,
-    failure: Option<String>,
+    failure: Option<ReadFailure>,
 }
 
 #[derive(Clone, Debug)]
@@ -74,6 +95,7 @@ pub struct ImportWindow {
     animations: bool,
     message: Option<String>,
     run: Run,
+    reinstall: Reinstall,
     just_opened: bool,
     show_parts: bool,
     focus_first: bool,
@@ -82,7 +104,9 @@ pub struct ImportWindow {
 impl ImportWindow {
     fn awaits(&self, job: u64) -> bool {
         let reading = self.reads.iter().any(|read| read.job == Some(job));
-        reading || matches!(&self.run, Run::Importing(Batch { current: Some((_, running)), .. }) if *running == job)
+        reading
+            || self.reinstall == Reinstall::Running(job)
+            || matches!(&self.run, Run::Importing(Batch { current: Some((_, running)), .. }) if *running == job)
     }
 
     /// Escape in a search field with text in it empties the field and stays.
@@ -115,6 +139,7 @@ impl ImportWindow {
             animations: true,
             message: None,
             run: Run::Idle,
+            reinstall: Reinstall::Idle,
             just_opened: true,
             show_parts: false,
             focus_first: true,
@@ -131,6 +156,10 @@ struct Source {
 /// `dialog.importComponent`: open the surface for the project of the file in front, on `package`.
 pub(crate) fn request(app: &mut FigApp, package: Option<&str>) {
     if cfg!(target_arch = "wasm32") {
+        return;
+    }
+    if active_sources(app).is_some_and(|(_, sources)| sources.is_empty()) {
+        super::project_settings::request(app);
         return;
     }
     app.ui.import_window = Some(ImportWindow::new(package));
@@ -155,17 +184,36 @@ fn take_event(app: &mut FigApp, event: &CaptureEvent) -> bool {
             None => false,
         },
         (IMPORT, outcome) => finish(app, event.job, outcome),
+        (REINSTALL, outcome) => {
+            finish_reinstall(state, outcome);
+            true
+        }
         _ => false,
     }
 }
 
-fn read_failure(outcome: &CaptureOutcome, asked: &str) -> Option<String> {
+fn finish_reinstall(state: &mut ImportWindow, outcome: &CaptureOutcome) {
+    forget_dependencies();
+    match outcome {
+        Ok(_) => {
+            state.reinstall = Reinstall::Idle;
+            state.reads.clear();
+        }
+        Err(error) => {
+            log::warn!("{REINSTALL}: {}", error.message);
+            state.reinstall = Reinstall::Failed(error.message.clone());
+        }
+    }
+}
+
+fn read_failure(outcome: &CaptureOutcome, asked: &str) -> Option<ReadFailure> {
     match outcome {
         Ok(result) => {
             let reported = result.get("version").and_then(Value::as_str);
-            (reported.is_some() && reported != Some(asked)).then(|| tr("The version read is not the one the project asks for").to_string())
+            (reported.is_some() && reported != Some(asked))
+                .then(|| ReadFailure::other(tr("The version read is not the one the project asks for").to_string()))
         }
-        Err(error) => Some(error.message.clone()),
+        Err(error) => Some(ReadFailure { kind: Some(error.kind), cause: error.message.clone() }),
     }
 }
 
@@ -298,7 +346,7 @@ fn fetch(app: &mut FigApp, state: &mut ImportWindow, package: &str, refresh: boo
     let params = if refresh { json!({"package": package, "refresh": true}) } else { json!({"package": package}) };
     let (job, failure) = match app.run(LIST, params) {
         Some(started) => (started.get("job").and_then(Value::as_u64), None),
-        None => (None, Some(app.ui.last_error.clone().unwrap_or_default())),
+        None => (None, Some(ReadFailure::other(app.ui.last_error.clone().unwrap_or_default()))),
     };
     if let Some(read) = state.reads.iter_mut().find(|read| read.package == package) {
         read.job = job;
@@ -407,25 +455,37 @@ fn has_parts(app: &FigApp, sources: &[Source]) -> bool {
 }
 
 fn statuses_of(app: &FigApp, state: &ImportWindow, sources: &[Source]) -> Vec<Status> {
-    sources
-        .iter()
-        .filter(|s| app.session.inspected(&s.package).is_none())
-        .map(|s| match state.reads.iter().find(|read| read.package == s.package).and_then(|read| read.failure.clone()) {
-            Some(cause) => Status::Failed { package: s.package.clone(), cause },
-            None => Status::Loading(s.package.clone()),
-        })
-        .collect()
+    let mut statuses = Vec::new();
+    let mut missing = false;
+    for source in sources.iter().filter(|s| app.session.inspected(&s.package).is_none()) {
+        match state.reads.iter().find(|read| read.package == source.package).and_then(|read| read.failure.clone()) {
+            Some(failure) if failure.kind == Some(CaptureErrorKind::NotInstalled) => missing = true,
+            Some(failure) => statuses.push(Status::Failed { package: source.package.clone(), cause: failure.cause }),
+            None => statuses.push(Status::Loading(source.package.clone())),
+        }
+    }
+    if missing {
+        let failure = if let Reinstall::Failed(cause) = &state.reinstall { Some(cause.clone()) } else { None };
+        statuses.push(Status::NotInstalled { running: matches!(state.reinstall, Reinstall::Running(_)), failure });
+    }
+    statuses
 }
 
 fn notes_of(app: &FigApp, sources: &[Source]) -> Vec<String> {
     sources.iter().filter_map(|s| app.session.inspected(&s.package)).flat_map(|found| found.notes.clone()).collect()
 }
 
-fn progress_of(run: &Run) -> Progress {
+fn progress_of(session: &Session, run: &Run) -> Progress {
     match run {
         Run::Idle => Progress::Idle,
         Run::Importing(batch) if batch.stopping => Progress::Stopping,
-        Run::Importing(batch) => Progress::Importing { done: batch.done, total: batch.total },
+        Run::Importing(batch) => match &batch.current {
+            Some((name, job)) => {
+                let renders = session.import_progress(*job).unwrap_or_default();
+                Progress::Importing { name: name.clone(), renders, component: batch.done + 1, components: batch.total }
+            }
+            None => Progress::Idle,
+        },
         Run::Summary { done, total, failures, .. } => Progress::Summary { done: *done, total: *total, failures: failures.clone() },
     }
 }
@@ -475,6 +535,9 @@ fn draw(app: &mut FigApp, ui: &mut Ui) -> Vec<Act> {
         }
         return Vec::new();
     };
+    if sources.is_empty() && matches!(state.run, Run::Idle) {
+        return vec![Act::OpenSettings];
+    }
     let project = app.session.project().map(|binding| binding.config.name.clone()).unwrap_or_default();
     let families = families(app, &root, &sources);
     let cards = cards_of(app, &state, &families);
@@ -483,14 +546,13 @@ fn draw(app: &mut FigApp, ui: &mut Ui) -> Vec<Act> {
     let valid: Vec<(String, String)> =
         cards.iter().flat_map(|card| card.rows.iter().filter(|row| row.ticked).map(|row| (row.package.clone(), row.name.clone()))).collect();
     let t = Tokens::get(ui.ctx());
-    let first_control_drawn = !cards.is_empty() || sources.is_empty();
+    let first_control_drawn = !cards.is_empty() || statuses.iter().any(|status| matches!(status, Status::NotInstalled { .. }));
     let mut acts = Vec::new();
     egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.bg)).show(ui, |ui| {
         let mut model = Model {
             project: &project,
             cards,
             statuses,
-            no_source: sources.is_empty(),
             nothing_to_offer,
             count: valid.len(),
             states: state.states,
@@ -498,7 +560,7 @@ fn draw(app: &mut FigApp, ui: &mut Ui) -> Vec<Act> {
             dark: state.dark,
             animations: state.animations,
             search: &mut state.search,
-            progress: progress_of(&state.run),
+            progress: progress_of(&app.session, &state.run),
             message: state.message.clone(),
             at_top: std::mem::take(&mut state.just_opened),
             focus_first: state.focus_first,
@@ -556,12 +618,22 @@ fn perform(app: &mut FigApp, act: Act) {
                 app.ui.import_window = Some(state);
             }
         }
+        Act::Reinstall => reinstall(app),
         Act::OpenSettings => {
             app.ui.import_window = None;
             app.run(SETTINGS, json!({}));
         }
         Act::Show => {}
     }
+}
+
+fn reinstall(app: &mut FigApp) {
+    let next = match app.run_quietly(REINSTALL, json!({})).0 {
+        Ok(started) => started.get("job").and_then(Value::as_u64).map_or(Reinstall::Idle, Reinstall::Running),
+        Err(EngineError::BadParams { msg, .. }) => Reinstall::Failed(super::install_refusal::source_text(&msg)),
+        Err(other) => Reinstall::Failed(other.to_string()),
+    };
+    edit(app, |state| state.reinstall = next);
 }
 
 #[cfg(test)]
@@ -637,7 +709,6 @@ fn import(app: &mut FigApp) {
 
 fn plan(app: &FigApp, state: &mut ImportWindow) -> Option<Batch> {
     if matches!(state.run, Run::Importing(_)) {
-        state.message = Some(tr("The import is already running.").to_string());
         return None;
     }
     let (root, sources) = active_sources(app)?;
