@@ -132,6 +132,9 @@ fn text_style_differs(x: &TextData, y: &TextData) -> bool {
         || x.hanging_list != y.hanging_list
         || x.max_lines != y.max_lines
         || x.features != y.features
+        || x.baseline_nudge != y.baseline_nudge
+        || x.hug_nudge != y.hug_nudge
+        || x.browser_gamma != y.browser_gamma
 }
 
 /// Whether a geometry change of `id` comes from layout rather than the user: an ancestor was
@@ -215,4 +218,31 @@ pub(super) fn follow_boolean_defaults(doc: &mut Document, before: &Document, cha
         out.extend(set_boolean_default(doc, &property_owners(doc, c), &name, visible));
     }
     out
+}
+
+#[cfg(test)]
+mod nudge_tests {
+    use figcraft_doc::{Node, NodeId, NodeKind, TextData};
+
+    use super::super::instances::copy_group;
+    use super::diff_groups;
+
+    fn text_node(id: u64, data: TextData) -> Node {
+        Node::new(NodeId(id), NodeKind::Text(data), "Label", 100.0, 20.0)
+    }
+
+    #[test]
+    fn the_text_style_group_carries_what_an_import_measured() {
+        let mut measured = TextData::new("Button".to_owned());
+        measured.set_nudges(0.6, -0.3);
+        measured.browser_gamma = true;
+        let main = text_node(1, measured);
+        let mut instance = text_node(2, TextData::new("Button".to_owned()));
+        assert!(diff_groups(&main, &instance).contains(&"textStyle"));
+        copy_group(&main, &mut instance, "textStyle");
+        assert!(!diff_groups(&main, &instance).contains(&"textStyle"));
+        let NodeKind::Text(copied) = &instance.kind else { panic!("{instance:?}") };
+        assert!(copied.browser_gamma);
+        assert_eq!((copied.held_baseline_nudge(), copied.held_hug_nudge()), (0.6, -0.3));
+    }
 }

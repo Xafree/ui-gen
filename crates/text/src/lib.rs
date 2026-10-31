@@ -128,7 +128,8 @@ pub fn layout_node(n: &Node) -> Option<(std::sync::Arc<TextLayout>, f64)> {
 }
 
 fn hug_width(text: &figcraft_doc::TextData, width: f64) -> f64 {
-    let whole = if text.hug_nudge == 0.0 || !text.hug_nudge.is_finite() { width.ceil() } else { (width + f64::from(text.hug_nudge)).round() };
+    let nudge = text.held_hug_nudge();
+    let whole = if nudge == 0.0 || !nudge.is_finite() { width.ceil() } else { (width + f64::from(nudge)).round() };
     whole.max(1.0)
 }
 

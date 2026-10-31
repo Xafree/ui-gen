@@ -442,6 +442,12 @@ pub struct TextData {
     /// fraction: an imported text keeps the width its browser snapped it to, so its frame leaves it in place.
     #[serde(skip_serializing_if = "crate::node::is_default")]
     pub hug_nudge: f32,
+    /// The metrics the nudges were measured on: see [`TextData::held_baseline_nudge`].
+    #[serde(skip_serializing_if = "crate::node::is_default")]
+    pub nudge_metrics: u32,
+    /// The characters `hug_nudge` was measured on.
+    #[serde(skip_serializing_if = "crate::node::is_default")]
+    pub nudge_characters: u32,
     /// Glyph edges follow a browser's luminance curve: an imported text keeps the weight its browser drew it at.
     #[serde(skip_serializing_if = "crate::node::is_default")]
     pub browser_gamma: bool,
@@ -509,7 +515,48 @@ pub fn valid_axis_tag(tag: &str) -> bool {
     valid_feature_tag(tag)
 }
 
+fn fingerprint(text: &str) -> u32 {
+    const OFFSET: u32 = 0x811c_9dc5;
+    const PRIME: u32 = 0x0100_0193;
+    text.bytes().fold(OFFSET, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(PRIME))
+}
+
+fn style_metrics(style: &TextStyle) -> String {
+    let TextStyle { font_family, font_style, font_size, line_height, letter_spacing, case, variations, .. } = style;
+    format!("{font_family}|{font_style}|{}|{line_height:?}|{letter_spacing:?}|{case:?}|{variations:?}", font_size.to_bits())
+}
+
 impl TextData {
+    fn metrics_fingerprint(&self) -> u32 {
+        let mut metrics: Vec<String> = std::iter::once(&self.style).chain(self.runs.iter().map(|run| &run.style)).map(style_metrics).collect();
+        metrics.sort_unstable();
+        metrics.dedup();
+        fingerprint(&metrics.join("\n"))
+    }
+
+    fn nudges_hold(&self) -> bool {
+        self.nudge_metrics != 0 && self.nudge_metrics == self.metrics_fingerprint()
+    }
+
+    /// Records the nudges measured on the text as it is now.
+    pub fn set_nudges(&mut self, baseline: f64, hug: f32) {
+        self.baseline_nudge = baseline;
+        self.hug_nudge = hug;
+        let any = baseline != 0.0 || hug != 0.0;
+        self.nudge_metrics = if any { self.metrics_fingerprint() } else { 0 };
+        self.nudge_characters = if any { fingerprint(&self.characters) } else { 0 };
+    }
+
+    /// The baseline nudge, while the metrics it was measured on still stand; every edit that changes them voids it.
+    pub fn held_baseline_nudge(&self) -> f64 {
+        if self.nudges_hold() { self.baseline_nudge } else { 0.0 }
+    }
+
+    /// The width nudge, while the metrics and the characters it was measured on still stand.
+    pub fn held_hug_nudge(&self) -> f32 {
+        if self.nudges_hold() && self.nudge_characters == fingerprint(&self.characters) { self.hug_nudge } else { 0.0 }
+    }
+
     pub fn new(characters: impl Into<String>) -> Self {
         Self { characters: characters.into(), ..Default::default() }
     }

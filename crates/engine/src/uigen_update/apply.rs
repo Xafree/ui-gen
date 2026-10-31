@@ -129,6 +129,8 @@ fn copy_field(field: Field, to: &mut Node, from: &Node) {
             if let (NodeKind::Text(into), NodeKind::Text(source)) = (&mut to.kind, &from.kind) {
                 into.characters.clone_from(&source.characters);
                 into.runs.clone_from(&source.runs);
+                into.hug_nudge = source.hug_nudge;
+                into.nudge_characters = source.nudge_characters;
             }
             follow(to, from, |key| key == "characters");
         }
@@ -143,6 +145,8 @@ fn copy_field(field: Field, to: &mut Node, from: &Node) {
                 into.leading_trim = source.leading_trim;
                 into.baseline_nudge = source.baseline_nudge;
                 into.hug_nudge = source.hug_nudge;
+                into.nudge_metrics = source.nudge_metrics;
+                into.nudge_characters = source.nudge_characters;
                 into.browser_gamma = source.browser_gamma;
                 into.auto_resize = source.auto_resize;
             }

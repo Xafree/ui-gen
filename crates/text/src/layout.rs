@@ -225,7 +225,8 @@ fn natural_ratio(face: &Face) -> f64 {
 const MAX_BASELINE_NUDGE: f64 = 1_000.0;
 
 fn baseline_nudge(text: &TextData) -> f64 {
-    if text.baseline_nudge.is_finite() { text.baseline_nudge.clamp(-MAX_BASELINE_NUDGE, MAX_BASELINE_NUDGE) } else { 0.0 }
+    let nudge = text.held_baseline_nudge();
+    if nudge.is_finite() { nudge.clamp(-MAX_BASELINE_NUDGE, MAX_BASELINE_NUDGE) } else { 0.0 }
 }
 
 fn whole_px(line_height: f64) -> f64 {

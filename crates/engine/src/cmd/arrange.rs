@@ -472,6 +472,7 @@ pub fn scale_node(doc: &mut Document, id: NodeId, k: f64) -> Result<()> {
             }
         }
         if let NodeKind::Text(t) = &mut n.kind {
+            let nudges = (t.held_baseline_nudge() * k, (f64::from(t.held_hug_nudge()) * k) as f32);
             let scale = |st: &mut TextStyle| {
                 st.font_size *= k;
                 if let LineHeight::Pixels(v) = &mut st.line_height {
@@ -495,6 +496,7 @@ pub fn scale_node(doc: &mut Document, id: NodeId, k: f64) -> Result<()> {
             t.paragraph_spacing *= k;
             t.paragraph_indent *= k;
             t.list_spacing *= k;
+            t.set_nudges(nudges.0, nudges.1);
             if let Some(tp) = &mut t.path {
                 tp.scale(k, k);
             }

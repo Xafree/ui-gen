@@ -1265,6 +1265,8 @@ mod handoff_tests;
 #[cfg(test)]
 mod ids_tests;
 #[cfg(test)]
+mod nudge_tests;
+#[cfg(test)]
 mod print_tests;
 #[cfg(test)]
 mod proto_expr_mode_tests;
