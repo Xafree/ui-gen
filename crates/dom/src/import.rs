@@ -4,6 +4,7 @@
 
 mod cleanup;
 mod css;
+mod effects;
 mod faces;
 mod facts;
 mod fonts;
@@ -12,7 +13,9 @@ mod layout;
 mod motion;
 mod names;
 mod notes;
+mod paints;
 mod shadow;
+mod stacking;
 mod svg;
 mod text;
 mod translate;
@@ -258,7 +261,7 @@ impl<'d, 's> Walk<'d, 's> {
             self.elements.push((id, element));
             (id, (placement.snapped.x, placement.snapped.y), Some(id))
         };
-        pending.extend(element.children.iter().rev().map(|child| Pending { node: child, parent, origin, at: None }));
+        pending.extend(stacking::painting_order(&element.children).into_iter().rev().map(|child| Pending { node: child, parent, origin, at: None }));
         Ok(id)
     }
 }
