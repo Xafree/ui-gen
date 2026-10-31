@@ -128,7 +128,7 @@ fn blend_mode(name: &str) -> Option<BlendMode> {
     })
 }
 
-/// A box already holds a translation; a rotation or a scale comes out as the bounding box of the result.
+/// A box already holds a translation; a rotation or a scale comes out as the bounding box of the result, a scale to nothing as an empty box.
 fn transform(style: &Style, report: &mut Report) {
     if let Some(value) = get(style, "transform").filter(|value| !is_translation(value)) {
         report.unreadable("transform", value);
@@ -151,5 +151,8 @@ fn is_translation(value: &str) -> bool {
     }
     let Some(inner) = value.strip_prefix("matrix(").and_then(|rest| rest.strip_suffix(')')) else { return false };
     let numbers: Vec<f64> = inner.split(',').filter_map(|number| number.trim().parse().ok()).collect();
-    numbers.len() == 6 && numbers.iter().zip(IDENTITY).all(|(number, identity)| (number - identity).abs() <= SAME)
+    let collapsed = numbers.len() == 6 && numbers.iter().take(4).all(|number| number.abs() <= SAME);
+    let flattened =
+        numbers.len() == 6 && (numbers[0].abs() <= SAME && numbers[1].abs() <= SAME || numbers[2].abs() <= SAME && numbers[3].abs() <= SAME);
+    collapsed || flattened || numbers.len() == 6 && numbers.iter().zip(IDENTITY).all(|(number, identity)| (number - identity).abs() <= SAME)
 }

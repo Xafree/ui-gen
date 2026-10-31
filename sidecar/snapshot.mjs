@@ -379,6 +379,17 @@ function walkInPage({ rootSelector, limits }) {
     return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
   };
 
+  const outerSize = (computed, width, height) => {
+    if (computed.boxSizing === 'border-box') {
+      return [width, height];
+    }
+    const sum = (keys) => keys.reduce((total, key) => total + (Number.parseFloat(computed[key]) || 0), 0);
+    return [
+      width + sum(['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth']),
+      height + sum(['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth']),
+    ];
+  };
+
   const pseudoNode = (element, pseudo) => {
     const computed = getComputedStyle(element, pseudo);
     if (computed.content === 'none' || computed.content === 'normal' || computed.display === 'none' || computed.visibility === 'hidden') {
@@ -399,7 +410,8 @@ function walkInPage({ rootSelector, limits }) {
     }
     countNode();
     const origin = computed.position === 'fixed' ? { x: 0, y: 0 } : containingBox(element);
-    const box = transformedBox(origin.x + left, origin.y + top, width, height, computed);
+    const [outerWidth, outerHeight] = outerSize(computed, width, height);
+    const box = transformedBox(origin.x + left, origin.y + top, outerWidth, outerHeight, computed);
     return {
       node: {
         type: 'element',

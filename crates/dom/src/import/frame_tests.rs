@@ -327,3 +327,8 @@ fn a_dashed_border_dashes_and_a_double_border_stays_solid_with_a_note() {
     assert_eq!(double.root_node().strokes.len(), 1);
     assert!(mentions(&double.warnings, "Bouton", "borderTopStyle"), "{:?}", double.warnings);
 }
+
+#[test]
+fn a_scale_to_nothing_needs_no_note() {
+    assert!(frame(json!({ "transform": "matrix(0, 0, 0, 1, 0, 0)" })).warnings.is_empty());
+}
