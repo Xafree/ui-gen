@@ -183,6 +183,7 @@ pub fn keys(app: &mut FigApp, ctx: &Context) {
         || u.playground.save_open
         || u.playground.code_open
         || u.confirm_close
+        || u.tab_close.is_some()
         || u.export_preview
         || u.shortcuts_panel
         || u.preferences
@@ -199,6 +200,7 @@ pub fn keys(app: &mut FigApp, ctx: &Context) {
         || u.project_settings.take().is_some()
         || u.import_window.take().is_some()
         || u.missing_fonts.take().is_some()
+        || u.tab_close.take().is_some()
     {
         return;
     }
@@ -425,6 +427,7 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
     crate::live::publish_dialog(app, ctx);
     crate::online::dialogs(app, ctx);
     crate::windows::confirm_close(app, ctx);
+    crate::tab_close::show(app, ctx);
 }
 
 /// Preferences ▸ Interface size: a size relative to the system's display scale (100 % is the

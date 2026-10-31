@@ -308,18 +308,29 @@ fn drag_free_space(ui: &mut Ui, rect: Rect, from_x: f32, to_x: f32) {
     }
 }
 
-/// Closes tab `i`; unsaved changes need a second close with Alt held.
+/// Closes tab `i`: unsaved changes ask first, unless Alt is held.
 fn close_tab(app: &mut FigApp, ui: &Ui, i: usize) {
+    let discard = ui.input(|inp| inp.modifiers.alt);
+    request_close_tab(app, i, discard);
+}
+
+/// Closes tab `i`. Unsaved changes ask Save / Don't Save / Cancel; `discard` closes at once and
+/// loses them.
+pub(crate) fn request_close_tab(app: &mut FigApp, i: usize, discard: bool) {
     // A branch tab's edits live on in its main file: closing it loses nothing.
-    let dirty = app.session.docs.get(i).is_some_and(|d| d.is_dirty() && d.branch_of.is_none());
-    if dirty {
-        app.ui.find = None;
-        app.toast(trf("Unsaved changes: save first, or close again with {key} to discard", &[("key", &crate::toolbar::pretty_shortcut("Alt"))]));
-        if ui.input(|inp| inp.modifiers.alt) {
+    let unsaved = app.session.docs.get(i).filter(|d| d.is_dirty() && d.branch_of.is_none()).map(|d| d.uid);
+    match unsaved {
+        Some(_) if discard => {
+            app.ui.find = None;
             app.run("file.close", json!({"index": i, "force": true}));
         }
-    } else {
-        app.run("file.close", json!({"index": i}));
+        Some(uid) => {
+            app.ui.find = None;
+            crate::tab_close::ask(app, uid);
+        }
+        None => {
+            app.run("file.close", json!({"index": i}));
+        }
     }
 }
 
