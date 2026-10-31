@@ -27,6 +27,7 @@ pub(crate) struct Request {
     pub states: Option<Vec<State>>,
     pub themes: Vec<Theme>,
     pub animations: bool,
+    pub role_names: std::collections::BTreeMap<String, String>,
 }
 
 pub(crate) struct Destination {

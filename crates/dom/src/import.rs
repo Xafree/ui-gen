@@ -58,6 +58,7 @@ use crate::model::{DomBox, DomNode, Element, Snapshot, SvgNode};
 pub use faces::{TextFace, text_faces};
 pub use fonts::nearest_weight;
 pub use motion::css_easing;
+pub use names::ROLE_NAMES;
 pub use notes::NOTE_PREFIX;
 pub use translate::{Effect, LayerFacts, TokenFact, TokenValue, TransitionFact, TranslateOptions, Translated, translate_snapshot};
 
