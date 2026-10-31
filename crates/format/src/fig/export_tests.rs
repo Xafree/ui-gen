@@ -869,6 +869,21 @@ fn written_files_decode_and_list_parents_first() {
 }
 
 #[test]
+fn a_shadow_cast_by_the_box_hides_behind_it_and_says_so() {
+    let mut doc = Document::new("box shadow");
+    let page = doc.first_page().unwrap();
+    let frame = doc.create(page, NodeKind::Frame, "Card", 0.0, 0.0, 100.0, 50.0).unwrap();
+    let shadow = Shadow { from_outline: true, show_behind: true, ..Shadow::default() };
+    doc.get_mut(frame).unwrap().effects = vec![Effect { kind: EffectKind::DropShadow(shadow), visible: true }];
+    let (bytes, warnings) = export(&doc, None).unwrap();
+    let (back, _) = import(&bytes, "x").unwrap();
+    let card = back.nodes().find(|node| node.name == "Card").unwrap();
+    let [Effect { kind: EffectKind::DropShadow(read), .. }] = &card.effects[..] else { panic!("{:?}", card.effects) };
+    assert!(!read.show_behind);
+    assert!(warnings.iter().any(|warning| warning.contains("cast by")), "{warnings:?}");
+}
+
+#[test]
 fn the_written_schema_parses_and_round_trips() {
     let schema = Schema::parse(export::SCHEMA).unwrap();
     let back = Schema::decode(&encode::schema(&schema)).unwrap();
