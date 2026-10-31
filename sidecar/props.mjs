@@ -14,6 +14,7 @@ const WORKER_MEMORY_MB = 512;
 const WORKER_START_GRACE_MS = 1_000;
 const EXCLUDED_NAMES = new Set(['children', 'className', 'style', 'ref', 'key']);
 const HANDLER_NAME = /^on[A-Z]/;
+const INTERNAL_NAME = /^__/;
 const COMPONENT_NAME = /^[A-Z]/;
 const STRING_LITERAL = /^(?:'([^']*)'|"([^"]*)")$/;
 
@@ -181,13 +182,13 @@ function packageFile(root, file) {
   }
 }
 
-async function readManifest(root) {
+function readManifest(root) {
   const found = packageFile(root, path.join(root, 'package.json'));
   if (found === null || found.stats.size > MAX_MANIFEST_BYTES) {
     return {};
   }
   try {
-    const manifest = JSON.parse(await readFile(found.real, 'utf8'));
+    const manifest = JSON.parse(readFileSync(found.real, 'utf8'));
     return isObject(manifest) ? manifest : {};
   } catch {
     return {};
@@ -211,7 +212,7 @@ function findEntry(manifest, root) {
   return null;
 }
 
-const propName = (name) => !EXCLUDED_NAMES.has(name) && !HANDLER_NAME.test(name);
+const propName = (name) => !EXCLUDED_NAMES.has(name) && !HANDLER_NAME.test(name) && !INTERNAL_NAME.test(name);
 
 function classifyText(text) {
   const parts = text.split('|').map((part) => part.trim()).filter((part) => part !== 'undefined' && part !== 'null');
@@ -230,7 +231,7 @@ function classifyText(text) {
 
 async function readAttributes(installed, meter) {
   const result = new Map();
-  const manifest = await readManifest(installed.root);
+  const manifest = readManifest(installed.root);
   if (typeof manifest.customElements !== 'string' || installed.tags.size === 0) {
     return result;
   }
@@ -336,13 +337,45 @@ function createClassifier(ts, checker) {
   };
 }
 
-function isOwnDeclaration(declaration, rootPrefix) {
-  const file = posix(declaration.getSourceFile().fileName);
-  const own = process.platform === 'win32' ? file.toLowerCase().startsWith(rootPrefix.toLowerCase()) : file.startsWith(rootPrefix);
-  return own && !file.slice(rootPrefix.length).includes('node_modules/');
+const EXCLUDED_PACKAGES = new Set(['react', 'react-dom', 'csstype']);
+const TYPES_SCOPE = '@types';
+
+const packageNameAt = (segments) => (segments[0].startsWith('@') ? segments.slice(0, 2).join('/') : segments[0]);
+
+const startsWithPath = (file, prefix) =>
+  process.platform === 'win32' ? file.toLowerCase().startsWith(prefix.toLowerCase()) : file.startsWith(prefix);
+
+const shipsRuntime = (manifest) => [manifest.main, manifest.module].some((entry) => typeof entry === 'string' && entry !== '') || isObject(manifest.exports);
+
+function createOwnership(installed) {
+  const rootPrefix = `${posix(installed.root)}/`;
+  const modulesPrefix = `${posix(path.join(installed.sources, 'node_modules'))}/`;
+  const runtimePackages = new Map();
+  const hasRuntime = (name, root) => {
+    if (!runtimePackages.has(name)) {
+      runtimePackages.set(name, shipsRuntime(readManifest(root)));
+    }
+    return runtimePackages.get(name);
+  };
+  const isDependency = (file) => {
+    if (!startsWithPath(file, modulesPrefix)) {
+      return false;
+    }
+    const relative = file.slice(modulesPrefix.length).split('/node_modules/').at(-1).split('/');
+    const name = packageNameAt(relative);
+    const excluded = EXCLUDED_PACKAGES.has(name) || name.startsWith(`${TYPES_SCOPE}/`);
+    return !excluded && hasRuntime(name, path.join(modulesPrefix, ...name.split('/')));
+  };
+  return (declaration) => {
+    const file = posix(declaration.getSourceFile().fileName);
+    if (startsWithPath(file, rootPrefix) && !file.slice(rootPrefix.length).includes('node_modules/')) {
+      return true;
+    }
+    return isDependency(file);
+  };
 }
 
-function componentProps(ts, checker, classify, rootPrefix, exported) {
+function componentProps(ts, checker, classify, isOwnDeclaration, exported) {
   const symbol = exported.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(exported) : exported;
   const type = checker.getTypeOfSymbol(symbol);
   const signature = [...type.getCallSignatures(), ...type.getConstructSignatures()].find((candidate) => candidate.getParameters().length > 0);
@@ -357,7 +390,8 @@ function componentProps(ts, checker, classify, rootPrefix, exported) {
   }
   const props = [];
   for (const property of checker.getPropertiesOfType(propsType)) {
-    const own = (property.declarations ?? []).some((declaration) => isOwnDeclaration(declaration, rootPrefix));
+    const declarations = property.declarations ?? [];
+    const own = declarations.length === 0 || declarations.some(isOwnDeclaration);
     if (!own || !propName(property.name)) {
       continue;
     }
@@ -373,7 +407,7 @@ function componentProps(ts, checker, classify, rootPrefix, exported) {
 }
 
 function readReactProps(ts, installed, entry, meter) {
-  const rootPrefix = `${posix(installed.root)}/`;
+  const isOwnDeclaration = createOwnership(installed);
   const modulesRoot = path.join(installed.sources, 'node_modules');
   const libDir = path.dirname(ts.sys.getExecutingFilePath());
   const reader = confinedReader([modulesRoot, libDir], meter);
@@ -389,7 +423,7 @@ function readReactProps(ts, installed, entry, meter) {
   const classify = createClassifier(ts, checker);
   for (const exported of checker.getExportsOfModule(moduleSymbol).filter((symbol) => COMPONENT_NAME.test(symbol.name))) {
     meter.tick();
-    const props = componentProps(ts, checker, classify, rootPrefix, exported);
+    const props = componentProps(ts, checker, classify, isOwnDeclaration, exported);
     if (props !== null) {
       components.set(exported.name, props);
     }
@@ -410,7 +444,7 @@ export async function readPropsInline(installed, limits) {
     notes.push(clip(`${error.message}: props not read`));
     return { components: new Map(), notes };
   }
-  const entry = findEntry(await readManifest(installed.root), installed.root);
+  const entry = findEntry(readManifest(installed.root), installed.root);
   if (entry === null) {
     notes.push(`${installed.name} ships no type declarations: props not read`);
     return { components, notes };
