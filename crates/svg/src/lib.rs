@@ -64,6 +64,22 @@ impl Default for SvgOptions {
     }
 }
 
+/// The geometry drop shadows drawn exactly are cast from, when the layer has it.
+#[derive(Clone, Copy)]
+struct ShadowShapes<'a> {
+    silhouette: Option<&'a [Outline]>,
+    outline: Option<&'a Outline>,
+}
+
+impl<'a> ShadowShapes<'a> {
+    fn of(self, shadow: &figcraft_doc::Shadow) -> Option<&'a [Outline]> {
+        match self.outline.filter(|_| shadow.from_outline) {
+            Some(outline) => Some(std::slice::from_ref(outline)),
+            None => self.silhouette.filter(|_| shadow.spread != 0.0),
+        }
+    }
+}
+
 struct NodePaint<'a> {
     node: &'a Node,
     xf: Affine,
@@ -334,12 +350,12 @@ impl W<'_> {
 
     /// The layer's filter: drop shadows (but those drawn as `exact` geometry: see
     /// [`W::drop_shadows`]) and layer blur.
-    fn filter_for(&mut self, n: &Node, exact: bool, xf: Affine) -> Option<String> {
+    fn filter_for(&mut self, n: &Node, exact: ShadowShapes, xf: Affine) -> Option<String> {
         let fx: Vec<&figcraft_doc::Effect> = n
             .effects
             .iter()
             .filter(|e| e.visible)
-            .filter(|e| !(exact && matches!(&e.kind, EffectKind::DropShadow(s) if s.spread != 0.0)))
+            .filter(|e| !matches!(&e.kind, EffectKind::DropShadow(s) if exact.of(s).is_some()))
             .filter(|e| matches!(e.kind, EffectKind::DropShadow(_) | EffectKind::LayerBlur { .. }))
             .collect();
         if fx.is_empty() {
@@ -448,10 +464,11 @@ impl W<'_> {
         let inherited = self.clip.clone();
         let spreads = n.effects.iter().any(|e| e.visible && matches!(&e.kind, EffectKind::DropShadow(s) if s.spread != 0.0));
         let sil = if spreads { figcraft_render::shadow::silhouette(self.doc, n) } else { None };
-        if let Some(sil) = &sil {
-            self.drop_shadows(n, sil, xf, &clip_attr(&inherited));
-        }
-        if let Some(fid) = self.filter_for(n, sil.is_some(), xf) {
+        let boxed = n.effects.iter().any(|e| e.visible && matches!(&e.kind, EffectKind::DropShadow(s) if s.from_outline));
+        let cast_by = if boxed { figcraft_render::node_outline(self.doc, n) } else { None };
+        let exact = ShadowShapes { silhouette: sil.as_deref(), outline: cast_by.as_ref() };
+        self.drop_shadows(n, exact, xf, &clip_attr(&inherited));
+        if let Some(fid) = self.filter_for(n, exact, xf) {
             let _ = write!(attrs, " filter=\"url(#{fid})\"");
         }
         let leaf = matches!(n.kind, NodeKind::BooleanOp { .. }) || n.children.is_empty();
@@ -953,7 +970,10 @@ impl W<'_> {
     /// through `xf`), when its drop shadows hide behind it there (see
     /// [`shadow::hiding_cover`](figcraft_render::shadow::hiding_cover)).
     fn cover_input(&self, n: &Node, xf: Affine) -> Option<String> {
-        let cover = figcraft_render::shadow::hiding_cover(self.doc, n)?;
+        Self::cover_image(&figcraft_render::shadow::hiding_cover(self.doc, n)?, xf)
+    }
+
+    fn cover_image(cover: &[Outline], xf: Affine) -> Option<String> {
         let b = cover
             .iter()
             .map(|(p, _)| figcraft_geom::transform_rect_bbox(xf, figcraft_geom::Shape::bounding_box(p)))
@@ -971,7 +991,7 @@ impl W<'_> {
             num(b.width()),
             num(b.height())
         );
-        for (p, rule) in &cover {
+        for (p, rule) in cover {
             let fr = if *rule == figcraft_render::FillRule::EvenOdd { " fill-rule=\"evenodd\"" } else { "" };
             let _ = write!(img, "<path transform=\"{}\" d=\"{}\"{fr}/>", matrix(xf), path_d(p));
         }
@@ -986,12 +1006,13 @@ impl W<'_> {
         ))
     }
 
-    /// Drop shadows with spread, as geometry under the layer: its silhouette offset by the
-    /// spread (exactly, like the renderer), moved, blurred and faded.
-    fn drop_shadows(&mut self, n: &Node, sil: &[Outline], xf: Affine, clip: &str) {
+    /// Drop shadows with spread or cast by the box, as geometry under the layer: its silhouette
+    /// or outline offset by the spread (exactly, like the renderer), moved, blurred and faded.
+    fn drop_shadows(&mut self, n: &Node, exact: ShadowShapes, xf: Affine, clip: &str) {
         for e in n.effects.iter().filter(|e| e.visible) {
             let EffectKind::DropShadow(s) = &e.kind else { continue };
-            if s.spread == 0.0 || !(s.offset.0.is_finite() && s.offset.1.is_finite()) {
+            let Some(sil) = exact.of(s) else { continue };
+            if !(s.offset.0.is_finite() && s.offset.1.is_finite()) {
                 continue;
             }
             let at = Affine::translate(s.offset) * xf;
@@ -1001,7 +1022,11 @@ impl W<'_> {
                 continue;
             };
             let reach = s.spread.abs() * SPREAD_MITER_LIMIT + s.radius.abs() * 1.5 + 2.0;
-            let cover = if s.show_behind { None } else { self.cover_input(n, xf) };
+            let cover = match exact.outline.filter(|_| s.from_outline) {
+                Some(outline) => Self::cover_image(std::slice::from_ref(outline), xf),
+                None if s.show_behind => None,
+                None => self.cover_input(n, xf),
+            };
             let filter =
                 self.blur_filter(s.radius, b.inflate(reach, reach), cover.as_deref()).map(|f| format!(" filter=\"url(#{f})\"")).unwrap_or_default();
             let op = f64::from(s.color.a * n.opacity.clamp(0.0, 1.0));
