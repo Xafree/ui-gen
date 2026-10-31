@@ -12,6 +12,30 @@ const PROP_LIMITS = { budgetMs: 20_000, maxFiles: 4_000, maxBytes: 64 * 1024 * 1
 const MAX_EXPORTS = 10_000;
 const MAX_EXPORT_NAME_LENGTH = 128;
 
+export const PARTS_OF = `(lib, names) => {
+  const namesOf = new Map();
+  for (const name of names) {
+    namesOf.set(lib[name], [...(namesOf.get(lib[name]) ?? []), name]);
+  }
+  const parts = {};
+  for (const parent of names) {
+    const holder = lib[parent];
+    if (holder === null || (typeof holder !== 'function' && typeof holder !== 'object')) continue;
+    for (const key of Object.keys(holder)) {
+      let value;
+      try {
+        value = holder[key];
+      } catch {
+        continue;
+      }
+      for (const name of namesOf.get(value) ?? []) {
+        if (name !== parent && name.startsWith(parent)) parts[name] = parent;
+      }
+    }
+  }
+  return parts;
+}`;
+
 const byName = (a, b) => (a.name < b.name ? -1 : Number(a.name > b.name));
 
 export function checkExportNames(value, packageName) {
@@ -30,7 +54,10 @@ async function listReactExports(installed) {
     resolveDir: installed.sources,
     contents: `import * as lib from ${JSON.stringify(installed.name)};
 const isComponent = ${IS_COMPONENT};
-window.__uigenExports = Object.keys(lib).filter((key) => /^[A-Z]/.test(key) && isComponent(lib[key]));`,
+const partsOf = ${PARTS_OF};
+const exported = Object.keys(lib).filter((key) => /^[A-Z]/.test(key) && isComponent(lib[key]));
+window.__uigenExports = exported;
+window.__uigenParts = partsOf(lib, exported);`,
   });
   return withPage({}, async (page) => {
     page.setDefaultTimeout(INSPECT_TIMEOUT_MS);
@@ -38,20 +65,26 @@ window.__uigenExports = Object.keys(lib).filter((key) => /^[A-Z]/.test(key) && i
     if (errors.length > 0) {
       throw new ServiceError('render', `${installed.name} throws when it loads: ${errors[0]}`);
     }
-    return checkExportNames(await page.evaluate(() => window.__uigenExports), installed.name);
+    const names = checkExportNames(await page.evaluate(() => window.__uigenExports), installed.name);
+    return { names, parts: await page.evaluate(() => window.__uigenParts) };
   });
 }
 
+const withPart = (component, parts) => {
+  const parent = Object.hasOwn(parts, component.name) ? parts[component.name] : undefined;
+  return typeof parent === 'string' ? { ...component, partOf: parent } : component;
+};
+
 export async function inspect(params) {
   const installed = await readInstalledPackage(params.dir, params.package);
-  const exported = installed.framework === 'react' ? await listReactExports(installed) : [];
+  const { names: exported, parts } = installed.framework === 'react' ? await listReactExports(installed) : { names: [], parts: {} };
   const names = [...new Set([...exported, ...installed.tags.keys()])];
   const { components, notes } = await readProps(installed, PROP_LIMITS);
   return {
     package: installed.name,
     version: installed.version,
     framework: installed.framework,
-    components: names.map((name) => ({ name, props: components.get(name) ?? [] })).sort(byName),
+    components: names.map((name) => withPart({ name, props: components.get(name) ?? [] }, parts)).sort(byName),
     notes,
   };
 }

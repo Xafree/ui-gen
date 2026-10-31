@@ -900,6 +900,16 @@ pub fn tab(resp: &Response, label: &str, selected: bool) {
     });
 }
 
+/// A text the painter draws, for a screen reader.
+pub fn spoken(resp: &Response, label: &str) {
+    node(resp, label, |n| n.set_role(Role::Label));
+}
+
+/// What a control says beside its name: a tag drawn on the row.
+pub fn describe(resp: &Response, description: &str) {
+    resp.ctx.accesskit_node_builder(resp.id, |n| n.set_description(description));
+}
+
 pub fn checkbox(resp: &Response, label: &str, on: bool) {
     node(resp, label, |n| {
         n.set_role(Role::CheckBox);

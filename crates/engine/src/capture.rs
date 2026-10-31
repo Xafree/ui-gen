@@ -4,6 +4,7 @@
 
 use std::fmt;
 
+use figcraft_project::npm::PackageSpec;
 use serde_json::Value;
 
 use crate::Session;
@@ -16,6 +17,7 @@ pub type JobId = u64;
 #[derive(Debug, Clone, PartialEq)]
 pub enum CaptureJob {
     Install { root: String, package: String, version: String },
+    InstallMany { root: String, packages: Vec<PackageSpec> },
     Uninstall { root: String, package: String },
     Inspect { root: String, package: String },
     Render { root: String, package: String, component: String, props: Value, sample_text: Option<String>, state: String, theme: String },
@@ -70,7 +72,7 @@ pub struct CaptureEvent {
     pub outcome: CaptureOutcome,
 }
 
-const MAX_FINISHED_JOBS: usize = 100;
+const MAX_FINISHED_JOBS: usize = 2 * (crate::uigen_import::MAX_RENDERS + 1);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JobState {
@@ -85,6 +87,7 @@ pub struct JobStatus {
     pub job: JobId,
     pub command: String,
     pub package: String,
+    pub packages: Vec<String>,
     pub root: String,
     pub state: JobState,
 }
@@ -93,6 +96,7 @@ struct JobRecord {
     id: JobId,
     command: String,
     package: String,
+    packages: Vec<String>,
     root: String,
     finished: Option<Result<(), String>>,
 }
@@ -101,6 +105,7 @@ impl CaptureJob {
     pub(crate) fn root(&self) -> &str {
         match self {
             Self::Install { root, .. }
+            | Self::InstallMany { root, .. }
             | Self::Uninstall { root, .. }
             | Self::Inspect { root, .. }
             | Self::Render { root, .. }
@@ -175,8 +180,12 @@ impl Session {
             return Err(CaptureError { kind: CaptureErrorKind::Unavailable, message: unavailable_message().to_string() });
         };
         let root = job.root().to_string();
+        let packages = match &job {
+            CaptureJob::InstallMany { packages, .. } => packages.iter().map(|spec| spec.name.clone()).collect(),
+            _ => vec![package.to_string()],
+        };
         let id = backend.submit(job);
-        capture.jobs.push(JobRecord { id, command: command.to_string(), package: package.to_string(), root, finished: None });
+        capture.jobs.push(JobRecord { id, command: command.to_string(), package: package.to_string(), packages, root, finished: None });
         Ok(id)
     }
 
@@ -208,17 +217,19 @@ impl Session {
                 continue;
             };
             let Some(record) = self.capture.jobs.get(position) else { continue };
-            let (command, package, root) = (record.command.clone(), record.package.clone(), record.root.clone());
+            let (command, package, packages, root) = (record.command.clone(), record.package.clone(), record.packages.clone(), record.root.clone());
             if command == uigen_import::COMMAND {
                 events.extend(uigen_import::advance(self, job, outcome));
                 continue;
             }
             let outcome = outcome.and_then(|value| match command.as_str() {
                 uigen_import::LIST_COMMAND => uigen_import::receive(self, &package, &root, &value),
-                _ => project_sources::apply(self, &command, &package, &root, &value).map(|()| value),
+                _ => project_sources::apply(self, &command, &packages, &root, &value).map(|()| value),
             });
             if outcome.is_ok() && project_sources::changes_source(&command) {
-                self.capture.catalog.forget(&root, &package);
+                for name in &packages {
+                    self.capture.catalog.forget(&root, name);
+                }
             }
             if let Some(record) = self.capture.jobs.get_mut(position) {
                 record.finished = Some(outcome.as_ref().map(|_| ()).map_err(|e| e.message.clone()));
@@ -248,7 +259,14 @@ impl Session {
                     None if std::mem::take(&mut running) => JobState::Running,
                     None => JobState::Queued,
                 };
-                JobStatus { job: record.id, command: record.command.clone(), package: record.package.clone(), root: record.root.clone(), state }
+                JobStatus {
+                    job: record.id,
+                    command: record.command.clone(),
+                    package: record.package.clone(),
+                    packages: record.packages.clone(),
+                    root: record.root.clone(),
+                    state,
+                }
             })
             .collect()
     }

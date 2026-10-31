@@ -66,6 +66,18 @@ impl FigApp {
 
     /// Run a command, surfacing errors as a toast. Returns the result.
     pub fn run(&mut self, id: &str, params: Value) -> Option<Value> {
+        let (result, told_by_the_tab) = self.run_quietly(id, params);
+        result
+            .map_err(|e| {
+                if !told_by_the_tab {
+                    self.failed(id, &e);
+                }
+            })
+            .ok()
+    }
+
+    /// [`run`](Self::run) for a surface that says the refusal itself; the `bool`: the playground tab said it.
+    pub(crate) fn run_quietly(&mut self, id: &str, params: Value) -> (figcraft_engine::Result<Value>, bool) {
         let params = with_role_names(id, self.with_component_template(id, params));
         #[cfg(test)]
         RUN_LOG.with_borrow_mut(|log| log.push((id.to_string(), params.clone())));
@@ -79,12 +91,7 @@ impl FigApp {
         // `file.open`/`file.close`). Record that presentation before returning, so an in-flight
         // screenshot admitted on the old file cannot accept pixels from the new one.
         self.observe_presentation();
-        r.map_err(|e| {
-            if !told_by_the_tab {
-                self.failed(id, &e);
-            }
-        })
-        .ok()
+        (r, told_by_the_tab)
     }
 
     /// A programmatic command that changed the engine clipboard never wrote the system clipboard:

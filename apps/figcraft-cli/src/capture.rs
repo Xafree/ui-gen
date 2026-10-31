@@ -9,8 +9,9 @@ use figcraft_engine::capture::JobState;
 use figcraft_engine::playground::Status;
 
 const POLL: Duration = Duration::from_millis(100);
-const CAPTURE_COMMANDS: [&str; 8] = [
+const CAPTURE_COMMANDS: [&str; 9] = [
     "project.addSource",
+    "project.addSources",
     "project.setSourceVersion",
     "project.removeSource",
     "uigen.importComponent",

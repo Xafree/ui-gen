@@ -3,36 +3,26 @@
 //! capture service works in the background, so the rows follow the capture jobs of the project and its
 //! sources and no frame waits. Programmatic `project.settings` calls never open it.
 
-use egui::{Align, Context, CornerRadius, Label, Layout, Margin, RichText, ScrollArea, Stroke, Ui, vec2};
+use egui::{Label, RichText, Ui};
 use figcraft_engine::capture::JobState;
-use figcraft_engine::file_access;
+use figcraft_engine::{EngineError, file_access};
+use figcraft_project::ProjectError;
 use figcraft_project::npm;
 use serde_json::json;
 
+pub(in crate::dialogs) mod page;
+
 use super::project_themes::{self, ThemeAct, Themes};
-use super::window;
 use crate::FigApp;
-use crate::i18n::{tr, tr_noop, trf};
-use crate::theme::{Tokens, regular, semibold};
+use crate::i18n::{tr_noop, trf};
+use crate::source_family::{SourceFacts, dependencies_of, forget_dependencies, group_sources};
+use crate::theme::{Tokens, regular};
 
 const ADD: &str = "project.addSource";
+const ADD_MANY: &str = "project.addSources";
 const SET_VERSION: &str = "project.setSourceVersion";
 const REMOVE: &str = "project.removeSource";
 const IMPORT: &str = "uigen.importComponent";
-const LATEST: &str = "latest";
-
-const PACKAGE_W: f32 = 180.0;
-const VERSION_W: f32 = 90.0;
-const FRAMEWORK_W: f32 = 100.0;
-const LICENSE_W: f32 = 70.0;
-const ACTIONS_W: f32 = 220.0;
-pub(super) const GAP: f32 = 8.0;
-pub(super) const CARD_MARGIN: i8 = 10;
-const CELL_H: f32 = 28.0;
-const LIST_HEIGHT: f32 = 320.0;
-pub(super) const INNER_W: f32 = PACKAGE_W + VERSION_W + FRAMEWORK_W + LICENSE_W + ACTIONS_W + 4.0 * GAP;
-const WIDTH: f32 = INNER_W + 2.0 * (CARD_MARGIN as f32 + 1.0);
-const ADD_PACKAGE_W: f32 = 280.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Work {
@@ -52,15 +42,47 @@ pub struct SourceRow {
 }
 
 #[derive(Clone, Debug)]
+pub struct FamilyRow {
+    pub name: String,
+    pub version: String,
+    pub framework: String,
+    pub license: String,
+    pub status: String,
+    work: Work,
+    pub packages: Vec<String>,
+    active: Vec<String>,
+}
+
+impl FamilyRow {
+    pub fn head(&self) -> &str {
+        self.packages.first().map_or("", String::as_str)
+    }
+}
+
+#[derive(Clone, Debug)]
 struct Failure {
-    package: String,
+    packages: Vec<String>,
     command: String,
     message: String,
 }
 
+#[derive(Clone, Debug)]
+enum RunState {
+    Running,
+    Done,
+    Failed(String),
+}
+
+#[derive(Clone, Debug)]
+struct LastRun {
+    command: String,
+    packages: Vec<String>,
+    state: RunState,
+}
+
 struct Job {
     command: String,
-    package: String,
+    packages: Vec<String>,
     state: String,
     error: String,
 }
@@ -68,9 +90,12 @@ struct Job {
 #[derive(Clone, Debug, Default)]
 pub struct ProjectSettings {
     sources: Vec<SourceRow>,
+    families: Vec<FamilyRow>,
     failures: Vec<Failure>,
+    project_name: String,
+    root: String,
     package_input: String,
-    version_input: String,
+    last_run: Option<LastRun>,
     add_error: Option<String>,
     pending_removal: Option<String>,
     changing: Option<(String, String)>,
@@ -80,9 +105,8 @@ pub struct ProjectSettings {
 }
 
 enum Act {
-    Package(String),
-    Version(String),
     Add,
+    Browse(Option<String>),
     AskRemoval(String),
     CancelRemoval,
     ConfirmRemoval(String),
@@ -99,6 +123,60 @@ impl ProjectSettings {
         &self.sources
     }
 
+    pub fn families(&self) -> &[FamilyRow] {
+        &self.families
+    }
+
+    /// What Escape ends before the page: a removal being asked, a version being changed, a typed line.
+    pub(in crate::dialogs) fn takes_escape(&mut self, ctx: &egui::Context) -> bool {
+        if self.pending_removal.take().is_some() {
+            return true;
+        }
+        if self.changing.take().is_some() {
+            self.change_error = None;
+            return true;
+        }
+        let typed = page::had_focus(ctx, package_field()) && !self.package_input.is_empty();
+        if typed {
+            self.package_input.clear();
+            self.add_error = None;
+        }
+        typed
+    }
+
+    fn removal(&self, package: &str) -> (Vec<String>, Vec<String>) {
+        let Some(family) = self.families.iter().find(|family| family.packages.iter().any(|p| p == package)) else {
+            return (vec![package.to_string()], Vec::new());
+        };
+        let needed: Vec<String> = self
+            .families
+            .iter()
+            .filter(|other| other.name != family.name && other.status != "removed")
+            .filter_map(|other| self.sources.iter().find(|row| row.package == other.head()))
+            .flat_map(|head| dependencies_of(&self.root, &head.package, &head.version))
+            .collect();
+        family.active.iter().cloned().partition(|member| member == family.head() || !needed.contains(member))
+    }
+
+    pub(in crate::dialogs) fn removal_note(&self, package: &str) -> String {
+        let (goes, stays) = self.removal(package);
+        let mut note = trf("Removes {packages}", &[("packages", &goes.join(", "))]);
+        if !stays.is_empty() {
+            note.push_str(" · ");
+            note.push_str(&trf("Keeps {packages}: another library needs them", &[("packages", &stays.join(", "))]));
+        }
+        note
+    }
+
+    fn version_targets(&self, package: &str) -> Vec<String> {
+        let Some(family) = self.families.iter().find(|family| family.packages.iter().any(|p| p == package)) else {
+            return vec![package.to_string()];
+        };
+        let shares_head = |name: &&String| self.sources.iter().any(|row| row.package == **name && row.version == family.version);
+        let same: Vec<String> = family.active.iter().filter(shares_head).cloned().collect();
+        if same.is_empty() { family.active.iter().take(1).cloned().collect() } else { same }
+    }
+
     pub fn add_error(&self) -> Option<&str> {
         self.add_error.as_deref()
     }
@@ -109,9 +187,12 @@ impl ProjectSettings {
 
     fn refresh(&mut self, app: &mut FigApp) -> bool {
         let Some(binding) = app.session.project().cloned() else { return false };
+        if !self.root.is_empty() && !file_access::same_file(&self.root, &binding.root) {
+            *self = Self::default();
+        }
         let jobs = jobs(app, &binding.root);
         let working = |package: &str, command: &str| {
-            jobs.iter().any(|j| j.package == package && j.command == command && matches!(j.state.as_str(), "queued" | "running"))
+            jobs.iter().any(|j| j.packages.iter().any(|p| p == package) && j.command == command && matches!(j.state.as_str(), "queued" | "running"))
         };
         let mut rows: Vec<SourceRow> = binding
             .config
@@ -140,10 +221,10 @@ impl ProjectSettings {
                 }
             })
             .collect();
-        for job in jobs.iter().filter(|j| j.command == ADD && working(&j.package, ADD)) {
-            if !rows.iter().any(|r| r.package == job.package) {
+        for package in jobs.iter().filter(|j| j.command == ADD).flat_map(|j| &j.packages) {
+            if working(package, ADD) && !rows.iter().any(|r| r.package == *package) {
                 rows.push(SourceRow {
-                    package: job.package.clone(),
+                    package: package.clone(),
                     version: String::new(),
                     framework: String::new(),
                     license: String::new(),
@@ -154,11 +235,26 @@ impl ProjectSettings {
         }
         let mut failures: Vec<Failure> = Vec::new();
         for job in &jobs {
-            failures.retain(|f| f.package != job.package);
+            failures.retain(|f| !f.packages.iter().any(|p| job.packages.contains(p)));
             if job.state == "failed" {
-                failures.push(Failure { package: job.package.clone(), command: job.command.clone(), message: job.error.clone() });
+                failures.push(Failure { packages: job.packages.clone(), command: job.command.clone(), message: job.error.clone() });
             }
         }
+        self.project_name = binding.config.name.clone();
+        self.root = binding.root.clone();
+        if let Some(run) = self.last_run.as_mut()
+            && let Some(job) = jobs
+                .iter()
+                .rev()
+                .find(|j| j.command == ADD && j.packages.len() == run.packages.len() && run.packages.iter().all(|p| j.packages.contains(p)))
+        {
+            run.state = match job.state.as_str() {
+                "failed" => RunState::Failed(job.error.clone()),
+                "done" => RunState::Done,
+                _ => RunState::Running,
+            };
+        }
+        self.families = family_rows(&binding.root, &rows);
         self.sources = rows;
         self.failures = failures;
         self.themes.refresh(app, &binding.root, &binding.config);
@@ -166,15 +262,58 @@ impl ProjectSettings {
     }
 
     fn failure(&self, package: &str) -> Option<String> {
-        self.failures.iter().find(|f| f.package == package).map(|f| failure_text(&f.command, &f.package, &f.message))
+        self.failures.iter().find(|f| f.packages.iter().any(|p| p == package)).map(|f| failure_text(&f.command, &f.packages.join(", "), &f.message))
     }
+}
+
+fn family_rows(root: &str, rows: &[SourceRow]) -> Vec<FamilyRow> {
+    let dependencies: Vec<Vec<String>> =
+        rows.iter().map(|r| if r.status == "removed" { Vec::new() } else { dependencies_of(root, &r.package, &r.version) }).collect();
+    let borrowed: Vec<Vec<&str>> = dependencies.iter().map(|list| list.iter().map(String::as_str).collect()).collect();
+    let facts: Vec<SourceFacts> = rows
+        .iter()
+        .zip(&borrowed)
+        .map(|(r, depends_on)| SourceFacts {
+            package: &r.package,
+            version: &r.version,
+            framework: &r.framework,
+            components: usize::from(!r.framework.is_empty()),
+            depends_on,
+        })
+        .collect();
+    group_sources(&facts)
+        .into_iter()
+        .map(|family| {
+            let members: Vec<&SourceRow> = family.packages.iter().filter_map(|p| rows.iter().find(|r| r.package == *p)).collect();
+            let head = members.first();
+            let any = |status: &str| members.iter().any(|r| r.status == status);
+            let status = if members.iter().all(|r| r.status == "removed") {
+                "removed"
+            } else if any("installing") {
+                "installing"
+            } else {
+                "ready"
+            };
+            let work = [Work::Removing, Work::Installing].into_iter().find(|w| members.iter().any(|r| r.work == *w)).unwrap_or(Work::Idle);
+            FamilyRow {
+                name: family.name,
+                version: family.version,
+                framework: head.map(|r| r.framework.clone()).unwrap_or_default(),
+                license: head.map(|r| r.license.clone()).unwrap_or_default(),
+                status: status.to_string(),
+                work,
+                active: members.iter().filter(|r| r.status != "removed").map(|r| r.package.clone()).collect(),
+                packages: family.packages,
+            }
+        })
+        .collect()
 }
 
 fn jobs(app: &FigApp, root: &str) -> Vec<Job> {
     app.session
         .capture_jobs()
         .into_iter()
-        .filter(|job| [ADD, SET_VERSION, REMOVE].contains(&job.command.as_str()) && file_access::same_file(&job.root, root))
+        .filter(|job| [ADD, ADD_MANY, SET_VERSION, REMOVE].contains(&job.command.as_str()) && file_access::same_file(&job.root, root))
         .map(|job| {
             let (state, error) = match job.state {
                 JobState::Queued => ("queued", String::new()),
@@ -182,7 +321,8 @@ fn jobs(app: &FigApp, root: &str) -> Vec<Job> {
                 JobState::Done => ("done", String::new()),
                 JobState::Failed(message) => ("failed", message),
             };
-            Job { command: job.command, package: job.package, state: state.to_string(), error }
+            let command = if job.command == ADD_MANY { ADD.to_string() } else { job.command };
+            Job { command, packages: job.packages, state: state.to_string(), error }
         })
         .collect()
 }
@@ -219,9 +359,10 @@ pub(crate) fn pump(app: &mut FigApp) {
             }
             continue;
         }
-        if ![ADD, SET_VERSION, REMOVE].contains(&event.command.as_str()) {
+        if ![ADD, ADD_MANY, SET_VERSION, REMOVE].contains(&event.command.as_str()) {
             continue;
         }
+        forget_dependencies();
         match &event.outcome {
             Ok(_) if event.command == REMOVE => app.toast(trf("Removed {package}", &[("package", &package)])),
             Ok(_) => app.toast(trf("Installed {package}", &[("package", &package)])),
@@ -232,8 +373,12 @@ pub(crate) fn pump(app: &mut FigApp) {
         }
     }
     if imported {
-        edit(app, |state| state.themes.invalidate());
-        sync(app);
+        for window in crate::windows::all_ids(app) {
+            crate::windows::as_window(app, window, |app| {
+                edit(app, |state| state.themes.invalidate());
+                sync(app);
+            });
+        }
     }
 }
 
@@ -250,19 +395,61 @@ fn sync(app: &mut FigApp) {
     }
 }
 
-/// Install `package` (the latest version when `version` is empty) as a source of the project.
-pub fn add_package(app: &mut FigApp, package: &str, version: &str) {
-    let (package, version) = (package.trim(), version.trim());
-    let version = if version.is_empty() { LATEST } else { version };
-    let checked = npm::validate_package_name(package).and_then(|()| npm::validate_version(version, true));
-    edit(app, |state| state.add_error = checked.as_ref().err().map(ToString::to_string));
-    if checked.is_ok() && app.run(ADD, json!({"package": package, "version": version})).is_some() {
-        edit(app, |state| {
-            state.package_input.clear();
-            state.version_input.clear();
-        });
+fn refusal_text(error: &ProjectError) -> String {
+    if let Some(text) = super::install_refusal::text(error) {
+        return text;
     }
+    match error {
+        ProjectError::Invalid { field, reason } if field == "line" => reason.clone(),
+        ProjectError::Invalid { field, reason } => format!("{field}: {reason}"),
+        other => other.to_string(),
+    }
+}
+
+/// Install the packages typed on `line` (`name`, `name@1.2.0`, after an optional `npm install`) as
+/// sources of the project in one go. A refused line starts nothing and keeps what was typed.
+pub fn add_packages(app: &mut FigApp, line: &str) {
+    let parsed = npm::parse_install_line(line);
+    let refusal = match &parsed {
+        Err(error) => Some(refusal_text(error)),
+        Ok(_) => match app.run_quietly(ADD_MANY, json!({"line": line})).0 {
+            Ok(_) => None,
+            Err(EngineError::BadParams { msg, .. }) => Some(super::install_refusal::source_text(&msg)),
+            Err(other) => Some(other.to_string()),
+        },
+    };
+    let run = parsed.ok().filter(|_| refusal.is_none()).map(|specs| LastRun {
+        command: specs.iter().fold("npm install".to_string(), |line, spec| {
+            if spec.version == "latest" { format!("{line} {}", spec.name) } else { format!("{line} {}@{}", spec.name, spec.version) }
+        }),
+        packages: specs.into_iter().map(|spec| spec.name).collect(),
+        state: RunState::Running,
+    });
+    edit(app, |state| {
+        if refusal.is_none() {
+            state.package_input.clear();
+        }
+        if run.is_some() {
+            state.last_run = run;
+        }
+        state.add_error = refusal;
+    });
     sync(app);
+}
+
+fn run_source_command(app: &mut FigApp, id: &str, params: serde_json::Value) -> bool {
+    match app.run_quietly(id, params).0 {
+        Ok(_) => true,
+        Err(EngineError::BadParams { msg, .. }) => {
+            log::warn!("{id}: {msg}");
+            app.show_error(super::install_refusal::source_text(&msg));
+            false
+        }
+        Err(other) => {
+            app.failed(id, &other);
+            false
+        }
+    }
 }
 
 /// Install another version of source `package`; the row shows it once the install has succeeded.
@@ -270,26 +457,33 @@ pub fn change_version(app: &mut FigApp, package: &str, version: &str) {
     let version = version.trim();
     let checked = npm::validate_version(version, true);
     edit(app, |state| state.change_error = checked.as_ref().err().map(ToString::to_string));
-    if checked.is_ok() && app.run(SET_VERSION, json!({"package": package, "version": version})).is_some() {
+    let packages = app.ui.project_settings.as_ref().map_or_else(|| vec![package.to_string()], |state| state.version_targets(package));
+    let params = match packages.as_slice() {
+        [single] => json!({"package": single, "version": version}),
+        _ => json!({"packages": packages, "version": version}),
+    };
+    if checked.is_ok() && run_source_command(app, SET_VERSION, params) {
         edit(app, |state| state.changing = None);
     }
     sync(app);
 }
 
 fn remove_package(app: &mut FigApp, package: &str) {
+    let packages = app.ui.project_settings.as_ref().map_or_else(|| vec![package.to_string()], |state| state.removal(package).0);
     edit(app, |state| state.pending_removal = None);
-    app.run(REMOVE, json!({"package": package}));
+    for package in packages {
+        run_source_command(app, REMOVE, json!({"package": package}));
+    }
     sync(app);
 }
 
 fn perform(app: &mut FigApp, act: Act) {
     match act {
-        Act::Package(text) => edit(app, |s| s.package_input = text),
-        Act::Version(text) => edit(app, |s| s.version_input = text),
+        Act::Browse(package) => super::import_component::request(app, package.as_deref()),
         Act::Add => {
             let Some(state) = app.ui.project_settings.as_ref() else { return };
-            let (package, version) = (state.package_input.clone(), state.version_input.clone());
-            add_package(app, &package, &version);
+            let line = state.package_input.clone();
+            add_packages(app, &line);
         }
         Act::AskRemoval(package) => edit(app, |s| {
             s.pending_removal = Some(package);
@@ -328,24 +522,20 @@ fn package_field() -> egui::Id {
     egui::Id::unique(("project_settings", "package"))
 }
 
-pub fn show(app: &mut FigApp, ctx: &Context) {
+pub fn show(app: &mut FigApp, ui: &mut Ui) {
     let Some(mut state) = app.ui.project_settings.take() else { return };
     if !state.refresh(app) {
         return;
     }
-    let t = Tokens::get(ctx);
+    let ctx = ui.ctx().clone();
+    let t = Tokens::get(&ctx);
     let can_install = !cfg!(target_arch = "wasm32");
-    let mut open = true;
-    let mut acts = Vec::new();
     let focus_first = state.focus_first;
-    window(tr("Project settings"), ctx).open(&mut open).show(ctx, |ui| {
-        ui.set_width(WIDTH);
-        acts = body(ui, &t, &state, can_install, focus_first);
+    let mut acts = Vec::new();
+    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.bg)).show(ui, |ui| {
+        acts = page::show(ui, &t, &mut state, can_install, focus_first);
     });
-    if !open {
-        return;
-    }
-    state.focus_first &= !crate::widgets::text_field_focused(ctx, package_field());
+    state.focus_first &= !ctx.memory(|m| m.has_focus(package_field()));
     app.ui.project_settings = Some(state);
     for act in acts {
         perform(app, act);
@@ -353,192 +543,5 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
 }
 
 pub(super) fn note(ui: &mut Ui, text: &str, color: egui::Color32) {
-    ui.add(Label::new(RichText::new(text).color(color).font(regular(11.0))).wrap());
-}
-
-fn body(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, can_install: bool, focus_first: bool) -> Vec<Act> {
-    let mut acts = Vec::new();
-    ui.label(RichText::new(tr("Source libraries")).font(semibold(15.0)).color(t.text));
-    if !can_install {
-        note(ui, tr("Installing packages is only available in the desktop app"), t.text_secondary);
-    }
-    ui.add_space(8.0);
-    add_row(ui, state, can_install, focus_first, &mut acts);
-    if let Some(error) = state.add_error() {
-        note(ui, error, t.danger);
-    }
-    note(ui, tr("Leave the version empty for the latest one"), t.text_tertiary);
-    ui.add_space(12.0);
-    table(ui, t, state, can_install, &mut acts);
-    ui.add_space(12.0);
-    if can_install {
-        let mut themes = Vec::new();
-        project_themes::section(ui, t, &state.themes, &mut themes);
-        acts.extend(themes.into_iter().map(Act::Themes));
-        ui.add_space(12.0);
-    }
-    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-        if crate::widgets::button(ui, tr("Close"), false, true).clicked() {
-            acts.push(Act::Close);
-        }
-    });
-    acts
-}
-
-fn add_row(ui: &mut Ui, state: &ProjectSettings, can_install: bool, focus_first: bool, acts: &mut Vec<Act>) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = GAP;
-        let package = package_field();
-        if focus_first {
-            crate::widgets::focus_text_field(ui, package);
-        }
-        if let Some(text) = crate::widgets::text_field(ui, package, &state.package_input, ADD_PACKAGE_W, tr("Package")) {
-            acts.push(Act::Package(text));
-        }
-        let version = egui::Id::unique(("project_settings", "version"));
-        if let Some(text) = crate::widgets::text_field(ui, version, &state.version_input, VERSION_W, tr("Version")) {
-            acts.push(Act::Version(text));
-        }
-        if crate::widgets::button(ui, tr("Add an npm package"), true, can_install).clicked() {
-            acts.push(Act::Add);
-        }
-    });
-}
-
-fn cell(ui: &mut Ui, width: f32, add: impl FnOnce(&mut Ui)) {
-    ui.allocate_ui_with_layout(vec2(width, CELL_H), Layout::left_to_right(Align::Center), |ui| {
-        ui.set_min_size(vec2(width, CELL_H));
-        ui.set_max_width(width);
-        add(ui);
-    });
-}
-
-fn text_cell(ui: &mut Ui, width: f32, text: RichText) {
-    cell(ui, width, |ui| {
-        ui.add(Label::new(text).truncate());
-    });
-}
-
-fn table(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, can_install: bool, acts: &mut Vec<Act>) {
-    let orphans: Vec<String> = state
-        .failures
-        .iter()
-        .filter(|f| !state.sources.iter().any(|r| r.package == f.package))
-        .map(|f| failure_text(&f.command, &f.package, &f.message))
-        .collect();
-    if state.sources.is_empty() && orphans.is_empty() {
-        note(ui, tr("No source library yet"), t.text_secondary);
-        return;
-    }
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = GAP;
-        ui.add_space(f32::from(CARD_MARGIN) + 1.0);
-        for (width, title) in [(PACKAGE_W, tr("Package")), (VERSION_W, tr("Version")), (FRAMEWORK_W, tr("Framework")), (LICENSE_W, tr("License"))] {
-            text_cell(ui, width, RichText::new(title).color(t.text_tertiary).font(regular(11.0)));
-        }
-    });
-    ScrollArea::vertical().id_salt("project_settings_sources").max_height(LIST_HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
-        for row in &state.sources {
-            card(ui, t, state, row, can_install, acts);
-            ui.add_space(6.0);
-        }
-        for message in &orphans {
-            note(ui, message, t.danger);
-        }
-    });
-}
-
-fn card(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &SourceRow, can_install: bool, acts: &mut Vec<Act>) {
-    let removed = row.status == "removed";
-    let ink = if removed { t.text_tertiary } else { t.text };
-    let secondary = if removed { t.text_tertiary } else { t.text_secondary };
-    egui::Frame::new().stroke(Stroke::new(1.0, t.border)).corner_radius(CornerRadius::same(8)).inner_margin(Margin::same(CARD_MARGIN)).show(
-        ui,
-        |ui| {
-            ui.set_width(INNER_W);
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = GAP;
-                text_cell(ui, PACKAGE_W, RichText::new(&row.package).monospace().size(11.0).color(ink));
-                version_cell(ui, t, row, removed);
-                text_cell(ui, FRAMEWORK_W, RichText::new(or_dash(&row.framework)).color(secondary).font(regular(11.0)));
-                text_cell(ui, LICENSE_W, RichText::new(or_dash(&row.license)).color(secondary).font(regular(11.0)));
-                cell(ui, ACTIONS_W, |ui| actions(ui, t, state, row, can_install, acts));
-            });
-            if let Some(message) = state.failure(&row.package) {
-                note(ui, &message, t.danger);
-            }
-            if state.changing.as_ref().is_some_and(|(package, _)| *package == row.package)
-                && let Some(error) = &state.change_error
-            {
-                note(ui, error, t.danger);
-            }
-        },
-    );
-}
-
-fn or_dash(text: &str) -> &str {
-    if text.is_empty() { "—" } else { text }
-}
-
-fn version_cell(ui: &mut Ui, t: &Tokens, row: &SourceRow, removed: bool) {
-    if row.status == "installing" {
-        text_cell(ui, VERSION_W, RichText::new(tr("Installing…")).color(t.text_secondary).font(regular(11.0)));
-    } else if removed {
-        text_cell(ui, VERSION_W, RichText::new(&row.version).monospace().size(11.0).color(t.text_tertiary));
-    } else {
-        cell(ui, VERSION_W, |ui| {
-            egui::Frame::new().fill(t.field).corner_radius(CornerRadius::same(5)).inner_margin(Margin::symmetric(8, 4)).show(ui, |ui| {
-                ui.add(Label::new(RichText::new(&row.version).monospace().size(11.0).color(t.text)).truncate());
-            });
-        });
-    }
-}
-
-fn actions(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &SourceRow, can_install: bool, acts: &mut Vec<Act>) {
-    ui.spacing_mut().item_spacing.x = GAP;
-    let dim = |text: &str| RichText::new(text.to_string()).color(t.text_tertiary).font(regular(11.0));
-    if row.status == "removed" {
-        ui.label(dim(tr("Removed source")));
-        return;
-    }
-    if row.status == "installing" {
-        return;
-    }
-    match row.work {
-        Work::Installing => {
-            ui.label(dim(tr("Installing…")));
-            return;
-        }
-        Work::Removing => {
-            ui.label(dim(tr("Removing…")));
-            return;
-        }
-        Work::Idle => {}
-    }
-    if state.pending_removal() == Some(row.package.as_str()) {
-        if crate::widgets::button(ui, tr("Confirm removal"), true, can_install).clicked() {
-            acts.push(Act::ConfirmRemoval(row.package.clone()));
-        }
-        if crate::widgets::button(ui, tr("Cancel"), false, true).clicked() {
-            acts.push(Act::CancelRemoval);
-        }
-    } else if let Some((_, draft)) = state.changing.as_ref().filter(|(package, _)| *package == row.package) {
-        let field = egui::Id::unique(("project_settings_change", row.package.as_str()));
-        if let Some(text) = crate::widgets::text_field(ui, field, draft, VERSION_W, tr("Version")) {
-            acts.push(Act::Draft(text));
-        }
-        if crate::widgets::button(ui, tr("Apply"), true, can_install).clicked() {
-            acts.push(Act::Apply(row.package.clone()));
-        }
-        if crate::widgets::button(ui, tr("Cancel"), false, true).clicked() {
-            acts.push(Act::CancelChange);
-        }
-    } else {
-        if crate::widgets::button(ui, tr("Change version"), false, can_install).clicked() {
-            acts.push(Act::Change(row.package.clone()));
-        }
-        if crate::widgets::button(ui, tr("Remove"), false, can_install).clicked() {
-            acts.push(Act::AskRemoval(row.package.clone()));
-        }
-    }
+    ui.add(Label::new(RichText::new(text).color(color).font(regular(12.5))).wrap());
 }

@@ -264,6 +264,22 @@ impl FigApp {
             self.observe_ime(&ctx, false);
             return;
         }
+        if self.ui.import_window.is_some() || self.ui.project_settings.is_some() {
+            // Before the widgets: a text field that sees Escape gives up its focus and no one could tell.
+            dialogs::keys(self, &ctx);
+            if self.ui.import_window.is_some() {
+                dialogs::import_component::show(self, ui);
+            } else {
+                dialogs::project_settings::show(self, ui);
+            }
+            dialogs::show(self, &ctx);
+            updates_ui::show(self, &ctx);
+            self.toast_ui(&ctx);
+            windows::requests(self, &ctx);
+            shortcuts::clear_field_save_marker(&ctx);
+            self.observe_ime(&ctx, false);
+            return;
+        }
         let playground_front = playground::on_screen(self);
         let hidden = playground_front || self.session.ds().map(|d| d.view.ui_hidden).unwrap_or(false);
         let narrow = !hidden && ui.available_width() < NARROW_WIDTH;

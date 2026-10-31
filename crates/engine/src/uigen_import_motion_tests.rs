@@ -130,7 +130,7 @@ impl CaptureBackend for Backend {
                 let size = props.get("size").and_then(Value::as_str).unwrap_or("md");
                 Ok(json!({"snapshot": snapshot(&self.look, style, size, state, theme), "png": ".uigen/captures/synthetic.png"}))
             }
-            CaptureJob::Install { .. } | CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => {
+            CaptureJob::Install { .. } | CaptureJob::InstallMany { .. } | CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => {
                 Err(service_failure(CaptureErrorKind::Internal, "unexpected job"))
             }
         };

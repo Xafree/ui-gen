@@ -1,0 +1,299 @@
+//! The queue of the "Choose your components" surface: it belongs to the file it started from, whatever
+//! tab comes to the front, and it stops cleanly. The bench is the one of `import_window_ui_tests`.
+
+use egui::accesskit::{Node, Role};
+use egui::{Key, Modifiers};
+use serde_json::json;
+
+use crate::import_window_ui_tests::{Bench, IMPORT, LIST, OTHER, PACKAGE, VERSION, mentions, source};
+
+fn open_pair(tag: &str) -> Bench {
+    let mut b = Bench::pair(tag, &["Alert", "Button", "Chip"], &["Button", "Slider"]);
+    b.open(None);
+    b.wait_until("both cards are listed", |b| b.has("Slider") && b.has("Alert"));
+    b
+}
+
+fn new_tab_in_front(b: &mut Bench) -> u64 {
+    b.run("file.new", json!({}));
+    b.ui.app.session.ds().expect("a file is in front").uid
+}
+
+fn front(b: &Bench) -> u64 {
+    b.ui.app.session.ds().expect("a file is in front").uid
+}
+
+#[test]
+fn the_queue_stays_on_its_file_when_another_tab_comes_to_the_front() {
+    let mut b = open_pair("queue-tab");
+    let project_doc = front(&b);
+    b.click("Alert");
+    b.click("Slider");
+    b.hold();
+    let mark = b.mark();
+    b.click("Import");
+    let other = new_tab_in_front(&mut b);
+    assert_ne!(other, project_doc);
+
+    b.release_all();
+    b.wait_until("the summary is drawn", |b| b.shows("Imported 2 of 2 components"));
+    let calls = b.ran_since(mark, IMPORT);
+    let order: Vec<&str> = calls.iter().map(|c| c["package"].as_str().unwrap_or_default()).collect();
+    assert_eq!(order, [PACKAGE, OTHER], "the queue goes on against its own project");
+    assert_eq!(front(&b), other, "the tab the user chose stays in front");
+    let shown = b.shown();
+    assert!(!mentions(&shown, "Couldn't import"), "no false failure: {shown:?}");
+}
+
+#[test]
+fn closing_the_file_of_the_queue_stops_it_and_counts_the_rest_as_failed_with_a_message() {
+    let mut b = open_pair("queue-closed");
+    let project_doc = front(&b);
+    b.click("Alert");
+    b.click("Slider");
+    b.hold();
+    let mark = b.mark();
+    b.click("Import");
+    new_tab_in_front(&mut b);
+    let index = b.ui.app.session.docs.iter().position(|d| d.uid == project_doc).expect("the file is open");
+    b.run("file.close", json!({"index": index, "force": true}));
+
+    b.release_all();
+    b.settle();
+    assert_eq!(b.ran_since(mark, IMPORT).len(), 1, "nothing starts once the file is gone");
+    let failure = b.ui.app.ui.last_error.clone().unwrap_or_default();
+    assert!(failure.contains("Slider") && failure.contains("closed"), "the message says what happened: {failure:?}");
+}
+
+#[test]
+fn cancel_during_a_run_keeps_the_surface_until_the_running_component_ends_and_starts_nothing_else() {
+    let mut b = open_pair("stop-cancel");
+    b.click("Alert");
+    b.click("Slider");
+    b.hold();
+    let mark = b.mark();
+    b.click("Import");
+    b.click("Cancel");
+    assert!(b.window_open(), "the surface stays while the job runs: {:?}", b.shown());
+    assert!(b.shows("Stopping"), "and says so: {:?}", b.shown());
+
+    b.release_all();
+    b.settle();
+    assert!(!b.window_open(), "it goes once the job ended");
+    assert_eq!(b.ran_since(mark, IMPORT).len(), 1, "the next component never starts");
+    let toast = b.ui.app.ui.toast.as_ref().map(|t| t.0.clone()).unwrap_or_default();
+    assert!(toast.contains("Stopped after 1 of 2"), "{toast:?}");
+}
+
+#[test]
+fn escape_during_a_run_stops_like_cancel() {
+    let mut b = open_pair("stop-escape");
+    b.click("Alert");
+    b.click("Slider");
+    b.hold();
+    let mark = b.mark();
+    b.click("Import");
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(b.window_open() && b.shows("Stopping"), "{:?}", b.shown());
+    b.release_all();
+    b.settle();
+    assert!(!b.window_open());
+    assert_eq!(b.ran_since(mark, IMPORT).len(), 1);
+}
+
+#[test]
+fn a_batch_whose_surface_lives_in_a_second_window_goes_on_to_its_summary() {
+    let mut b = Bench::pair("second-window", &["Alert", "Button", "Chip"], &["Button", "Slider"]);
+    for package in [PACKAGE, OTHER] {
+        b.run(LIST, json!({"package": package}));
+    }
+    b.settle();
+    let index = b.ui.app.session.active;
+    let ctx = b.ui.ctx.clone();
+    ctx.set_embed_viewports(false);
+    let window = crate::windows::open(&mut b.ui.app, &ctx, Some(index), None, None).expect("a second window");
+    let wanted = [(PACKAGE, "Alert"), (OTHER, "Slider")];
+    crate::windows::as_window(&mut b.ui.app, window, |app| crate::dialogs::import_component::start_for_test(app, &wanted));
+    for _ in 0..20 {
+        b.ui.frame(vec![]);
+    }
+    let summary = crate::windows::as_window(&mut b.ui.app, window, |app| crate::dialogs::import_component::summary_for_test(app)).flatten();
+    assert_eq!(summary, Some((2, 2)), "the second window gets its events");
+}
+
+#[test]
+fn escape_closes_a_modal_over_a_surface_first_and_leaves_the_surface() {
+    let mut b = open_pair("escape-modal");
+    b.ui.app.ui.about = true;
+    b.settle();
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.ui.app.ui.about, "the modal on top goes");
+    assert!(b.window_open(), "the surface behind stays");
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.window_open());
+
+    b.open_settings();
+    b.ui.app.ui.preferences = true;
+    b.settle();
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.ui.app.ui.preferences);
+    assert!(b.flat().contains("Installed in this project"), "the page stays: {:?}", b.shown());
+}
+
+#[test]
+fn escape_goes_to_the_focused_search_first_then_to_the_surface() {
+    let mut b = open_pair("escape-search");
+    b.click("Search components");
+    b.type_text("chi");
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(b.window_open(), "the field takes the first Escape");
+    assert!(b.has("Alert"), "and it emptied: {:?}", b.shown());
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.window_open(), "the next one closes the surface");
+}
+
+#[test]
+fn escape_ends_the_version_being_changed_and_the_removal_being_asked_before_the_page() {
+    let mut b = Bench::nominal("escape-sub", &["Alert"]);
+    b.open_settings();
+    b.click("Change version");
+    assert!(b.has("Apply"));
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.has("Apply") && b.has("Change version"), "the row comes back: {:?}", b.shown());
+    b.click("Remove");
+    assert!(b.has("Confirm removal"));
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.has("Confirm removal") && b.has("Remove"), "{:?}", b.shown());
+    assert!(b.flat().contains("Installed in this project"), "the page stays");
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.flat().contains("Installed in this project"), "the next Escape closes it");
+}
+
+fn wide_and_slim(tag: &str) -> Bench {
+    let values = |prefix: &str, count: usize| (0..count).map(|index| format!("{prefix}{index}")).collect::<Vec<_>>();
+    let wide = json!({"name": "Wide", "props": [
+        {"name": "variant", "type": "enum", "values": values("s", 9)},
+        {"name": "size", "type": "enum", "values": values("z", 4)},
+    ]});
+    let slim = json!({"name": "Slim", "props": []});
+    let inspected = json!({"package": PACKAGE, "version": VERSION, "framework": "react", "components": [wide, slim], "notes": []});
+    let mut b = Bench::with(tag, &[source(PACKAGE, VERSION, false)], vec![(PACKAGE.to_string(), Ok(inspected))]);
+    b.open(None);
+    b.wait_until("the rows are listed", |b| b.has("Wide"));
+    b
+}
+
+#[test]
+fn an_oversized_component_is_named_and_does_not_hold_the_others_back() {
+    let mut b = wide_and_slim("oversized-others");
+    b.click("Wide");
+    b.click("Slim");
+    let mark = b.mark();
+    b.click("Import");
+    b.wait_until("the summary is drawn", |b| b.shows("Imported 1 of 2 components"));
+    let calls = b.ran_since(mark, IMPORT);
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert_eq!(calls[0]["component"], json!("Slim"));
+    assert!(b.shows("Wide: More than"), "the failure names it: {:?}", b.shown());
+}
+
+#[test]
+fn an_oversized_component_alone_is_named_in_the_refusal() {
+    let mut b = wide_and_slim("oversized-alone");
+    b.click("Wide");
+    b.click("Import");
+    assert!(b.shows("Wide: More than"), "{:?}", b.shown());
+}
+
+#[test]
+fn import_clicked_during_a_run_says_it_is_running_and_starts_nothing() {
+    let mut b = open_pair("import-twice");
+    b.click("Alert");
+    b.click("Slider");
+    b.hold();
+    let mark = b.mark();
+    b.click("Import");
+    b.click("Import");
+    assert!(b.shows("The import is already running."), "{:?}", b.shown());
+    assert_eq!(b.ran_since(mark, IMPORT).len(), 1);
+    b.release_all();
+    b.wait_until("the summary is drawn", |b| b.shows("Imported 2 of 2 components"));
+    assert!(!b.shows("The import is already running."), "the note ends with the run");
+}
+
+#[test]
+fn the_crumb_the_steps_the_cards_and_the_tag_reach_a_screen_reader_and_the_search_has_the_first_focus() {
+    let mut b = open_pair("speaks");
+    assert_eq!(crate::a11y::focused_name(&b.ui.ctx), "Search components", "the first control has the focus");
+    b.click_nth("Button", 0);
+    let nodes = b.nodes();
+    let labelled = |wanted: &str| nodes.iter().any(|n| n.role() == Role::Label && n.label().is_some_and(|l| l.trim() == wanted));
+    for wanted in ["mylib / Import components", "01 Libraries ✓", "02 Components", PACKAGE, OTHER] {
+        assert!(labelled(wanted), "{wanted:?} is spoken");
+    }
+    let rows: Vec<&Node> = nodes.iter().filter(|n| n.role() == Role::CheckBox && n.label().is_some_and(|l| l.trim() == "Button")).collect();
+    let tag = format!("Already taken in {PACKAGE}");
+    assert!(rows.iter().any(|n| n.description() == Some(tag.as_str())), "the row says its tag");
+}
+
+#[test]
+fn the_surfaces_take_their_colours_from_the_theme() {
+    for (file, source) in [("view", include_str!("dialogs/import_component/view.rs")), ("page", include_str!("dialogs/project_settings/page.rs"))] {
+        assert!(!source.contains("Color32::from_rgb"), "{file} has a hard-coded colour");
+    }
+    assert!(!include_str!("dialogs/import_component/view.rs").contains("Color32::WHITE"), "the unticked box has a token");
+    assert!(!include_str!("dialogs/project_settings/page.rs").contains("line(ui, &format!(\"$ {}\", run.command), Color32::WHITE)"));
+}
+
+#[test]
+fn a_row_tagged_as_taken_can_still_be_ticked() {
+    let mut b = open_pair("tagged-free");
+    b.click_nth("Button", 0);
+    assert!(b.shows("Already taken in"), "{:?}", b.shown());
+    let tagged = b.controls("Button").remove(1);
+    assert!(!tagged.is_disabled(), "the tagged row is a normal row");
+    b.click_nth("Button", 1);
+    assert!(b.checked_nth("Button", 1), "a click ticks it");
+}
+
+#[test]
+fn the_selection_panel_stays_in_view_while_the_list_scrolls() {
+    let names: Vec<String> = (0..70).map(|index| format!("Row{index}")).collect();
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    let mut b = Bench::nominal("sticky", &names);
+    b.open(None);
+    b.wait_until("the rows are listed", |b| b.has("Row0"));
+    let top = |b: &mut Bench, label: &str| b.control(label).and_then(|n| n.bounds()).map_or(f64::NAN, |bounds| bounds.y0);
+    let first_before = top(&mut b, "Row0");
+    let import_before = top(&mut b, "Import");
+    for _ in 0..60 {
+        b.press(Key::Tab, Modifiers::NONE);
+    }
+    let first_after = top(&mut b, "Row0");
+    assert!(first_after < first_before - 400.0, "the list scrolled: {first_before} to {first_after}");
+    let import_after = top(&mut b, "Import");
+    assert!(import_after > 0.0, "Import is still on screen: {import_before} to {import_after}");
+}
+
+#[test]
+fn parts_are_hidden_until_show_parts_and_a_ticked_part_stays_listed() {
+    let mut b = Bench::nominal("parts", &["Card", "CardHeader", "CardRoot", "Chip"]);
+    b.open(None);
+    b.wait_until("the rows are listed", |b| b.has("Card"));
+    assert!(!b.has("CardHeader") && !b.has("CardRoot"), "{:?}", b.shown());
+    assert!(b.has("Chip"));
+    assert!(mentions(&b.shown(), "0 of 2"), "{:?}", b.shown());
+    b.click("Show parts");
+    assert!(b.has("CardHeader") && b.has("CardRoot"), "nothing is out of reach");
+    assert!(mentions(&b.shown(), "0 of 4"), "{:?}", b.shown());
+    b.click("CardHeader");
+    b.click("Show parts");
+    assert!(b.has("CardHeader"), "a ticked part stays");
+    assert!(!b.has("CardRoot"));
+}
+
+#[test]
+fn a_library_with_no_part_has_no_show_parts_control() {
+    let mut b = open_pair("no-parts");
+    assert!(!b.has("Show parts"));
+}
