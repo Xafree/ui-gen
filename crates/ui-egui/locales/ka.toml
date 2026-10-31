@@ -1555,7 +1555,6 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Unresolve" = "ხელახლა გახსნა"
 "Unsaved changes" = "შეუნახავი ცვლილებები"
 "Unsaved changes in {names}. Save them before closing?" = "შეუნახავი ცვლილებები: {names}. შევინახოთ დახურვამდე?"
-"Unsaved changes: save first ({save}), or close the tab with {alt}-click to discard" = "შეუნახავი ცვლილებები: ჯერ შეინახეთ ({save}) ან გასაუქმებლად დახურეთ ჩანართი {alt}+დაწკაპუნებით"
 "{name} has unsaved changes. Save it before closing the tab?" = "{name}-ში არის შეუნახავი ცვლილებები. შევინახოთ ჩანართის დახურვამდე?"
 "Up" = "ზემოთ"
 "Update plugin" = "პლაგინის განახლება"

@@ -175,3 +175,24 @@ fn cancel_and_escape_do_nothing() {
     assert_eq!(app.session.docs.len(), 1);
     assert!(app.session.ds().unwrap().is_dirty());
 }
+
+#[test]
+fn the_close_tab_menu_item_and_its_shortcut_ask_the_same_question() {
+    let ctx = egui::Context::default();
+    let mut app = FigApp::new(dirty_session(None), Box::new(NoServices));
+    frame(&ctx, &mut app, false);
+    crate::menus::invoke(&mut app, "file.close");
+    assert!(app.ui.tab_close.as_ref().is_some_and(|q| q.stage == Stage::Asking), "the question shows");
+    assert!(app.ui.toast.is_none(), "no toast");
+    assert_eq!(app.session.docs.len(), 1, "still open");
+}
+
+#[test]
+fn the_close_tab_menu_item_closes_a_clean_tab_at_once() {
+    let ctx = egui::Context::default();
+    let mut app = FigApp::new(Session::new(), Box::new(NoServices));
+    frame(&ctx, &mut app, false);
+    crate::menus::invoke(&mut app, "file.close");
+    assert!(app.ui.tab_close.is_none());
+    assert!(app.session.docs.is_empty());
+}
