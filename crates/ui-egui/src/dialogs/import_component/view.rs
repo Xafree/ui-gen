@@ -124,7 +124,7 @@ fn top_bar(ui: &mut Ui, t: &Tokens, project: &str, stopping: bool, acts: &mut Ve
     let name = ui.painter().text(pos2(bar.min.x + 20.0, centre_y), Align2::LEFT_CENTER, project, regular(13.5), t.text_secondary);
     let slash = ui.painter().text(pos2(name.max.x + 6.0, centre_y), Align2::LEFT_CENTER, "/", regular(13.5), t.text_secondary);
     let page = ui.painter().text(pos2(slash.max.x + 6.0, centre_y), Align2::LEFT_CENTER, tr("Import components"), regular(13.5), t.text);
-    let crumb = ui.interact(name.union(page), ui.id().with("crumb"), Sense::hover());
+    let crumb = ui.interact(name.union(page), ui.scope_id().with("crumb"), Sense::hover());
     a11y::spoken(&crumb, &format!("{project} / {}", tr("Import components")));
     let inner = Rect::from_min_max(pos2(bar.min.x + 20.0, bar.min.y), pos2(bar.max.x - 20.0, bar.max.y));
     ui.scope_builder(UiBuilder::new().max_rect(inner).layout(Layout::right_to_left(Align::Center)), |ui| {
@@ -149,7 +149,7 @@ fn steps(ui: &mut Ui, t: &Tokens) {
         let digits = ui.painter().text(pos2(left, y), Align2::LEFT_CENTER, number, mono(13.0), t.text);
         let font = if weight { semibold(13.0) } else { regular(13.0) };
         let written = ui.painter().text(pos2(digits.max.x + 5.0, y), Align2::LEFT_CENTER, &label, font, t.text);
-        let step = ui.interact(digits.union(written), ui.id().with(("step", index)), Sense::hover());
+        let step = ui.interact(digits.union(written), ui.scope_id().with(("step", index)), Sense::hover());
         a11y::spoken(&step, &format!("{number} {label}"));
     }
 }
@@ -290,7 +290,7 @@ fn library(ui: &mut Ui, t: &Tokens, card: &CardView, query: &str, acts: &mut Vec
         let (head, _) = ui.allocate_exact_size(vec2(ui.available_width(), HEAD_H), Sense::hover());
         let top = CornerRadius { nw: 13, ne: 13, sw: 0, se: 0 };
         ui.painter().rect_filled(head, top, t.hover);
-        let heading = ui.interact(head, ui.id().with(("card", card.label.as_str())), Sense::hover());
+        let heading = ui.interact(head, ui.scope_id().with(("card", card.label.as_str())), Sense::hover());
         a11y::spoken(&heading, &card.label);
         ui.painter().text(pos2(head.min.x + 16.0, head.center().y), Align2::LEFT_CENTER, &card.label, semibold(13.5), t.text);
         let count = trf("{n} of {m}", &[("n", &card.ticked), ("m", &card.total)]);
