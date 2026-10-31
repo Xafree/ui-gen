@@ -324,8 +324,12 @@ pub(crate) fn pump(app: &mut FigApp) {
         }
     }
     if imported {
-        edit(app, |state| state.themes.invalidate());
-        sync(app);
+        for window in crate::windows::all_ids(app) {
+            crate::windows::as_window(app, window, |app| {
+                edit(app, |state| state.themes.invalidate());
+                sync(app);
+            });
+        }
     }
 }
 

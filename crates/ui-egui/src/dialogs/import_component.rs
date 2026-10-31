@@ -76,6 +76,11 @@ pub struct ImportWindow {
 }
 
 impl ImportWindow {
+    fn awaits(&self, job: u64) -> bool {
+        let reading = self.reads.iter().any(|read| read.job == Some(job));
+        reading || matches!(&self.run, Run::Importing(Batch { current: Some((_, running)), .. }) if *running == job)
+    }
+
     /// Cancel or Escape while a component is being captured: the service can't drop a job, so
     /// nothing more starts and the surface waits for it. `false`: nothing runs, the surface can go.
     pub(crate) fn stop_running(&mut self) -> bool {
@@ -118,6 +123,12 @@ pub(crate) fn request(app: &mut FigApp, package: Option<&str>) {
 
 /// Take the capture events the surface shows; `false` leaves the event to the toast.
 pub(crate) fn pump_event(app: &mut FigApp, event: &CaptureEvent) -> bool {
+    let job = event.job;
+    let owner = crate::windows::holding(app, |ui| ui.import_window.as_ref().is_some_and(|state| state.awaits(job)));
+    owner.and_then(|window| crate::windows::as_window(app, window, |app| take_event(app, event))).unwrap_or(false)
+}
+
+fn take_event(app: &mut FigApp, event: &CaptureEvent) -> bool {
     let Some(state) = app.ui.import_window.as_mut() else { return false };
     match (event.command.as_str(), &event.outcome) {
         (LIST, outcome) => match state.reads.iter_mut().find(|read| read.job == Some(event.job)) {
@@ -516,6 +527,26 @@ fn perform(app: &mut FigApp, act: Act) {
             app.run(SETTINGS, json!({}));
         }
         Act::Show => {}
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn start_for_test(app: &mut FigApp, wanted: &[(&str, &str)]) {
+    let mut state = ImportWindow::new(None);
+    state.ticked = wanted.iter().map(|(package, name)| ((*package).to_string(), (*name).to_string())).collect();
+    app.ui.import_window = Some(state);
+    if let Some(mut state) = app.ui.import_window.take() {
+        let _ = settle(app, &mut state);
+        app.ui.import_window = Some(state);
+    }
+    import(app);
+}
+
+#[cfg(test)]
+pub(crate) fn summary_for_test(app: &FigApp) -> Option<(usize, usize)> {
+    match app.ui.import_window.as_ref().map(|state| &state.run) {
+        Some(Run::Summary { done, total, .. }) => Some((*done, *total)),
+        _ => None,
     }
 }
 

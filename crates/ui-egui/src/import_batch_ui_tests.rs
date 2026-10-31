@@ -4,7 +4,7 @@
 use egui::{Key, Modifiers};
 use serde_json::json;
 
-use crate::import_window_ui_tests::{Bench, IMPORT, OTHER, PACKAGE, mentions};
+use crate::import_window_ui_tests::{Bench, IMPORT, LIST, OTHER, PACKAGE, mentions};
 
 fn open_pair(tag: &str) -> Bench {
     let mut b = Bench::pair(tag, &["Alert", "Button", "Chip"], &["Button", "Slider"]);
@@ -98,4 +98,24 @@ fn escape_during_a_run_stops_like_cancel() {
     b.settle();
     assert!(!b.window_open());
     assert_eq!(b.ran_since(mark, IMPORT).len(), 1);
+}
+
+#[test]
+fn a_batch_whose_surface_lives_in_a_second_window_goes_on_to_its_summary() {
+    let mut b = Bench::pair("second-window", &["Alert", "Button", "Chip"], &["Button", "Slider"]);
+    for package in [PACKAGE, OTHER] {
+        b.run(LIST, json!({"package": package}));
+    }
+    b.settle();
+    let index = b.ui.app.session.active;
+    let ctx = b.ui.ctx.clone();
+    ctx.set_embed_viewports(false);
+    let window = crate::windows::open(&mut b.ui.app, &ctx, Some(index), None, None).expect("a second window");
+    let wanted = [(PACKAGE, "Alert"), (OTHER, "Slider")];
+    crate::windows::as_window(&mut b.ui.app, window, |app| crate::dialogs::import_component::start_for_test(app, &wanted));
+    for _ in 0..20 {
+        b.ui.frame(vec![]);
+    }
+    let summary = crate::windows::as_window(&mut b.ui.app, window, |app| crate::dialogs::import_component::summary_for_test(app)).flatten();
+    assert_eq!(summary, Some((2, 2)), "the second window gets its events");
 }
