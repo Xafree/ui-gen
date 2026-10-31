@@ -359,12 +359,11 @@ fn within_a_point(a: f32, b: f32) -> bool {
     (a - b).abs() <= 1.0
 }
 
-const PANEL_CONTROLS: [(Role, &str); 8] = [
+const PANEL_CONTROLS: [(Role, &str); 7] = [
     (Role::Navigation, "Sidebar"),
     (Role::Pane, "Layers"),
     (Role::Pane, "Design"),
     (Role::Tab, "File"),
-    (Role::Tab, "Components"),
     (Role::Tab, "Design"),
     (Role::Tab, "Prototype"),
     (Role::Button, "Share: live session, export"),

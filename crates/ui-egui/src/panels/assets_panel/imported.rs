@@ -28,6 +28,7 @@ pub(super) struct Block {
     /// Keys the thumbnails of the section's tiles (`<package> <version>`) and remembers its fold.
     pub key: String,
     pub package: String,
+    pub version: String,
     pub title: String,
     pub removed: bool,
     pub tiles: Vec<Tile>,
@@ -61,7 +62,7 @@ pub(super) fn list(app: &FigApp, doc: &Document, q: &str) -> Imported {
         }
         let key = format!("{} {}", section.package, section.version);
         let title = trf("Imported · {package} {version}", &[("package", &section.package), ("version", &section.version)]);
-        found.blocks.push(Block { key, package: section.package, title, removed: section.removed, tiles });
+        found.blocks.push(Block { key, package: section.package, version: section.version, title, removed: section.removed, tiles });
     }
     found
 }

@@ -480,6 +480,7 @@ pub struct UiState {
     /// the tree last revealed (ancestors expand and the row scrolls into view when it changes).
     pub layer_search: bool,
     pub layer_filter: String,
+    pub library_panel: panels::assets_panel::library_tab::LibraryPanel,
     pub layer_anchor: Option<NodeId>,
     /// The layers panel has the keyboard: arrow keys move through its rows instead of nudging
     /// (set by a click on a row, cleared by a press on the canvas).
@@ -666,6 +667,7 @@ impl Default for UiState {
             key_box: None,
             layer_search: false,
             layer_filter: String::new(),
+            library_panel: Default::default(),
             layer_anchor: None,
             layers_focus: false,
             pages_focus: None,
@@ -825,5 +827,7 @@ mod selection_spacing_tests;
 #[cfg(test)]
 mod type_settings_tests;
 
+#[cfg(test)]
+mod library_panel_tests;
 #[cfg(test)]
 mod typography_scrub_tests;

@@ -1949,6 +1949,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Compare with the original" = "ორიგინალთან შედარება"
 "Original" = "ორიგინალი"
 "Library" = "ბიბლიოთეკა"
+"Library|section" = "ბიბლიოთეკა"
 "Shapes {percent}" = "ფორმები {percent}"
 "OK" = "OK"
 "Differs" = "განსხვავდება"

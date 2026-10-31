@@ -305,10 +305,11 @@ impl Lab {
     }
 
     fn tile(&mut self, name: &str) -> Pos2 {
-        let (_, at, size) = self
-            .panel_texts()
+        let shown = self.panel_texts();
+        let pages = shown.iter().find(|(t, _, _)| t == "Pages").map_or(f32::MAX, |(_, p, _)| p.y);
+        let (_, at, size) = shown
             .into_iter()
-            .filter(|(t, _, _)| t == name)
+            .filter(|(t, p, _)| t == name && p.y < pages)
             .max_by(|a, b| a.1.y.total_cmp(&b.1.y))
             .unwrap_or_else(|| panic!("no tile {name:?} in the panel"));
         at + vec2(8.0, size.y / 2.0)
@@ -445,7 +446,7 @@ fn a_source_that_is_removed_has_no_import_button_in_its_section() {
     let mut lab = Lab::new("removed", "en");
     lab.import_now("Chip");
     lab.show_components();
-    assert_eq!(lab.centres_of(Some(Role::Button), IMPORT_BUTTON).len(), 2, "the search row and the section");
+    assert_eq!(lab.centres_of(Some(Role::Button), IMPORT_BUTTON).len(), 1, "the section");
 
     lab.run("project.removeSource", json!({"package": PACKAGE}));
     for _ in 0..MAX_FRAMES {
@@ -453,7 +454,7 @@ fn a_source_that_is_removed_has_no_import_button_in_its_section() {
         lab.ui.frame(vec![]);
     }
     lab.show_components();
-    assert_eq!(lab.centres_of(Some(Role::Button), IMPORT_BUTTON).len(), 1, "only the search row is left");
+    assert_eq!(lab.centres_of(Some(Role::Button), IMPORT_BUTTON).len(), 0, "the removed source has none");
 }
 
 #[test]

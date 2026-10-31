@@ -330,6 +330,11 @@ fn offered(found: &Inspected) -> impl Iterator<Item = &InspectedComponent> {
     found.components.iter().filter(|component| is_visual(&component.name))
 }
 
+/// The families of the active sources of the project of the tab.
+pub(crate) fn project_families(app: &FigApp) -> Vec<Family> {
+    active_sources(app).map(|(root, sources)| families(app, &root, &sources)).unwrap_or_default()
+}
+
 fn families(app: &FigApp, root: &str, sources: &[Source]) -> Vec<Family> {
     let counts: Vec<usize> = sources
         .iter()

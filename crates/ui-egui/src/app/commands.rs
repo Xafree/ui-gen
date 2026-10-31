@@ -238,6 +238,7 @@ impl FigApp {
                 "focus.region" => self.ui.nav.step(r.data.get("step").and_then(Value::as_i64).unwrap_or(1).clamp(-4, 4) as i32),
                 "panel.layers" => self.ui.left_tab = LeftTab::File,
                 "panel.assets" => {
+                    self.ui.library_panel.reveal = true;
                     self.ui.left_tab = LeftTab::Assets;
                     self.ui.open_left_panel();
                     self.ui.versions = Default::default();

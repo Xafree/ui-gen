@@ -258,9 +258,11 @@ impl Lab {
         self.ui.frame(vec![]);
         let width = RAIL_WIDTH + self.ui.app.ui.left_width;
         let out = self.ui.frame_output(vec![]);
-        let (_, at, size) = texts(&flat(&out.shapes))
+        let shown = texts(&flat(&out.shapes));
+        let pages = shown.iter().find(|(t, _, _)| t == "Pages").map_or(f32::MAX, |(_, p, _)| p.y);
+        let (_, at, size) = shown
             .into_iter()
-            .filter(|(t, p, _)| t == name && p.x >= RAIL_WIDTH && p.x < width)
+            .filter(|(t, p, _)| t == name && p.x >= RAIL_WIDTH && p.x < width && p.y < pages)
             .max_by(|a, b| a.1.y.total_cmp(&b.1.y))
             .unwrap_or_else(|| panic!("no tile {name:?} in the panel"));
         at + vec2(8.0, size.y / 2.0)

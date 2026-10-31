@@ -15,6 +15,8 @@ pub struct Family {
     pub name: String,
     pub version: String,
     pub packages: Vec<String>,
+    /// A package of the family offers components (a lone stylesheet package does not).
+    pub has_components: bool,
 }
 
 fn is_head(source: &SourceFacts) -> bool {
@@ -58,6 +60,7 @@ pub fn group_sources(sources: &[SourceFacts]) -> Vec<Family> {
                 name,
                 version: head.version.to_string(),
                 packages: list.iter().map(|&index| sources[index].package.to_string()).collect(),
+                has_components: is_head(head),
             };
             (first, family)
         })
@@ -84,6 +87,16 @@ pub fn dependencies_of(root: &str, package: &str, version: &str) -> Vec<String> 
         cache.get_or_insert_with(HashMap::new).insert(key, read.clone());
     }
     read
+}
+
+/// Tests: packages were written by hand in project folder `root`.
+#[cfg(test)]
+pub fn forget_dependencies_of(root: &str) {
+    if let Ok(mut cache) = DEPENDENCIES.lock()
+        && let Some(map) = cache.as_mut()
+    {
+        map.retain(|(in_root, _, _), _| in_root != root);
+    }
 }
 
 /// A job on the sources of a project ended: what is installed may have changed.

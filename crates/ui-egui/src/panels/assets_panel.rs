@@ -28,6 +28,7 @@ use crate::icons::{self, Icon};
 use crate::theme::{COMPONENT, Tokens, regular, semibold};
 
 mod imported;
+pub(crate) mod library_tab;
 
 const TILE_LABEL: f32 = 22.0;
 const TILE_GAP: f32 = 8.0;
@@ -139,6 +140,8 @@ struct Listing {
     local: Vec<Folder>,
     local_styles: Vec<StyleRow>,
     imported: Vec<imported::Block>,
+    /// The rows of the library dropdown: the imported blocks gathered by source family.
+    families: Vec<library_tab::FamilyRow>,
     libraries: Vec<Section>,
     /// Library components and styles in this file with a newer published version.
     updates: usize,
@@ -253,6 +256,7 @@ fn libraries_key(app: &FigApp, doc: &Document) -> u64 {
 
 fn build_listing(app: &FigApp, doc: &Document, q: &str, key: (u64, String, u64)) -> Listing {
     let imported = imported::list(app, doc, q);
+    let families = library_tab::family_rows(&crate::dialogs::import_component::project_families(app), &imported.blocks, !q.is_empty());
     let local = library::local_components(doc)
         .into_iter()
         .filter_map(|id| {
@@ -286,7 +290,7 @@ fn build_listing(app: &FigApp, doc: &Document, q: &str, key: (u64, String, u64))
             libraries.push(sec);
         }
     }
-    Listing { key, local: foldered("", local), local_styles, imported: imported.blocks, libraries, updates }
+    Listing { key, local: foldered("", local), local_styles, imported: imported.blocks, families, libraries, updates }
 }
 
 /// Re-read enabled library files that changed on disk (throttled).
@@ -498,33 +502,58 @@ fn tiles(ui: &mut Ui, w: f32, src: &Source, list: &[Tile], thumbs: &Thumbs, want
             }
             let name_colour = if own_hidden { t.text_secondary } else { t.text };
             crate::bidi::paint_name(ui.painter(), pos2(x, label.center().y), &item.label, regular(11.0), name_colour, tile);
-            let imported = matches!(src, Source::Imported(_));
-            if *src == Source::Local {
-                crate::right::context_popup(&resp).show(|ui| {
-                    if crate::right::menu_check(ui, item.hidden, tr("Hide when publishing"), "") {
-                        *act = Some(Act::Hide(item.id, !item.hidden));
-                        ui.close();
-                    }
-                });
-            }
-            if imported {
-                imported::tile_menu(ui, &resp, item.id, act);
-            }
-            let resp = if imported {
-                imported::tile_tip(resp, &item.name)
-            } else {
-                resp.on_hover_text(trf(
-                    "{name}\nDrag onto the canvas, or click to place in the middle of the view.\nHold Alt (Option) while dropping onto an instance to swap it.",
-                    &[("name", &item.name)],
-                ))
-            };
-            if resp.drag_started() {
-                *act = Some(Act::Drag(AssetDrag { src: src.clone(), component: item.id, set: item.set }));
-            }
-            if resp.clicked() && !imported {
-                *act = Some(Act::Place(src.clone(), item.id));
-            }
+            tile_actions(ui, resp, src, item, act);
         }
+    }
+}
+
+/// What a component's tile or row does: its context menu, its tooltip, dragging onto the canvas and,
+/// unless imported, placing on a click.
+fn tile_actions(ui: &Ui, resp: egui::Response, src: &Source, item: &Tile, act: &mut Option<Act>) -> egui::Response {
+    let imported = matches!(src, Source::Imported(_));
+    if *src == Source::Local {
+        crate::right::context_popup(&resp).show(|ui| {
+            if crate::right::menu_check(ui, item.hidden, tr("Hide when publishing"), "") {
+                *act = Some(Act::Hide(item.id, !item.hidden));
+                ui.close();
+            }
+        });
+    }
+    if imported {
+        imported::tile_menu(ui, &resp, item.id, act);
+    }
+    let resp = if imported {
+        imported::tile_tip(resp, &item.name)
+    } else {
+        resp.on_hover_text(trf(
+            "{name}\nDrag onto the canvas, or click to place in the middle of the view.\nHold Alt (Option) while dropping onto an instance to swap it.",
+            &[("name", &item.name)],
+        ))
+    };
+    if resp.drag_started() {
+        *act = Some(Act::Drag(AssetDrag { src: src.clone(), component: item.id, set: item.set }));
+    }
+    if resp.clicked() && !imported {
+        *act = Some(Act::Place(src.clone(), item.id));
+    }
+    resp
+}
+
+/// A style's mark: a swatch for a paint style, else an icon in `colour`.
+fn style_icon(ui: &Ui, rect: Rect, kind: &StyleKind, colour: Color32) {
+    let icon = match kind {
+        StyleKind::Paint { paints } => {
+            if let Some(p) = paints.first() {
+                crate::widgets::paint_swatch(ui.painter(), rect, p);
+            }
+            None
+        }
+        StyleKind::Text { .. } => Some(Icon::Text),
+        StyleKind::Effect { .. } => Some(Icon::Effects),
+        StyleKind::Grid { .. } => Some(Icon::Grid),
+    };
+    if let Some(i) = icon {
+        icons::paint(ui.painter(), rect, i, colour);
     }
 }
 
@@ -536,21 +565,7 @@ fn style_rows(ui: &mut Ui, w: f32, src: &Source, list: &[StyleRow], act: &mut Op
         if resp.hovered() {
             ui.painter().rect_filled(r.shrink2(vec2(8.0, 1.0)), CornerRadius::same(5), t.hover);
         }
-        let icon_rect = Rect::from_center_size(pos2(r.min.x + 22.0, r.center().y), vec2(14.0, 14.0));
-        let icon = match &s.kind {
-            StyleKind::Paint { paints } => {
-                if let Some(p) = paints.first() {
-                    crate::widgets::paint_swatch(ui.painter(), icon_rect, p);
-                }
-                None
-            }
-            StyleKind::Text { .. } => Some(Icon::Text),
-            StyleKind::Effect { .. } => Some(Icon::Effects),
-            StyleKind::Grid { .. } => Some(Icon::Grid),
-        };
-        if let Some(i) = icon {
-            icons::paint(ui.painter(), icon_rect, i, t.icon_secondary);
-        }
+        style_icon(ui, Rect::from_center_size(pos2(r.min.x + 22.0, r.center().y), vec2(14.0, 14.0)), &s.kind, t.icon_secondary);
         crate::bidi::paint_name(ui.painter(), pos2(r.min.x + 40.0, r.center().y), &s.name, regular(11.0), t.text, w - 40.0 - PAD);
         if resp.on_hover_text(trf("{name}\nClick to apply to the selection", &[("name", &s.name)])).clicked() {
             *act = Some(Act::Style(src.clone(), s.id.clone()));
@@ -637,27 +652,13 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
     let doc = ds.doc.clone();
     let revision = ds.revision;
     let q = search_row(app, ui, w);
-    let key = (revision, q.clone(), libraries_key(app, &doc));
-    let listing_id = Id::unique("asset_listing");
-    let listing = match ui.data(|d| d.get_temp::<Arc<Listing>>(listing_id)) {
-        Some(l) if l.key == key => l,
-        _ => {
-            let l = Arc::new(build_listing(app, &doc, &q, key));
-            ui.data_mut(|d| d.insert_temp(listing_id, l.clone()));
-            l
-        }
-    };
+    let listing = listing_of(app, ui, &doc, revision, &q);
     if listing.updates > 0 {
         updates_banner(app, ui, w, listing.updates);
     }
-    let mut thumbs: Thumbs = ui.data(|d| d.get_temp(Id::unique("asset_thumbs"))).unwrap_or_default();
-    let mut sources: Vec<(Source, Arc<Document>)> = vec![(Source::Local, doc.clone())];
-    sources.extend(listing.imported.iter().filter(|b| !b.tiles.is_empty()).map(|b| (Source::Imported(b.key.clone()), doc.clone())));
-    sources.extend(listing.libraries.iter().filter_map(|l| l.doc.clone().map(|d| (Source::Library(l.id.clone()), d))));
-    invalidate_thumbs(ui, &mut thumbs, &sources);
+    let thumbs = thumbs_for(ui, &doc, &listing);
     let mut wanted = Vec::new();
-    let collapsed_id = Id::unique("asset_collapsed_libraries");
-    let collapsed: HashSet<String> = ui.data(|d| d.get_temp(collapsed_id)).unwrap_or_default();
+    let collapsed: HashSet<String> = ui.data(|d| d.get_temp(collapsed_id())).unwrap_or_default();
     let importable = imported::can_import(app);
     let mut act = None;
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -706,7 +707,51 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
             style_rows(ui, w, &src, &sec.styles, &mut act);
         }
     });
-    render_thumbs(ui, w, &mut thumbs, &wanted);
+    finish(app, ui, w, &doc, &listing, thumbs, &wanted, act);
+}
+
+fn collapsed_id() -> Id {
+    Id::unique("asset_collapsed_libraries")
+}
+
+/// What the panel lists for `q`, cached until the document, the search or a library changes.
+fn listing_of(app: &FigApp, ui: &Ui, doc: &Arc<Document>, revision: u64, q: &str) -> Arc<Listing> {
+    let key = (revision, q.to_string(), libraries_key(app, doc));
+    let listing_id = Id::unique("asset_listing");
+    match ui.data(|d| d.get_temp::<Arc<Listing>>(listing_id)) {
+        Some(l) if l.key == key => l,
+        _ => {
+            let l = Arc::new(build_listing(app, doc, q, key));
+            ui.data_mut(|d| d.insert_temp(listing_id, l.clone()));
+            l
+        }
+    }
+}
+
+/// The cached thumbnails, those of changed components dropped.
+fn thumbs_for(ui: &Ui, doc: &Arc<Document>, listing: &Listing) -> Thumbs {
+    let mut thumbs: Thumbs = ui.data(|d| d.get_temp(Id::unique("asset_thumbs"))).unwrap_or_default();
+    let mut sources: Vec<(Source, Arc<Document>)> = vec![(Source::Local, doc.clone())];
+    sources.extend(listing.imported.iter().filter(|b| !b.tiles.is_empty()).map(|b| (Source::Imported(b.key.clone()), doc.clone())));
+    sources.extend(listing.libraries.iter().filter_map(|l| l.doc.clone().map(|d| (Source::Library(l.id.clone()), d))));
+    invalidate_thumbs(ui, &mut thumbs, &sources);
+    thumbs
+}
+
+/// After the list is drawn: render the thumbnails it wants, run what the user did in it and follow
+/// a drag onto the canvas.
+fn finish(
+    app: &mut FigApp,
+    ui: &mut Ui,
+    w: f32,
+    doc: &Arc<Document>,
+    listing: &Listing,
+    mut thumbs: Thumbs,
+    wanted: &[(Source, NodeId)],
+    act: Option<Act>,
+) {
+    let collapsed: HashSet<String> = ui.data(|d| d.get_temp(collapsed_id())).unwrap_or_default();
+    render_thumbs(ui, w, &mut thumbs, wanted);
     let drag = ui.data(|d| d.get_temp::<AssetDrag>(drag_id()));
     let tex = drag.as_ref().and_then(|d| thumbs.map.get(&(d.src.clone(), d.component)).cloned().flatten());
     ui.data_mut(|d| d.insert_temp(Id::unique("asset_thumbs"), thumbs));
@@ -741,12 +786,12 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
             if !c.remove(&id) {
                 c.insert(id);
             }
-            ui.data_mut(|d| d.insert_temp(collapsed_id, c));
+            ui.data_mut(|d| d.insert_temp(collapsed_id(), c));
         }
         None => {}
     }
     let libs: HashMap<String, Arc<Document>> = listing.libraries.iter().filter_map(|l| l.doc.clone().map(|d| (l.id.clone(), d))).collect();
-    drag_feedback(app, ui, &doc, &libs, tex);
+    drag_feedback(app, ui, doc, &libs, tex);
 }
 
 /// Place component `id` of `src` centred on page point (`x`, `y`).

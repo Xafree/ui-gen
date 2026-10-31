@@ -23,6 +23,7 @@ fn depends(b: &Bench, package: &str, on: &[&str]) {
     std::fs::create_dir_all(&folder).unwrap();
     let dependencies: serde_json::Map<String, Value> = on.iter().map(|name| ((*name).to_string(), json!("*"))).collect();
     std::fs::write(folder.join("package.json"), json!({"dependencies": dependencies}).to_string()).unwrap();
+    crate::source_family::forget_dependencies_of(&root);
 }
 
 fn last_job(b: &Bench) -> CaptureJob {

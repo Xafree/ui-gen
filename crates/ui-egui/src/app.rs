@@ -3,7 +3,9 @@ use super::clock::{
 };
 use super::open::OPEN_EXTENSIONS;
 use super::services::{DialogFuture, PickFuture, Picked, RepaintWaker, Services};
-use super::state::{LEFT_PANEL, LeftTab, MOBILE_STRIP, MobilePanel, NARROW_WIDTH, PANEL_DEFAULT, RIGHT_PANEL, RightTab, TitleBar, fit_panels};
+use super::state::{
+    LEFT_PANEL, LIBRARY_PANEL_DEFAULT, LeftTab, MOBILE_STRIP, MobilePanel, NARROW_WIDTH, PANEL_DEFAULT, RIGHT_PANEL, RightTab, TitleBar, fit_panels,
+};
 use super::{
     Arc, Done, FigApp, NodeId, OsStr, Path, PathBuf, PendingAck, PendingDialog, Poll, Session, TaskContext, UiState, Value, Waker, a11y, branch_ui,
     canvas, cjk, comments, compare_tab, compare_view, cursors, dev_compare, dialogs, frame_stats, home, home_recents, i18n, icons, import_report,
@@ -19,6 +21,16 @@ mod frame;
 mod ime;
 
 impl FigApp {
+    /// What the left panel holds in this tab: a library tab has one panel, whichever tab other files show.
+    pub(crate) fn left_tab_shown(&self) -> LeftTab {
+        if self.session.in_lib_project() { LeftTab::File } else { self.ui.left_tab }
+    }
+
+    /// How wide the left panel opens: a library tab starts wider until the panel was resized.
+    fn left_width_shown(&self) -> f32 {
+        if self.session.in_lib_project() && self.ui.left_width == PANEL_DEFAULT { LIBRARY_PANEL_DEFAULT } else { self.ui.left_width }
+    }
+
     /// Construct `FigApp` from a session and services, taking panel widths and pages height
     /// from preferences and initializing UI, canvas, clocks, capture/IME and transient channel
     /// state.
@@ -303,7 +315,7 @@ impl FigApp {
             let w = (ui.available_width() - MOBILE_STRIP).max(0.0);
             (if left_open { w } else { 0.0 }, w)
         } else {
-            fit_panels(ui.available_width(), left_open.then_some(self.ui.left_width), right_open.then_some(self.ui.right_width))
+            fit_panels(ui.available_width(), left_open.then_some(self.left_width_shown()), right_open.then_some(self.ui.right_width))
         };
         let rows = ui.available_rect_before_wrap().y_range();
         let mut edges: Vec<(&str, f32, f32, f32)> = Vec::new();
@@ -316,7 +328,7 @@ impl FigApp {
                 .exact_size(left_w)
                 .frame(egui::Frame::NONE.fill(t.panel).stroke(egui::Stroke::new(1.0, t.border)))
                 .show(ui, |ui| {
-                    let label = match self.ui.left_tab {
+                    let label = match self.left_tab_shown() {
                         _ if self.ui.versions.open => i18n::tr("Version history"),
                         LeftTab::File => i18n::tr("Layers"),
                         LeftTab::Assets => i18n::tr("Components"),
@@ -397,7 +409,7 @@ impl FigApp {
         self.toast_ui(&ctx);
         // A rename started after the layers panel drew (Cmd/Ctrl+R, a double-click) opens its field
         // next frame.
-        if self.ui.rename.is_some_and(|r| r.start) && !hidden && !self.ui.left_collapsed && self.ui.left_tab == LeftTab::File {
+        if self.ui.rename.is_some_and(|r| r.start) && !hidden && !self.ui.left_collapsed && self.left_tab_shown() == LeftTab::File {
             ctx.request_repaint();
         }
         a11y::end(self, &ctx);

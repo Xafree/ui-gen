@@ -42,7 +42,7 @@ type Outcome = Result<Value, CaptureError>;
 type Painted = (String, Pos2, Vec2);
 
 fn title_of(package: &str, version: &str) -> String {
-    format!("Imported · {package} {version}")
+    format!("{package} {version}")
 }
 
 struct Dir(PathBuf);
@@ -318,10 +318,11 @@ impl Lab {
     }
 
     fn tile(&mut self, name: &str) -> Pos2 {
-        let (_, at, size) = self
-            .panel_texts()
+        let shown = self.panel_texts();
+        let pages = shown.iter().find(|(t, _, _)| t == "Pages").map_or(f32::MAX, |(_, p, _)| p.y);
+        let (_, at, size) = shown
             .into_iter()
-            .filter(|(t, _, _)| t == name)
+            .filter(|(t, p, _)| t == name && p.y < pages)
             .max_by(|a, b| a.1.y.total_cmp(&b.1.y))
             .unwrap_or_else(|| panic!("no tile {name:?} in the panel"));
         at + vec2(8.0, size.y / 2.0)
@@ -345,6 +346,9 @@ impl Lab {
     }
 
     fn type_in_search(&mut self, query: &str) {
+        self.ui.app.ui.library_panel.search = true;
+        self.settle();
+        let title = y_of(&self.panel_texts(), "Library");
         let width = RAIL_WIDTH + self.ui.app.ui.left_width;
         let field = self
             .nodes()
@@ -352,7 +356,7 @@ impl Lab {
             .filter(|n| matches!(n.role(), Role::TextInput | Role::MultilineTextInput | Role::SearchInput))
             .filter_map(|n| n.bounds())
             .map(|b| pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32))
-            .filter(|p| p.x > RAIL_WIDTH && p.x < width)
+            .filter(|p| p.x > RAIL_WIDTH && p.x < width && p.y > title)
             .min_by(|a, b| a.y.total_cmp(&b.y))
             .expect("the search field of the Components tab");
         self.click(field);
@@ -377,25 +381,6 @@ fn names(texts: &[Painted]) -> Vec<&str> {
 fn has_title(texts: &[Painted], package: &str, version: &str) -> bool {
     let wanted = title_of(package, version);
     texts.iter().any(|(t, _, _)| t.starts_with(&wanted))
-}
-
-fn thumbnails(ctx: &egui::Context) -> Vec<(egui::TextureId, String)> {
-    let manager = ctx.tex_manager();
-    let manager = manager.read();
-    let mut found: Vec<(egui::TextureId, String)> =
-        manager.allocated().filter(|(_, meta)| meta.name.starts_with("asset-thumb-")).map(|(id, meta)| (*id, meta.name.clone())).collect();
-    found.sort_by(|a, b| a.1.cmp(&b.1).then(format!("{:?}", a.0).cmp(&format!("{:?}", b.0))));
-    found
-}
-
-fn thumbnail_of(ctx: &egui::Context, node: NodeId) -> Vec<egui::TextureId> {
-    let name = format!("asset-thumb-{}", node.0);
-    thumbnails(ctx).into_iter().filter(|(_, n)| *n == name).map(|(id, _)| id).collect()
-}
-
-fn default_variant(lab: &mut Lab, set: NodeId) -> NodeId {
-    let doc = lab.ui.app.session.doc().unwrap();
-    figcraft_engine::components::default_variant(doc, set).expect("a set has a default variant")
 }
 
 // covers: E4-4.1
@@ -499,58 +484,6 @@ fn searching_keeps_the_matching_sets_and_hides_the_sections_left_empty() {
 
     let shown = lab.panel_texts();
     assert!(!has_title(&shown, PACKAGE, VERSION), "no match, no section: {:?}", names(&shown));
-}
-
-// covers: E4-4.3
-#[test]
-fn an_imported_tile_shows_the_default_variant_cached_and_rendered_again_when_the_set_changes() {
-    let mut lab = Lab::with_imports("thumb", &[source(PACKAGE, VERSION)], &["Button", "Chip"]);
-    lab.show();
-    let (button, chip) = (lab.set("Button"), lab.set("Chip"));
-    let (shown_button, shown_chip) = (default_variant(&mut lab, button), default_variant(&mut lab, chip));
-    lab.settle();
-
-    let first = thumbnail_of(&lab.ui.ctx, shown_button);
-    assert_eq!(first.len(), 1, "the default variant is drawn once at first display: {:?}", thumbnails(&lab.ui.ctx));
-    assert_eq!(thumbnail_of(&lab.ui.ctx, shown_chip).len(), 1, "so is the other set's");
-    assert!(thumbnail_of(&lab.ui.ctx, button).is_empty(), "the set itself is not drawn: its default variant is");
-    let chip_first = thumbnail_of(&lab.ui.ctx, shown_chip);
-    let local_cache = crate::assets_panel::cached_thumbnails(&lab.ui.ctx);
-    assert!(!local_cache.contains(&button) && !local_cache.contains(&chip), "imported sets are not cached as local ones: {local_cache:?}");
-
-    lab.settle();
-    assert_eq!(thumbnail_of(&lab.ui.ctx, shown_button), first, "cached: the same texture on later frames");
-
-    lab.run("node.set", json!({"ids": [shown_button], "props": {"fill": "#FF0000"}}));
-    lab.ui.advance_clock(100.0);
-    lab.settle();
-    lab.settle();
-
-    let after = thumbnail_of(&lab.ui.ctx, shown_button);
-    assert_eq!(after.len(), 1, "one thumbnail again");
-    assert_ne!(after, first, "a changed set is drawn again");
-    assert_eq!(thumbnail_of(&lab.ui.ctx, shown_chip), chip_first, "an untouched set keeps its thumbnail");
-}
-
-// covers: E4-4.3
-#[test]
-fn imported_and_local_thumbnails_are_kept_apart() {
-    let mut lab = Lab::with_imports("apart", &[source(PACKAGE, VERSION)], &["Button"]);
-    let local = lab.local_component("Card");
-    lab.show();
-    let button = lab.set("Button");
-    let shown = default_variant(&mut lab, button);
-
-    let local_cache = crate::assets_panel::cached_thumbnails(&lab.ui.ctx);
-    assert_eq!(local_cache, vec![local], "the local cache holds the local tile only: {local_cache:?}");
-    assert_eq!(thumbnail_of(&lab.ui.ctx, local).len(), 1, "the local tile has its own picture");
-    assert_eq!(thumbnail_of(&lab.ui.ctx, shown).len(), 1, "the imported tile has its own, not the local one's");
-    assert_eq!(
-        thumbnails(&lab.ui.ctx).iter().filter(|(_, n)| n.starts_with("asset-thumb-")).count(),
-        2,
-        "two tiles, two pictures: {:?}",
-        thumbnails(&lab.ui.ctx)
-    );
 }
 
 // covers: E4-4.4
@@ -711,27 +644,42 @@ fn the_menu_key_on_a_focused_imported_tile_opens_its_menu_and_show_runs_from_the
 
 // covers: E4-4.5
 #[test]
-fn the_search_row_button_opens_the_import_window_for_any_source_and_a_section_button_for_its_package() {
+fn the_library_title_menu_opens_the_import_window_for_any_source_and_a_family_button_for_its_package() {
     let mut lab = Lab::with_imports("window", &[source(PACKAGE, VERSION)], &["Button"]);
     lab.show();
     let buttons = lab.centres_of(Role::Button, IMPORT_BUTTON);
-    assert_eq!(buttons.len(), 2, "one in the search row, one in the section: {buttons:?}");
-    assert!(buttons.iter().all(|b| b.x > RAIL_WIDTH && b.x < RAIL_WIDTH + lab.ui.app.ui.left_width), "both in the Components tab");
-
+    assert_eq!(buttons.len(), 1, "one on the family's row: {buttons:?}");
+    let library = lab.centres_of(Role::Button, "Library");
+    assert_eq!(library.len(), 1, "the title of the dropdown");
+    lab.right_click(library[0]);
+    let item = lab.centres_of(Role::MenuItem, IMPORT_BUTTON);
     let mark = lab.mark();
-    lab.click(buttons[0]);
+    lab.click(item[0]);
     let calls = lab.ran_since(mark, "uigen.importWindow");
-    assert_eq!(calls.len(), 1, "the search row runs uigen.importWindow: {calls:?}");
+    assert_eq!(calls.len(), 1, "the title's menu runs uigen.importWindow: {calls:?}");
     assert!(calls[0].get("package").is_none_or(Value::is_null), "without a package: {:?}", calls[0]);
 
     lab.ui.app.ui.import_window = None;
     lab.show();
     let mark = lab.mark();
     let buttons = lab.centres_of(Role::Button, IMPORT_BUTTON);
-    lab.click(buttons[1]);
+    lab.click(buttons[0]);
     let calls = lab.ran_since(mark, "uigen.importWindow");
-    assert_eq!(calls.len(), 1, "the section runs it too: {calls:?}");
+    assert_eq!(calls.len(), 1, "the family's row runs it too: {calls:?}");
     assert_eq!(calls[0]["package"], json!(PACKAGE), "with its package");
+}
+
+// covers: panel-show
+#[test]
+fn clicking_an_imported_row_opens_its_import_page_and_selects_it() {
+    let mut lab = Lab::with_imports("row-click", &[source(PACKAGE, VERSION)], &["Button"]);
+    lab.show();
+    let at = lab.tile("Button");
+    lab.click(at);
+    let selected = lab.ui.app.session.selection();
+    assert_eq!(selected.len(), 1, "the set is selected");
+    let doc = lab.ui.app.session.doc().unwrap();
+    assert!(figcraft_engine::is_import_page(doc, doc.page_of(selected[0]).unwrap()), "on its import page");
 }
 
 // covers: E4-4.5
@@ -740,10 +688,10 @@ fn an_empty_section_has_its_own_import_button_with_its_package() {
     let mut lab = Lab::new("window-empty", &[source(PACKAGE, VERSION), source(OTHER, OTHER_VERSION)]);
     lab.show();
     let buttons = lab.centres_of(Role::Button, IMPORT_BUTTON);
-    assert_eq!(buttons.len(), 3, "the search row and one per section: {buttons:?}");
+    assert_eq!(buttons.len(), 2, "one per family: {buttons:?}");
 
     let mark = lab.mark();
-    lab.click(buttons[2]);
+    lab.click(buttons[1]);
 
     let calls = lab.ran_since(mark, "uigen.importWindow");
     assert_eq!(calls.len(), 1, "{calls:?}");

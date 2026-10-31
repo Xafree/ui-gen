@@ -34,6 +34,8 @@ pub const LEFT_PANEL: std::ops::RangeInclusive<f32> = 200.0..=480.0;
 pub const RIGHT_PANEL: std::ops::RangeInclusive<f32> = 240.0..=480.0;
 
 pub const PANEL_DEFAULT: f32 = 240.0;
+/// Default width of the left panel in a tab of a library project.
+pub const LIBRARY_PANEL_DEFAULT: f32 = 280.0;
 
 /// Windows narrower than this (logical points: phones, portrait tablets) show one side panel at a
 /// time over the canvas, opened from two buttons, instead of both beside it.
