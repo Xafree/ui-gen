@@ -221,6 +221,8 @@ mod compare_tab_ui_tests;
 #[cfg(test)]
 mod import_drop_ui_tests;
 #[cfg(test)]
+mod import_pick_ui_tests;
+#[cfg(test)]
 mod import_review_ui_tests;
 #[cfg(test)]
 mod import_sections_ui_tests;
