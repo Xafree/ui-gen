@@ -231,9 +231,6 @@ pub(crate) fn plan_named(doc: &Document, opts: &ExportOptions) -> (ExportPlan, L
     let holders = |same: &dyn Fn(&str) -> bool| -> Vec<String> {
         found.iter().zip(&tags).filter(|(c, tag)| !c.empty && tag.as_ref().is_ok_and(|tag| same(tag))).map(|(c, _)| located(doc, c)).collect()
     };
-    let holders = |same: &dyn Fn(&str) -> bool| -> Vec<String> {
-        found.iter().zip(&tags).filter(|(c, tag)| !c.empty && tag.as_ref().is_ok_and(|tag| same(tag))).map(|(c, _)| located(doc, c)).collect()
-    };
     let (mut components, mut notes, mut sources) = (Vec::new(), Vec::new(), Vec::new());
     let mut reads: Vec<(String, Vec<String>)> = Vec::new();
     for (c, tag) in found.iter().zip(&tags) {
