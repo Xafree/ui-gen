@@ -118,8 +118,8 @@ pub use doc_state::{DocState, History, HistoryEntry, Interaction, PREVIEW_READ_O
 pub use error::{EngineError, Result, bad};
 pub use prefs::{Clipboard, MAX_RECENT_ACTIONS, Prefs, UI_SCALE_MAX, UI_SCALE_MIN, UiRequest, clamp_ui_scale};
 pub use uigen_import::{
-    ImportSection, ImportedSet, Inspected, InspectedComponent, InspectedProp, MAX_RENDERS, OPTIONS_KEY, PropKind, REFERENCE_KEY, RefText, Reference,
-    ThemeReference, is_import_page, reference_of, render_count, sections as imported_sections,
+    ImportProgress, ImportSection, ImportedSet, Inspected, InspectedComponent, InspectedProp, MAX_RENDERS, OPTIONS_KEY, PropKind, REFERENCE_KEY,
+    RefText, Reference, ThemeReference, is_import_page, reference_of, render_count, sections as imported_sections,
 };
 pub use uigen_theme::{Swatch, ThemeInfo, themes as token_themes};
 pub use uigen_update::{Difference, DifferenceKind, DifferenceState, Located, MAX_DIFFERENCES, SourceDiff, Summary, source_diff};
@@ -585,6 +585,8 @@ mod uigen_import_dom_parent_tests;
 mod uigen_import_dom_tests;
 #[cfg(test)]
 mod uigen_import_motion_tests;
+#[cfg(test)]
+mod uigen_import_progress_tests;
 #[cfg(test)]
 mod uigen_import_review_tests;
 #[cfg(test)]

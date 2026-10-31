@@ -150,3 +150,62 @@ fn a_bad_package_list_is_refused_and_submits_nothing() {
     }
     assert!(bench.submitted().is_empty());
 }
+
+#[test]
+fn reinstall_asks_for_every_active_source_at_its_exact_version_in_one_job() {
+    let mut bench = Bench::new();
+    bench.session.execute("project.reinstallSources", &json!({})).unwrap();
+    let jobs = bench.submitted();
+    assert_eq!(jobs.len(), 1, "{jobs:?}");
+    let CaptureJob::InstallMany { packages, .. } = &jobs[0] else { panic!("expected InstallMany: {jobs:?}") };
+    let asked: Vec<(&str, &str)> = packages.iter().map(|spec| (spec.name.as_str(), spec.version.as_str())).collect();
+    assert_eq!(asked, [("@acme/ui", "1.0.0"), ("@acme/styles", "1.0.0"), ("lit", "3.3.2")]);
+}
+
+#[test]
+fn a_finished_reinstall_keeps_license_and_framework_and_leaves_removed_sources_removed() {
+    let mut bench = Bench::new();
+    let job = bench.session.execute("project.reinstallSources", &json!({})).unwrap()["job"].as_u64().unwrap();
+    let packages = json!([
+        {"package": "@acme/ui", "version": "1.0.0", "framework": "react", "license": "Apache-2.0"},
+        {"package": "@acme/styles", "version": "1.0.0"},
+        {"package": "lit", "version": "3.3.2"}
+    ]);
+    bench.calls.lock().unwrap().ready.push((job, Ok(json!({"packages": packages}))));
+    let events = bench.session.pump_capture();
+    assert!(events.iter().all(|event| event.outcome.is_ok()), "{events:?}");
+
+    let manifest: Value = serde_json::from_slice(&std::fs::read(bench.dir.join("uigen.json")).unwrap()).unwrap();
+    let sources = manifest["sources"].as_array().unwrap();
+    assert_eq!(sources.len(), 4, "{sources:?}");
+    assert_eq!(sources[0]["license"], json!("Apache-2.0"));
+    assert_eq!(sources[1]["license"], json!("MIT"), "kept when the install reports none");
+    assert_eq!(sources[2]["framework"], json!("web-components"), "kept when the install reports none");
+    assert_eq!(sources[3]["removed"], json!(true));
+}
+
+#[test]
+fn a_failed_reinstall_leaves_uigen_json_untouched() {
+    let mut bench = Bench::new();
+    let before = std::fs::read(bench.dir.join("uigen.json")).unwrap();
+    let job = bench.session.execute("project.reinstallSources", &json!({})).unwrap()["job"].as_u64().unwrap();
+    let error = CaptureError { kind: crate::capture::CaptureErrorKind::Install, message: "no network".to_string() };
+    bench.calls.lock().unwrap().ready.push((job, Err(error)));
+    let events = bench.session.pump_capture();
+    assert!(events.iter().any(|event| event.outcome.is_err()), "{events:?}");
+    assert_eq!(std::fs::read(bench.dir.join("uigen.json")).unwrap(), before);
+}
+
+#[test]
+fn reinstall_refuses_a_second_run_and_a_project_with_no_active_source() {
+    let mut bench = Bench::new();
+    bench.session.execute("project.reinstallSources", &json!({})).unwrap();
+    assert!(message(bench.session.execute("project.reinstallSources", &json!({}))).contains("in progress"));
+
+    let manifest = json!({"version": 1, "name": "mylib", "sources": [{"package": "gone", "version": "1.0.0", "removed": true}]});
+    std::fs::write(bench.dir.join("uigen.json"), serde_json::to_string_pretty(&manifest).unwrap()).unwrap();
+    let mut session = Session::empty();
+    session.set_capture_backend(Box::new(FakeBackend(Arc::new(Mutex::new(Calls::default())))));
+    session.execute("project.open", &json!({"path": bench.dir.to_string_lossy()})).unwrap();
+    assert!(message(session.execute("project.reinstallSources", &json!({}))).contains("no source library"));
+}

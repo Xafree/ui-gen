@@ -17,6 +17,7 @@ const ADD: &str = "project.addSource";
 const ADD_MANY: &str = "project.addSources";
 const SET_VERSION: &str = "project.setSourceVersion";
 const REMOVE: &str = "project.removeSource";
+const REINSTALL: &str = "project.reinstallSources";
 const LATEST: &str = "latest";
 const SOURCES_DIR: &str = "sources";
 const FRAMEWORKS: [&str; 5] = ["react", "vue", "svelte", "web-components", "unknown"];
@@ -51,6 +52,13 @@ pub fn specs() -> Vec<CommandSpec> {
             "{package}  asks the capture service to uninstall a source of the project and returns {job}; once it succeeds the source stays in uigen.json with removed: true (its version kept, .uigen/captures untouched)",
             false,
             remove
+        ),
+        spec!(
+            "project.reinstallSources",
+            "Reinstall source libraries",
+            "{}  asks the capture service to install again, in one job, every active source of the project at the exact version of uigen.json, for a project whose .uigen folder is gone, and returns {job}; removed sources stay out, and framework and license stay as they are when the install reports none. A project with no active source is refused",
+            false,
+            reinstall
         ),
         spec!(
             "capture.status",
@@ -98,9 +106,7 @@ pub(super) fn absolute_root(cmd: &str, root: &str) -> Result<String> {
 
 fn in_flight<'a>(s: &Session, root: &str, packages: &'a [String]) -> Option<&'a String> {
     let busy = s.capture_jobs().into_iter().filter(|job| {
-        matches!(job.state, JobState::Queued | JobState::Running)
-            && [ADD, ADD_MANY, SET_VERSION, REMOVE].contains(&job.command.as_str())
-            && file_access::same_file(&job.root, root)
+        matches!(job.state, JobState::Queued | JobState::Running) && changes_source(&job.command) && file_access::same_file(&job.root, root)
     });
     let busy: Vec<String> = busy.flat_map(|job| job.packages).collect();
     packages.iter().find(|package| busy.contains(package))
@@ -180,6 +186,23 @@ fn remove(s: &mut Session, p: &Value) -> Result<Value> {
     submit(s, REMOVE, &binding, &[package], job)
 }
 
+fn reinstall(s: &mut Session, _p: &Value) -> Result<Value> {
+    let binding = binding(s, REINSTALL)?;
+    let active = binding.config.sources.iter().filter(|source| !source.removed);
+    let specs: Vec<npm::PackageSpec> =
+        active.map(|source| npm::PackageSpec { name: source.package.clone(), version: source.version.clone() }).collect();
+    if specs.is_empty() {
+        return Err(bad(REINSTALL, "this project has no source library to reinstall"));
+    }
+    for spec in &specs {
+        npm::validate_package_name(&spec.name).map_err(|e| bad(REINSTALL, e.to_string()))?;
+        npm::validate_version(&spec.version, false).map_err(|e| bad(REINSTALL, format!("{}: {e}", spec.name)))?;
+    }
+    let names: Vec<String> = specs.iter().map(|spec| spec.name.clone()).collect();
+    let job = CaptureJob::InstallMany { root: absolute_root(REINSTALL, &binding.root)?, packages: specs };
+    submit(s, REINSTALL, &binding, &names, job)
+}
+
 fn status(s: &mut Session, p: &Value) -> Result<Value> {
     let only = match p.get("job") {
         None => None,
@@ -210,7 +233,7 @@ fn status(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 pub(crate) fn changes_source(command: &str) -> bool {
-    matches!(command, ADD | ADD_MANY | SET_VERSION | REMOVE)
+    matches!(command, ADD | ADD_MANY | SET_VERSION | REMOVE | REINSTALL)
 }
 
 /// Write what the finished job `command` on `packages` changed into the `uigen.json` of folder
@@ -232,6 +255,8 @@ pub(crate) fn apply(s: &mut Session, command: &str, packages: &[String], root: &
             Some(source) => source.removed = true,
             None => return Ok(()),
         }
+    } else if command == REINSTALL {
+        restore_all(&mut config, packages, result)?;
     } else if command == ADD_MANY || (command == SET_VERSION && packages.len() > 1) {
         upsert_all(&mut config, packages, result)?;
     } else {
@@ -261,6 +286,18 @@ fn upsert_all(config: &mut Project, packages: &[String], result: &Value) -> std:
     }
     for (package, entry) in packages.iter().zip(reported) {
         upsert(config, package, entry)?;
+    }
+    Ok(())
+}
+
+fn restore_all(config: &mut Project, packages: &[String], result: &Value) -> std::result::Result<(), CaptureError> {
+    let before = config.sources.clone();
+    upsert_all(config, packages, result)?;
+    for source in &mut config.sources {
+        if let Some(old) = before.iter().find(|old| old.package == source.package) {
+            source.framework = source.framework.take().or_else(|| old.framework.clone());
+            source.license = source.license.take().or_else(|| old.license.clone());
+        }
     }
     Ok(())
 }

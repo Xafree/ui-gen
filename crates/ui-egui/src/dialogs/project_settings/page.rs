@@ -100,6 +100,9 @@ pub(in crate::dialogs) fn button_at(ui: &mut Ui, t: &Tokens, rect: Rect, label: 
         if enabled { Sense::click() } else { Sense::hover() },
     );
     a11y::button(&resp, label);
+    if !enabled {
+        a11y::disabled(&resp);
+    }
     let hovered = enabled && resp.hovered();
     let ghost = matches!(look, Look::Ghost | Look::Icon);
     let radius = if ghost { 8 } else { 9 };

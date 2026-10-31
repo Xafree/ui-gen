@@ -1,7 +1,11 @@
+use std::fmt::Display;
+
 use egui::text::{LayoutJob, TextFormat};
 use egui::{
     Align, Align2, CornerRadius, Frame, Label, Layout, Margin, Rect, RichText, ScrollArea, Sense, Stroke, StrokeKind, Ui, UiBuilder, pos2, vec2,
 };
+
+use figcraft_engine::ImportProgress;
 
 use crate::a11y;
 use crate::dialogs::project_settings::page::{
@@ -41,11 +45,12 @@ pub(super) struct CardView {
 pub(super) enum Status {
     Loading(String),
     Failed { package: String, cause: String },
+    NotInstalled { running: bool, failure: Option<String> },
 }
 
 pub(super) enum Progress {
     Idle,
-    Importing { done: usize, total: usize },
+    Importing { name: String, renders: ImportProgress, component: usize, components: usize },
     Stopping,
     Summary { done: usize, total: usize, failures: Vec<String> },
 }
@@ -59,6 +64,7 @@ pub(super) enum Act {
     Import,
     Cancel,
     Retry(String),
+    Reinstall,
     OpenSettings,
     Show,
 }
@@ -67,7 +73,6 @@ pub(super) struct Model<'a> {
     pub project: &'a str,
     pub cards: Vec<CardView>,
     pub statuses: Vec<Status>,
-    pub no_source: bool,
     pub nothing_to_offer: Option<Vec<String>>,
     pub count: usize,
     pub states: [bool; 5],
@@ -211,17 +216,6 @@ fn left(ui: &mut Ui, t: &Tokens, model: &mut Model, acts: &mut Vec<Act>) {
         ui.label(RichText::new(tr("Choose your components")).font(semibold(30.0)).color(t.text).line_height(Some(30.0 * 1.15)));
         note(ui, tr("Take what you want from each library."), 14.0, t.text_secondary);
     });
-    if model.no_source {
-        note(ui, tr("No source library yet. Add one in the project settings."), 13.5, t.text_secondary);
-        let open = button(ui, t, tr("Open project settings"), Look::Primary, 34.0, 14.0, true);
-        if model.focus_first {
-            open.request_focus();
-        }
-        if open.clicked() {
-            acts.push(Act::OpenSettings);
-        }
-        return;
-    }
     if !model.cards.is_empty() || model.search_active() {
         search_field(ui, model);
     }
@@ -236,6 +230,21 @@ fn left(ui: &mut Ui, t: &Tokens, model: &mut Model, acts: &mut Vec<Act>) {
                 note(ui, &message, 13.5, t.danger);
                 if button(ui, t, tr("Try again"), Look::Secondary, 34.0, 14.0, true).clicked() {
                     acts.push(Act::Retry(package.clone()));
+                }
+            }
+            Status::NotInstalled { running, failure } => {
+                let ink = if *running { t.text_secondary } else { t.danger };
+                note(ui, tr("These libraries are not installed in this project."), 13.5, ink);
+                if let Some(cause) = failure {
+                    note(ui, &trf("Couldn't reinstall the libraries: {cause}", &[("cause", cause)]), 13.5, t.danger);
+                }
+                let label = if *running { tr("Reinstalling…") } else { tr("Reinstall") };
+                let reinstall = button(ui, t, label, Look::Primary, 34.0, 14.0, !*running);
+                if model.focus_first {
+                    reinstall.request_focus();
+                }
+                if reinstall.clicked() {
+                    acts.push(Act::Reinstall);
                 }
             }
         }
@@ -374,7 +383,8 @@ fn panel(ui: &mut Ui, t: &Tokens, model: &mut Model, acts: &mut Vec<Act>) {
             acts.push(Act::Animations);
         }
         let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::hover());
-        if button_at(ui, t, rect, tr("Import"), Look::Primary, true).clicked() {
+        let running = matches!(model.progress, Progress::Importing { .. } | Progress::Stopping);
+        if button_at(ui, t, rect, tr("Import"), Look::Primary, !running).clicked() {
             acts.push(Act::Import);
         }
         status(ui, t, model, acts);
@@ -443,7 +453,17 @@ fn status(ui: &mut Ui, t: &Tokens, model: &Model, acts: &mut Vec<Act>) {
     }
     match &model.progress {
         Progress::Idle => {}
-        Progress::Importing { done, total } => note(ui, &trf("Importing… {done} of {total}", &[("done", done), ("total", total)]), 13.5, t.text),
+        Progress::Importing { name, renders, component, components } => {
+            let total = renders.total.unwrap_or_default();
+            let args: [(&str, &dyn Display); 5] =
+                [("name", name), ("done", &renders.rendered), ("total", &total), ("current", component), ("components", components)];
+            let line = if renders.total.is_some() {
+                trf("{name}: {done} of {total} renders · component {current} of {components}", &args)
+            } else {
+                trf("{name}: {done} renders · component {current} of {components}", &args)
+            };
+            note(ui, &line, 13.5, t.text);
+        }
         Progress::Stopping => note(ui, tr("Stopping… the component in progress finishes first"), 13.5, t.text),
         Progress::Summary { done, total, failures } => {
             note(ui, &trf("Imported {done} of {total} components", &[("done", done), ("total", total)]), 13.5, t.text);

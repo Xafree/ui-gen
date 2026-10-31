@@ -235,6 +235,9 @@ mod import_review_ui_tests;
 mod import_sections_ui_tests;
 #[cfg(test)]
 mod import_window_ui_tests;
+
+#[cfg(test)]
+mod import_reinstall_ui_tests;
 #[cfg(test)]
 mod install_refusal_tests;
 #[cfg(test)]

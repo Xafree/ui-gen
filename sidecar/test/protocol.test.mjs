@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { internalMessage } from '../protocol.mjs';
 
 const SIDECAR_DIR = resolve(import.meta.dirname, '..');
 const SERVICE = resolve(SIDECAR_DIR, 'service.mjs');
@@ -218,6 +219,18 @@ describe('sidecar protocol version 1: termination', () => {
 
     assert.equal(code, 0);
     assert.ok(Date.now() - started < EXIT_BUDGET_MS, 'exited within 5 s');
+  });
+});
+
+describe('sidecar internal errors', () => {
+  it('names the first line of the cause', () => {
+    const error = new TypeError('browser is gone\nlong call log');
+    assert.equal(internalMessage('inspect', error), 'internal error in "inspect": TypeError: browser is gone');
+  });
+
+  it('bounds a long cause and survives a thrown non-error', () => {
+    assert.ok(internalMessage('inspect', new Error('x'.repeat(5000))).length < 400);
+    assert.equal(internalMessage('inspect', 'text'), 'internal error in "inspect": unknown');
   });
 });
 

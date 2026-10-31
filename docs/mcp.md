@@ -78,7 +78,7 @@ Each may be given more than once, as `--flag DIR` or `--flag=DIR`:
   every command that names a file: `file.open`, `file.openRecent` (recent files outside the roots
   are never listed, opened, removed or named: `index` counts the files listed), `file.import`,
   `file.placeImage`, `image.place`, `file.save`, `file.saveAs`, `file.revert`, `file.recover`,
-  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, `project.open`, `project.update`, `uigen.applyTheme` (the project's `uigen.json`) and the source commands (`project.addSource`, `project.addSources`, `project.setSourceVersion`, `project.removeSource`: the project folder and its `uigen.json`; `uigen.importComponent`: the project's `.uigen/captures` folder), the playground (`playground.open`, `playground.refresh`: the project's `.uigen/playground` folder), the images and variables JSON read next to an imported REST API
+  `file.export`, `file.exportSvg`, `file.exportLayers` (and the folders it makes), `file.exportFramesPdf`, `project.open`, `project.update`, `uigen.applyTheme` (the project's `uigen.json`) and the source commands (`project.addSource`, `project.addSources`, `project.setSourceVersion`, `project.reinstallSources`, `project.removeSource`: the project folder and its `uigen.json`; `uigen.importComponent`: the project's `.uigen/captures` folder), the playground (`playground.open`, `playground.refresh`: the project's `.uigen/playground` folder), the images and variables JSON read next to an imported REST API
   file, `library.add` and the library files open documents link to, `variable.import` /
   `variable.export`, `codeConnect.import` / `codeConnect.export`, `component.playground {path}`,
   `plugin.import {path}`, a development plugin's module read again from disk,
@@ -927,7 +927,7 @@ Two more commands prepare an import; neither edits the document (no undo step).
   64 values per prop; at most 16 notes of 256 characters. It is kept **in the session** (nothing on disk) for the
   version the source has: a second call returns `{cached: true, package, version, framework, components, notes}` at
   once, with no job and no event; `refresh: true` asks the service again. `Session::inspected(package)` reads what
-  is kept; a finished `project.addSource`, `project.addSources`, `project.setSourceVersion` or `project.removeSource` forgets it, and a
+  is kept; a finished `project.addSource`, `project.addSources`, `project.setSourceVersion`, `project.reinstallSources` or `project.removeSource` forgets it, and a
   failed listing keeps nothing (the next call asks the service again). **Refused at once** (`bad`, nothing submitted): outside a library
   project; a `package` that is missing, invalid or not an active source; a `refresh` that is not a boolean; no
   capture service (`capture service not available`).

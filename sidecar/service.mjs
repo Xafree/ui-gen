@@ -4,7 +4,7 @@ import { install, uninstall } from './install.mjs';
 import * as playground from './playground.mjs';
 import { render } from './render.mjs';
 import { killRunningNpm, runNpm } from './run-npm.mjs';
-import { ServiceError, createLineReader, encodeLine, errorResponse, greeting, okResponse, parseRequest } from './protocol.mjs';
+import { ServiceError, createLineReader, encodeLine, errorResponse, greeting, internalMessage, okResponse, parseRequest } from './protocol.mjs';
 
 export const methods = new Map();
 
@@ -56,8 +56,9 @@ async function dispatch({ id, method, params }) {
     if (error instanceof ServiceError) {
       return errorResponse(id, error.kind, error.message);
     }
-    process.stderr.write(`internal error in "${method}": ${error instanceof Error ? error.name : 'unknown'}\n`);
-    return errorResponse(id, 'internal', `internal error in "${method}"`);
+    const message = internalMessage(method, error);
+    process.stderr.write(`${message}\n`);
+    return errorResponse(id, 'internal', message);
   }
 }
 
