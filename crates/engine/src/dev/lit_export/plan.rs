@@ -134,10 +134,14 @@ fn located(doc: &Document, c: &Candidate) -> String {
     page.map_or_else(|| format!("\"{}\"", shown(&c.name)), |page| format!("\"{}\" on page \"{}\"", shown(&c.name), shown(page)))
 }
 
+/// Two components side by side need no more than their name; on other pages, each one has to be found.
 fn clash(doc: &Document, c: &Candidate, rivals: &[String], what: &str) -> Issue {
-    let others = rivals.iter().filter(|rival| **rival != located(doc, c)).cloned().collect::<Vec<_>>();
-    let also = if others.is_empty() { "another component".to_string() } else { others.join(" and ") };
-    issue(DUPLICATE, format!("{} gives {what}, which {also} gives too: rename or delete one of them", located(doc, c)))
+    let me = located(doc, c);
+    let others: Vec<&str> = rivals.iter().filter(|rival| **rival != me).map(String::as_str).collect();
+    if others.is_empty() {
+        return issue(DUPLICATE, format!("\"{}\" gives {what}, which another component has too: rename one of them", shown(&c.name)));
+    }
+    issue(DUPLICATE, format!("{me} gives {what}, which {} gives too: rename or delete one of them", others.join(" and ")))
 }
 
 fn tag_issue(why: TagIssue, name: &str) -> Issue {

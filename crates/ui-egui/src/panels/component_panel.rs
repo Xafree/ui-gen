@@ -38,11 +38,12 @@ pub fn instance_section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[No
     match &n.kind {
         NodeKind::Instance { .. } => instance_ui(app, ui, doc, n),
         NodeKind::ComponentSet { description } => {
-            properties_ui(app, ui, doc, n.id);
+            properties_ui(app, ui, doc, n.id, None);
             description_ui(app, ui, n.id, description);
         }
         NodeKind::Component { description, .. } => {
-            properties_ui(app, ui, doc, variant_set(doc, n.id).unwrap_or(n.id));
+            let set = variant_set(doc, n.id);
+            properties_ui(app, ui, doc, set.unwrap_or(n.id), set.map(|_| n.id));
             description_ui(app, ui, n.id, description);
         }
         _ => {}
@@ -208,6 +209,16 @@ fn slot_fill(app: &mut FigApp, ui: &mut Ui, doc: &Document, slot: NodeId, prefer
     });
 }
 
+const CHIP_INDENT: f32 = 22.0;
+const CHIP_ADD_WIDTH: f32 = 30.0;
+const CHIP_MIN_WIDTH: f32 = 40.0;
+const CHIP_PADDING: f32 = 18.0;
+
+fn chip_width(ui: &Ui, value: &str, room: f32) -> f32 {
+    let text = ui.painter().layout_no_wrap(value.to_string(), crate::theme::regular(11.0), egui::Color32::WHITE).size().x;
+    (text + CHIP_PADDING).clamp(CHIP_MIN_WIDTH, room)
+}
+
 fn prop_defs(doc: &Document, c: NodeId) -> std::collections::BTreeMap<String, PropDef> {
     match doc.node(c).map(|n| &n.kind) {
         Some(NodeKind::Component { props, .. }) => props.clone(),
@@ -215,8 +226,38 @@ fn prop_defs(doc: &Document, c: NodeId) -> std::collections::BTreeMap<String, Pr
     }
 }
 
-/// Properties of a component or component set.
-fn properties_ui(app: &mut FigApp, ui: &mut Ui, doc: &Document, owner: NodeId) {
+/// The value each variant property shows: those of the selected variant, or the defaults of the set when none is.
+pub(crate) fn shown_values(doc: &Document, set: NodeId, selected: Option<NodeId>) -> std::collections::BTreeMap<String, String> {
+    selected.or_else(|| default_variant(doc, set)).and_then(|variant| doc.node(variant)).map(|n| variant_props(&n.name)).unwrap_or_default()
+}
+
+/// The name of a variant once its property `key` has the value `value`.
+pub(crate) fn renamed_variant(name: &str, key: &str, value: &str) -> String {
+    let swap = |pair: &str| match pair.split_once('=') {
+        Some((k, _)) if k.trim() == key => format!("{}={value}", k.trim()),
+        _ => pair.trim().to_string(),
+    };
+    name.split(',').map(swap).collect::<Vec<_>>().join(", ")
+}
+
+/// The chips of widths `widths` as rows of at most `available`: a chip wider than a row has one of its own.
+pub(crate) fn chip_rows(widths: &[f32], available: f32, gap: f32) -> Vec<std::ops::Range<usize>> {
+    let (mut rows, mut start, mut used) = (Vec::new(), 0, 0.0);
+    for (index, width) in widths.iter().enumerate() {
+        if index > start && used + gap + width > available {
+            rows.push(start..index);
+            (start, used) = (index, 0.0);
+        }
+        used += if index > start { gap + width } else { *width };
+    }
+    if start < widths.len() {
+        rows.push(start..widths.len());
+    }
+    rows
+}
+
+/// Properties of a component or component set; `selected` is the variant of the set the selection is on.
+fn properties_ui(app: &mut FigApp, ui: &mut Ui, doc: &Document, owner: NodeId, selected: Option<NodeId>) {
     let t = Tokens::get(ui.ctx());
     let is_set = matches!(doc.node(owner).map(|n| &n.kind), Some(NodeKind::ComponentSet { .. }));
     // Shared (non-variant) properties live on every variant; read them from the first.
@@ -257,11 +298,8 @@ fn properties_ui(app: &mut FigApp, ui: &mut Ui, doc: &Document, owner: NodeId) {
     if is_set && !variant_conflicts(doc, owner).is_empty() {
         widgets::note(ui, tr("Some variants have the same property values: give each one a unique combination"), t.warning);
     }
-    let defaults = if is_set {
-        default_variant(doc, owner).and_then(|d| doc.node(d)).map(|n| variant_props(&n.name)).unwrap_or_default()
-    } else {
-        Default::default()
-    };
+    let defaults = if is_set { shown_values(doc, owner, selected) } else { Default::default() };
+    let selected_name = selected.and_then(|variant| doc.node(variant)).map(|n| n.name.clone());
     // Variant properties: name, values (the matrix), add value, delete. Dragged by their left
     // margin to reorder them (only among themselves: the shared ones keep the engine's order).
     let mut drag = ListDrag::in_order(ui, ("variant_props", owner));
@@ -273,11 +311,21 @@ fn properties_ui(app: &mut FigApp, ui: &mut Ui, doc: &Document, owner: NodeId) {
                 app.run("component.editProperty", json!({"id": owner, "name": k, "newName": nn}));
             }
             let def = defaults.get(k).or(vals.first()).cloned().unwrap_or_default();
-            let resp = widgets::dropdown(ui, &def, 70.0, None).on_hover_text(tr("Default value (the top-left variant)"));
+            let mut resp = widgets::dropdown(ui, &def, 70.0, None);
+            if selected.is_none() {
+                resp = resp.on_hover_text(tr("Default value (the top-left variant)"));
+            }
             menu_popup(&resp).show(|ui| {
                 for v in vals {
                     if menu_item(ui, v, "") {
-                        app.run("component.editProperty", json!({"id": owner, "name": k, "default": v}));
+                        match (selected, &selected_name) {
+                            (Some(variant), Some(name)) => {
+                                app.run("node.set", json!({"id": variant, "props": {"name": renamed_variant(name, k, v)}}));
+                            }
+                            _ => {
+                                app.run("component.editProperty", json!({"id": owner, "name": k, "default": v}));
+                            }
+                        }
                         ui.close();
                     }
                 }
@@ -287,14 +335,16 @@ fn properties_ui(app: &mut FigApp, ui: &mut Ui, doc: &Document, owner: NodeId) {
             }
         });
         // Values: rename inline; "+" adds a variant with a new value.
-        let mut vi = 0;
-        while vi < vals.len() {
-            let chunk: Vec<String> = vals.iter().skip(vi).take(3).cloned().collect();
-            let last = vi + chunk.len() >= vals.len();
+        let room = (ui.available_width() - CHIP_INDENT - CHIP_ADD_WIDTH).max(CHIP_MIN_WIDTH);
+        let widths: Vec<f32> = vals.iter().map(|v| chip_width(ui, v, room)).collect();
+        let rows = chip_rows(&widths, room, ui.spacing().item_spacing.x);
+        for range in &rows {
+            let last = range.end >= vals.len();
             row(ui, 30.0, |ui| {
-                ui.add_space(22.0);
-                for v in &chunk {
-                    if let Some(nv) = widgets::text_field(ui, Id::unique(("vprop_val", owner, k.as_str(), v.as_str())), v, 62.0, "")
+                ui.add_space(CHIP_INDENT);
+                for index in range.clone() {
+                    let (Some(v), Some(width)) = (vals.get(index), widths.get(index)) else { continue };
+                    if let Some(nv) = widgets::text_field(ui, Id::unique(("vprop_val", owner, k.as_str(), v.as_str())), v, *width, "")
                         && nv != *v
                     {
                         app.run("component.editProperty", json!({"id": owner, "name": k, "value": v, "newValue": nv}));
@@ -305,7 +355,6 @@ fn properties_ui(app: &mut FigApp, ui: &mut Ui, doc: &Document, owner: NodeId) {
                     app.run("component.addVariant", json!({"id": owner, "property": k, "value": nv}));
                 }
             });
-            vi += 3;
         }
         drag.row(ui, i, header, header.with_max_y(ui.cursor().min.y.max(header.max.y)), || k.clone());
     }
