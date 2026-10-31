@@ -85,7 +85,7 @@ impl Entry {
         Some(Self {
             id: text("id")?,
             variant: text("variant").unwrap_or_default(),
-            path: text("path")?,
+            path: text("label").or_else(|| text("path"))?,
             kind: Kind::parse(&text("kind")?)?,
             field: text("field")?,
             origin: Origin::parse(&text("state")?)?,

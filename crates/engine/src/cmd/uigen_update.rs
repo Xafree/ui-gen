@@ -21,21 +21,22 @@ const APPLY: &str = "uigen.applyDifferences";
 const MAX_NAME_CHARS: usize = 128;
 const MAX_COMPONENTS: usize = 256;
 const MAX_ID_CHARS: usize = 600;
-const OPTION_KEYS: [&str; 7] = ["styleProp", "sizeProp", "styles", "sizes", "states", "themes", "animations"];
+const OPTION_KEYS: [&str; 8] = ["styleProp", "sizeProp", "styles", "sizes", "states", "themes", "animations", ROLE_NAMES];
+const ROLE_NAMES: &str = "roleNames";
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         spec!(
             UPDATE,
             "Update source components",
-            "{package (a source of the library project), components? [names of imported components] (default all)}  captures again every component imported from the source, with the options of its first import, into the import page of the source's current version (\"- Imported · <package> <version>\") and the variable collection \"<package> <version>\"; the components are those of that page, else of the last import page of the package. Returns {jobs: [one import job per component], components: [names]} at once; each import ends with its own event (command uigen.importComponent). The library never changes: see uigen.sourceDiff and uigen.applyDifferences. Refused (`bad`, no job submitted) outside a library project, for a package that is not an active source, when nothing was imported from it, for an unknown component, and without a capture service",
+            "{package (a source of the library project), components? [names of imported components] (default all), roleNames? (as in uigen.importComponent; default: those of the first import)}  captures again every component imported from the source, with the options of its first import, into the import page of the source's current version (\"- Imported · <package> <version>\") and the variable collection \"<package> <version>\"; the components are those of that page, else of the last import page of the package. Returns {jobs: [one import job per component], components: [names]} at once; each import ends with its own event (command uigen.importComponent). The library never changes: see uigen.sourceDiff and uigen.applyDifferences. Refused (`bad`, no job submitted) outside a library project, for a package that is not an active source, when nothing was imported from it, for an unknown component, and without a capture service",
             false,
             update_source
         ),
         spec!(
             DIFF,
             "List source differences",
-            "{copy (the component set of the library that uigen.placeImported made)}  what changed between the capture the copy comes from and the one of the source's current version: {copy, name, from (version of the copy), to (current version), base: {page, set} | null (the old capture), latest: {page, set} | null (the new one), differences: [{id (\"<variant>|<path>|<field>\"), variant, path (names of the layers from the root, joined by \" / \"; empty for the variant itself), kind (added|removed|changed), field (layer, or fill|stroke|effects|corner radius|size|position|opacity|blend|visibility|clip content|text|font|auto layout|other), state (clean: the copy still has the old value; modified: the user changed it; unknown: the old capture is gone), applicable (false: uigen.applyDifferences can't take it)}], summary: {clean, modified, unknown}, note? (what was left out: a variant in one capture only, layers sharing a name with a sibling)}. A difference the copy already has the new value of is not listed. Without a latest capture, `latest` is null, there is no difference and `note` says to recapture first. At most 2000 differences, `note` says when more. Pure: no job, no write. Refused (`bad`) outside a library project and for a copy that is not a component set with a readable uigen.source",
+            "{copy (the component set of the library that uigen.placeImported made)}  what changed between the capture the copy comes from and the one of the source's current version: {copy, name, from (version of the copy), to (current version), base: {page, set} | null (the old capture), latest: {page, set} | null (the new one), differences: [{id (\"<variant>|<path>|<field>\"), variant, path (stable names of the layers from the root, joined by \" / \", the same in every language; empty for the variant itself), label (the path as the layers show it), kind (added|removed|changed), field (layer, or fill|stroke|effects|corner radius|size|position|opacity|blend|visibility|clip content|text|font|auto layout|other), state (clean: the copy still has the old value; modified: the user changed it; unknown: the old capture is gone), applicable (false: uigen.applyDifferences can't take it)}], summary: {clean, modified, unknown}, note? (what was left out: a variant in one capture only, layers sharing a name with a sibling)}. A difference the copy already has the new value of is not listed. Without a latest capture, `latest` is null, there is no difference and `note` says to recapture first. At most 2000 differences, `note` says when more. Pure: no job, no write. Refused (`bad`) outside a library project and for a copy that is not a component set with a readable uigen.source",
             false,
             source_differences
         ),
@@ -105,9 +106,16 @@ fn update_source(s: &mut Session, p: &Value) -> Result<Value> {
     if let Some(unknown) = wanted.iter().flatten().find(|name| !components.iter().any(|(_, component)| component == *name)) {
         return Err(bad(UPDATE, format!("`{unknown}` is not a component imported from \"{package}\"")));
     }
+    let language = get(p, ROLE_NAMES).filter(|names| names.is_object()).cloned();
     let requests = components
         .iter()
-        .map(|(set, component)| Ok(import_params(&package, component, &options_of(s, *set, component)?)))
+        .map(|(set, component)| {
+            let mut options = options_of(s, *set, component)?;
+            if let (Some(language), Some(fields)) = (&language, options.as_object_mut()) {
+                fields.insert(ROLE_NAMES.to_owned(), language.clone());
+            }
+            Ok(import_params(&package, component, &options))
+        })
         .collect::<Result<Vec<_>>>()?;
     let mut jobs = Vec::with_capacity(requests.len());
     for request in &requests {
@@ -126,6 +134,7 @@ fn difference_json(difference: &Difference) -> Value {
         "id": difference.id,
         "variant": difference.variant,
         "path": difference.path,
+        "label": difference.label,
         "kind": difference.kind.as_str(),
         "field": difference.field,
         "state": difference.state.as_str(),

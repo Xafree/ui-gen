@@ -240,6 +240,7 @@ pub(super) fn options_of(request: &Request, variants: &[Variant]) -> String {
         "states": states,
         "themes": themes,
         "animations": request.animations,
+        "roleNames": request.role_names,
     })
     .to_string()
 }

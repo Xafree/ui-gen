@@ -19,9 +19,23 @@ impl FigApp {
     }
 }
 
-/// An import started from the interface names its layers in the language of the interface.
+#[cfg(test)]
+mod role_names_tests {
+    use super::with_role_names;
+    use serde_json::json;
+
+    #[test]
+    fn an_update_from_the_interface_names_its_layers_like_an_import() {
+        for command in ["uigen.importComponent", "uigen.updateSource"] {
+            assert!(with_role_names(command, json!({}))["roleNames"]["Label"].is_string(), "{command}");
+        }
+        assert!(with_role_names("node.set", json!({})).get("roleNames").is_none());
+    }
+}
+
+/// An import or an update started from the interface names its layers in the language of the interface.
 fn with_role_names(id: &str, mut params: Value) -> Value {
-    if id == "uigen.importComponent"
+    if (id == "uigen.importComponent" || id == "uigen.updateSource")
         && let Some(map) = params.as_object_mut().filter(|m| !m.contains_key("roleNames"))
     {
         let names = [

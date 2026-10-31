@@ -25,16 +25,47 @@ const TAG_ROLES: [(&[&str], &str); 7] = [
     (&["h1", "h2", "h3", "h4", "h5", "h6"], "Heading"),
 ];
 
+/// The English name of a layer whose shown name is another: what paths and variables are made of.
+const STABLE_NAME_KEY: &str = "uigen.stableName";
+
+/// The name that matches a layer across captures and languages.
+pub fn stable_name(node: &Node) -> &str {
+    node.plugin_data.get(STABLE_NAME_KEY).map_or(node.name.as_str(), String::as_str)
+}
+
 /// The English layer names a translation gives; the interface passes them in its language.
 pub const ROLE_NAMES: [&str; 12] = [BACKGROUND, LABEL, ICON, CONTENT, SHAPE, "Button", "Link", "Input", "Image", "List", "Item", "Heading"];
 
 /// A layer is named after what it does, not after the text it holds: a label an element only inherits from its text says nothing, an `aria-label` does.
-pub(super) fn by_role(doc: &mut Document, root: NodeId, sources: &BTreeMap<NodeId, &Element>, options: &TranslateOptions) {
+/// The names are in English and unique among siblings; `localized` then shows them in the language of the interface.
+pub(super) fn by_role(doc: &mut Document, root: NodeId, sources: &BTreeMap<NodeId, &Element>) -> BTreeMap<NodeId, &'static str> {
+    let mut roles = BTreeMap::new();
     for id in doc.subtree(root).into_iter().filter(|id| *id != root) {
         let Some(role) = role_of(doc, id, sources) else { continue };
-        let name = options.role_names.get(role).map_or(role, String::as_str).to_owned();
+        roles.insert(id, role);
         if let Some(node) = doc.node_mut(id) {
-            node.name = name;
+            role.clone_into(&mut node.name);
+        }
+    }
+    make_unique(doc, root);
+    roles
+}
+
+/// Shows the role names in the language of the interface; a layer whose shown name is no longer its English one keeps that one aside.
+pub(super) fn localized(doc: &mut Document, root: NodeId, roles: &BTreeMap<NodeId, &'static str>, options: &TranslateOptions) {
+    if options.role_names.is_empty() {
+        return;
+    }
+    let english: BTreeMap<NodeId, String> = doc.subtree(root).into_iter().filter_map(|id| Some((id, doc.node(id)?.name.clone()))).collect();
+    for (id, role) in roles {
+        if let (Some(name), Some(node)) = (options.role_names.get(*role), doc.node_mut(*id)) {
+            node.name.clone_from(name);
+        }
+    }
+    make_unique(doc, root);
+    for (id, name) in english {
+        if let Some(node) = doc.node_mut(id).filter(|node| node.name != name) {
+            node.plugin_data.insert(STABLE_NAME_KEY.to_owned(), name);
         }
     }
 }
@@ -86,7 +117,7 @@ fn letters(text: &str) -> String {
     text.chars().filter(|c| !c.is_whitespace()).flat_map(char::to_lowercase).collect()
 }
 
-pub(super) fn make_unique(doc: &mut Document, root: NodeId) {
+fn make_unique(doc: &mut Document, root: NodeId) {
     for id in doc.subtree(root) {
         let children = doc.node(id).map(|node| node.children.clone()).unwrap_or_default();
         let mut taken = BTreeSet::new();
@@ -116,7 +147,7 @@ pub(super) fn facts(doc: &Document, root: NodeId) -> Vec<LayerFacts> {
     for id in doc.subtree(root) {
         let Some(node) = doc.node(id) else { continue };
         let parent_path = node.parent.filter(|_| id != root).and_then(|parent| paths.get(&parent));
-        let name = escaped(&node.name);
+        let name = escaped(stable_name(node));
         let path = parent_path.map_or_else(|| name.clone(), |parent| format!("{parent}{SEPARATOR}{name}"));
         paths.insert(id, path.clone());
         layers.push(LayerFacts { id, path, tokens: Vec::new(), transition: None, effect: None });

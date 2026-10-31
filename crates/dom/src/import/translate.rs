@@ -85,8 +85,8 @@ pub fn translate_snapshot(
     let Walk { doc, mut warnings, elements, svgs, .. } = walk;
     let sources: BTreeMap<_, _> = elements.into_iter().collect();
     let root = if options.cleanup { cleanup::run(doc, root, &sources)? } else { root };
-    names::by_role(doc, root, &sources, options);
-    names::make_unique(doc, root);
+    let roles = names::by_role(doc, root, &sources);
+    names::localized(doc, root, &roles, options);
     if options.auto_layout {
         layout::apply(doc, root, &sources, &mut warnings);
     }
