@@ -31,6 +31,7 @@ pub(super) fn is_installed(family: &str) -> bool {
 }
 
 const MAX_STYLE_WORDS: usize = 3;
+const WIDTH_WORDS: [&str; 5] = ["narrow", "condensed", "compressed", "expanded", "extended"];
 
 /// A platform font name like "Segoe UI Semibold" is a face of an installed family: its family and the style it names.
 pub(super) fn face_of_platform_name(name: &str) -> Option<(String, String)> {
@@ -60,20 +61,32 @@ pub(super) fn installed_family(stack: &str) -> Option<String> {
 
 /// The style of `family` nearest `weight`, on the same slant when the family has one: a weight is never synthesised.
 pub(super) fn installed_style(family: &str, weight: u16, italic: bool) -> Option<String> {
-    let styles: Vec<(String, u16, bool)> = figcraft_text::family_styles(family)
-        .into_iter()
-        .map(|style| {
-            let lower = style.to_ascii_lowercase();
-            let slanted = lower.contains("italic") || lower.contains("oblique");
-            let weight = style_weight(&style);
-            (style, weight, slanted)
-        })
-        .collect();
-    let same_slant: Vec<&(String, u16, bool)> = styles.iter().filter(|style| style.2 == italic).collect();
-    let pool = if same_slant.is_empty() { styles.iter().collect() } else { same_slant };
-    let weights: Vec<u16> = pool.iter().map(|style| style.1).collect();
+    nearest_style(&figcraft_text::family_styles(family), weight, italic)
+}
+
+/// A filter that keeps nothing keeps everything: the family has no such style to prefer.
+fn preferring<'a>(styles: Vec<&'a str>, keep: impl Fn(&str) -> bool) -> Vec<&'a str> {
+    let kept: Vec<&str> = styles.iter().copied().filter(|style| keep(style)).collect();
+    if kept.is_empty() { styles } else { kept }
+}
+
+fn is_slanted(style: &str) -> bool {
+    let lower = style.to_ascii_lowercase();
+    lower.contains("italic") || lower.contains("oblique")
+}
+
+fn has_normal_width(style: &str) -> bool {
+    let lower = style.to_ascii_lowercase();
+    !WIDTH_WORDS.iter().any(|word| lower.contains(word))
+}
+
+/// The style CSS font matching picks for a page that asks no particular width.
+pub(super) fn nearest_style(styles: &[String], weight: u16, italic: bool) -> Option<String> {
+    let all: Vec<&str> = styles.iter().map(String::as_str).collect();
+    let pool = preferring(preferring(all, has_normal_width), |style| is_slanted(style) == italic);
+    let weights: Vec<u16> = pool.iter().map(|style| style_weight(style)).collect();
     let chosen = nearest_weight(&weights, weight);
-    pool.into_iter().find(|style| style.1 == chosen).map(|style| style.0.clone())
+    pool.into_iter().find(|style| style_weight(style) == chosen).map(str::to_owned)
 }
 
 /// The weight among `available` that CSS font matching picks for `wanted`; `wanted` itself when there is none.
