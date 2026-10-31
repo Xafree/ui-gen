@@ -867,8 +867,10 @@ fn select_clicked(app: &mut FigApp, rows: &[Row], sel: &[NodeId], id: NodeId, m:
         app.ui.layer_anchor = Some(id);
         app.run("select.set", json!({"ids": [id]}));
     }
-    // A click in the panel needs no reveal scroll.
-    app.ui.layers_seen_sel = app.session.selection();
+    // A click in the panel needs no reveal scroll, but the layer it picked shows its layers.
+    let picked = app.session.selection();
+    app.ui.expanded.extend(picked.iter().copied());
+    app.ui.layers_seen_sel = picked;
     if let Ok(ds) = app.session.ds_mut()
         && ds.text_edit.is_some()
     {
@@ -960,11 +962,12 @@ fn eye_lock(
     (vis, lock)
 }
 
-/// Expands the ancestors of a selection not seen yet (once, so manual collapsing sticks); whether it was new.
+/// Expands a selection not seen yet and its ancestors (once, so manual collapsing sticks); whether it was new.
 fn reveal_selection(app: &mut FigApp, doc: &Document, page: NodeId, sel: &[NodeId]) -> bool {
     let reveal = sel != app.ui.layers_seen_sel;
     if reveal {
         for s in sel {
+            app.ui.expanded.insert(*s);
             for a in doc.ancestors(*s) {
                 if a != page {
                     app.ui.expanded.insert(a);

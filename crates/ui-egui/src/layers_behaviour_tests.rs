@@ -110,6 +110,31 @@ fn expanding_collapsing_and_revealing() {
 }
 
 #[test]
+fn a_selected_layer_shows_its_layers_once_and_a_manual_collapse_stays() {
+    let mut s = Session::new();
+    let f = id(s.execute("frame.create", &json!({"x": 0, "y": 0, "width": 200, "height": 200, "name": "F"})).unwrap());
+    rect(&mut s, "inner", 10.0, Some(f));
+    s.execute("select.none", &json!({})).unwrap();
+    let mut u = Ui::new(s);
+    u.app.ui.expanded.clear();
+    u.frame(vec![]);
+
+    u.app.run("select.set", json!({"ids": [f]}));
+    u.frame(vec![]);
+    assert!(u.app.ui.expanded.contains(&f), "selected on the canvas, the layer opens");
+
+    u.app.ui.expanded.remove(&f);
+    u.frame(vec![]);
+    assert!(!u.app.ui.expanded.contains(&f), "a manual collapse stays while the selection does not change");
+
+    u.app.run("select.none", json!({}));
+    u.frame(vec![]);
+    let row = u.row_at(f);
+    click(&mut u, Pos2::new(row.x + 40.0, row.y), Modifiers::NONE);
+    assert!(u.app.ui.expanded.contains(&f), "clicked in the panel, the layer opens");
+}
+
+#[test]
 fn sweeping_across_eyes_and_padlocks_sets_several_layers() {
     let (mut u, [a, b, c, d]) = four();
     // The eye and padlock are at the row's right end (the left panel spans 56…296).
