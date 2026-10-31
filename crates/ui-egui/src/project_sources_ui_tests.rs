@@ -269,7 +269,7 @@ fn the_file_menu_offers_project_settings_which_opens_the_window_for_a_user_only(
 
     b.open_window();
     let shown = b.painted();
-    for text in ["Source libraries", "Run", "Package", "Version", "Framework", "Close"] {
+    for text in ["Source libraries", "Run", "Library", "Version", "Written for"] {
         assert!(mentions(&shown, text), "{text:?} is on screen: {shown:?}");
     }
     assert!(mentions(&shown, MUI) && mentions(&shown, "7.3.11"), "the listed source is on screen: {shown:?}");
@@ -517,9 +517,9 @@ fn keys_in(src: &str) -> BTreeSet<String> {
 const FIXED_KEYS: [&str; 12] = [
     "Source libraries",
     "Run",
-    "Package",
+    "Library",
     "Version",
-    "Framework",
+    "Written for",
     "Remove",
     "Change version",
     "Removed source",
@@ -530,10 +530,10 @@ const FIXED_KEYS: [&str; 12] = [
 ];
 
 const FRENCH: [(&str, &str); 9] = [
-    ("Source libraries", "Bibliothèques sources"),
+    ("Source libraries", "Librairies sources"),
     ("Run", "Lancer"),
-    ("Package", "Paquet"),
-    ("Framework", "Framework"),
+    ("Library", "Librairie"),
+    ("Written for", "Écrite pour"),
     ("Remove", "Retirer"),
     ("Change version", "Changer de version"),
     ("Removed source", "Source retirée"),
