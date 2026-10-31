@@ -226,6 +226,7 @@ fn to_effects(img: Img, world: Affine) -> Option<Vec<Effect>> {
                     spread: s.spread * k,
                     blend: BlendMode::Normal,
                     show_behind: !s.knockout,
+                    from_outline: false,
                 };
                 match (s.inner, i < at) {
                     (false, true) => out.push(EffectKind::DropShadow(shadow)),

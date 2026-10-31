@@ -87,6 +87,7 @@ fn effect(r: &mut Lcg) -> Effect {
         spread: r.f(-2.0, 2.0),
         blend: r.pick(&BLENDS),
         show_behind: r.chance(30),
+        from_outline: false,
     };
     let blur = |r: &mut Lcg| {
         let mut b = Blur { radius: r.f(1.0, 10.0), ..Blur::default() };

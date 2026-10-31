@@ -152,7 +152,8 @@ async function renderInPage(page, installed, params, { code, styles }, budget) {
 }
 
 export async function render(params) {
-  const budget = startBudget(RENDER_BUDGET_MS, `rendering did not finish within ${RENDER_BUDGET_MS / 1000} s`);
+  const newBudget = () => startBudget(RENDER_BUDGET_MS, `rendering did not finish within ${RENDER_BUDGET_MS / 1000} s`);
+  let budget = newBudget();
   const installed = await readInstalledPackage(params.dir, params.package);
   checkParams(params);
   if (!RENDERABLE.includes(installed.framework)) {
@@ -190,5 +191,6 @@ export async function render(params) {
       throw error;
     }
   }
+  budget = newBudget();
   return withNotes(await inPage(undefined), [SAMPLE_TEXT_IGNORED]);
 }

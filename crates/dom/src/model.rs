@@ -134,5 +134,7 @@ pub struct SvgNode {
     #[serde(rename = "box")]
     pub r#box: DomBox,
     #[serde(default)]
+    pub rotation: f64,
+    #[serde(default)]
     pub animations: Vec<DomAnimation>,
 }
