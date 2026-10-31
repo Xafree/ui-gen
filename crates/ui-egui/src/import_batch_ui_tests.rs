@@ -119,3 +119,22 @@ fn a_batch_whose_surface_lives_in_a_second_window_goes_on_to_its_summary() {
     let summary = crate::windows::as_window(&mut b.ui.app, window, |app| crate::dialogs::import_component::summary_for_test(app)).flatten();
     assert_eq!(summary, Some((2, 2)), "the second window gets its events");
 }
+
+#[test]
+fn escape_closes_a_modal_over_a_surface_first_and_leaves_the_surface() {
+    let mut b = open_pair("escape-modal");
+    b.ui.app.ui.about = true;
+    b.settle();
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.ui.app.ui.about, "the modal on top goes");
+    assert!(b.window_open(), "the surface behind stays");
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.window_open());
+
+    b.open_settings();
+    b.ui.app.ui.preferences = true;
+    b.settle();
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.ui.app.ui.preferences);
+    assert!(b.flat().contains("Installed in this project"), "the page stays: {:?}", b.shown());
+}
