@@ -18,6 +18,13 @@ export const okResponse = (id, result) => ({ id, ok: true, result });
 
 export const errorResponse = (id, kind, message) => ({ id, ok: false, error: { kind, message } });
 
+const MAX_INTERNAL_CAUSE_LENGTH = 300;
+
+export function internalMessage(method, error) {
+  const cause = error instanceof Error ? `${error.name}: ${error.message.split('\n', 1)[0]}` : 'unknown';
+  return `internal error in "${method}": ${cause.slice(0, MAX_INTERNAL_CAUSE_LENGTH)}`;
+}
+
 export const encodeLine = (message) => `${JSON.stringify(message)}\n`;
 
 const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);

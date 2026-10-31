@@ -16,7 +16,8 @@ use std::fmt::Write as _;
 use serde_json::Value;
 
 fn main() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../contributors");
+    let manifest = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap_or_default());
+    let dir = manifest.join("../../contributors");
     let json = read(&dir.join("contributors.json"), "the About window shows no contributors", |t| {
         serde_json::from_str::<Value>(t).map_err(|e| e.to_string())
     })
@@ -28,14 +29,14 @@ fn main() {
         println!("cargo::warning=writing {}: {e}", out.display());
     }
     let out = out.with_file_name("locales.rs");
-    if let Err(e) = std::fs::write(&out, locales()) {
+    if let Err(e) = std::fs::write(&out, locales(&manifest)) {
         println!("cargo::warning=writing {}: {e}", out.display());
     }
 }
 
 /// `pub static LANGS: &[Lang]`: every `locales/*.toml`, English first, each table sorted by key.
-fn locales() -> String {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("locales");
+fn locales(manifest: &std::path::Path) -> String {
+    let dir = manifest.join("locales");
     println!("cargo::rerun-if-changed={}", dir.display());
     let mut files: Vec<_> =
         std::fs::read_dir(&dir).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "toml")).collect();
@@ -48,6 +49,7 @@ fn locales() -> String {
             Some((path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(), path, t))
         })
         .collect();
+    assert!(!langs.is_empty(), "no string catalog found in {}", dir.display());
     let mut o = String::from(
         "pub static LANGS: &[Lang] = &[
 ",
