@@ -132,26 +132,48 @@ async function readInstalledManifest(dir, name, version) {
   throw new ServiceError('install', `${name}@${version} was installed but its package.json cannot be read`);
 }
 
+const MAX_PACKAGES = 32;
+
+function requestedPackages(params) {
+  if (params.packages === undefined) {
+    return [{ name: params.package, version: params.version }];
+  }
+  const { packages } = params;
+  if (!Array.isArray(packages) || packages.length === 0 || packages.length > MAX_PACKAGES) {
+    throw invalid(`"packages" must list between 1 and ${MAX_PACKAGES} packages`);
+  }
+  return packages.map((entry) => ({ name: entry?.name, version: entry?.version }));
+}
+
+const describeInstalled = (name, manifest) => ({
+  package: name,
+  version: manifest.version,
+  license: typeof manifest.license === 'string' ? manifest.license : null,
+  framework: detectFramework(manifest),
+});
+
 export async function install(params, { runNpm }) {
-  const { dir, package: name, version } = params;
-  checkPackage(name);
-  checkVersion(version);
+  const requested = requestedPackages(params);
+  for (const { name, version } of requested) {
+    checkPackage(name);
+    checkVersion(version);
+  }
+  const { dir } = params;
   await checkProject(dir);
   await ensureSourcesManifest(dir);
   await refuseProjectNpmrc(dir, 'install');
   const { flags, env } = await npmSettings();
-  const args = ['install', ...flags, '--save-exact', '--prefix', sourcesDir(dir), `${name}@${version}`];
+  const specs = requested.map(({ name, version }) => `${name}@${version}`);
+  const args = ['install', ...flags, '--save-exact', '--prefix', sourcesDir(dir), ...specs];
   const { code, stderr } = await runNpm(args, { cwd: sourcesDir(dir), env });
   if (code !== 0) {
-    throw new ServiceError('install', `npm could not install ${name}@${version}: ${lastUsefulLine(stderr)}`);
+    throw new ServiceError('install', `npm could not install ${specs.join(', ')}: ${lastUsefulLine(stderr)}`);
   }
-  const manifest = await readInstalledManifest(dir, name, version);
-  return {
-    package: name,
-    version: manifest.version,
-    license: typeof manifest.license === 'string' ? manifest.license : null,
-    framework: detectFramework(manifest),
-  };
+  const installed = [];
+  for (const { name, version } of requested) {
+    installed.push(describeInstalled(name, await readInstalledManifest(dir, name, version)));
+  }
+  return params.packages === undefined ? installed[0] : { packages: installed };
 }
 
 export async function uninstall(params, { runNpm }) {

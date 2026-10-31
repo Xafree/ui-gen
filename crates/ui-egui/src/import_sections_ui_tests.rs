@@ -127,7 +127,7 @@ impl CaptureBackend for FakeBackend {
             CaptureJob::Install { package, version, .. } => {
                 Ok(json!({"package": package, "version": version, "framework": "react", "license": "MIT"}))
             }
-            CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
+            CaptureJob::InstallMany { .. } | CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
         };
         self.submitted += 1;
         self.ready.push((self.submitted, outcome));

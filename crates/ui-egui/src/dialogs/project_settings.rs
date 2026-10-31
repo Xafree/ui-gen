@@ -5,7 +5,8 @@
 
 use egui::{Align, Context, CornerRadius, Label, Layout, Margin, RichText, ScrollArea, Stroke, Ui, vec2};
 use figcraft_engine::capture::JobState;
-use figcraft_engine::file_access;
+use figcraft_engine::{EngineError, file_access};
+use figcraft_project::ProjectError;
 use figcraft_project::npm;
 use serde_json::json;
 
@@ -16,10 +17,10 @@ use crate::i18n::{tr, tr_noop, trf};
 use crate::theme::{Tokens, regular, semibold};
 
 const ADD: &str = "project.addSource";
+const ADD_MANY: &str = "project.addSources";
 const SET_VERSION: &str = "project.setSourceVersion";
 const REMOVE: &str = "project.removeSource";
 const IMPORT: &str = "uigen.importComponent";
-const LATEST: &str = "latest";
 
 const PACKAGE_W: f32 = 180.0;
 const VERSION_W: f32 = 90.0;
@@ -32,7 +33,7 @@ const CELL_H: f32 = 28.0;
 const LIST_HEIGHT: f32 = 320.0;
 pub(super) const INNER_W: f32 = PACKAGE_W + VERSION_W + FRAMEWORK_W + LICENSE_W + ACTIONS_W + 4.0 * GAP;
 const WIDTH: f32 = INNER_W + 2.0 * (CARD_MARGIN as f32 + 1.0);
-const ADD_PACKAGE_W: f32 = 280.0;
+const ADD_PACKAGE_W: f32 = 360.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Work {
@@ -53,14 +54,14 @@ pub struct SourceRow {
 
 #[derive(Clone, Debug)]
 struct Failure {
-    package: String,
+    packages: Vec<String>,
     command: String,
     message: String,
 }
 
 struct Job {
     command: String,
-    package: String,
+    packages: Vec<String>,
     state: String,
     error: String,
 }
@@ -70,7 +71,6 @@ pub struct ProjectSettings {
     sources: Vec<SourceRow>,
     failures: Vec<Failure>,
     package_input: String,
-    version_input: String,
     add_error: Option<String>,
     pending_removal: Option<String>,
     changing: Option<(String, String)>,
@@ -81,7 +81,6 @@ pub struct ProjectSettings {
 
 enum Act {
     Package(String),
-    Version(String),
     Add,
     AskRemoval(String),
     CancelRemoval,
@@ -111,7 +110,7 @@ impl ProjectSettings {
         let Some(binding) = app.session.project().cloned() else { return false };
         let jobs = jobs(app, &binding.root);
         let working = |package: &str, command: &str| {
-            jobs.iter().any(|j| j.package == package && j.command == command && matches!(j.state.as_str(), "queued" | "running"))
+            jobs.iter().any(|j| j.packages.iter().any(|p| p == package) && j.command == command && matches!(j.state.as_str(), "queued" | "running"))
         };
         let mut rows: Vec<SourceRow> = binding
             .config
@@ -140,10 +139,10 @@ impl ProjectSettings {
                 }
             })
             .collect();
-        for job in jobs.iter().filter(|j| j.command == ADD && working(&j.package, ADD)) {
-            if !rows.iter().any(|r| r.package == job.package) {
+        for package in jobs.iter().filter(|j| j.command == ADD).flat_map(|j| &j.packages) {
+            if working(package, ADD) && !rows.iter().any(|r| r.package == *package) {
                 rows.push(SourceRow {
-                    package: job.package.clone(),
+                    package: package.clone(),
                     version: String::new(),
                     framework: String::new(),
                     license: String::new(),
@@ -154,9 +153,9 @@ impl ProjectSettings {
         }
         let mut failures: Vec<Failure> = Vec::new();
         for job in &jobs {
-            failures.retain(|f| f.package != job.package);
+            failures.retain(|f| !f.packages.iter().any(|p| job.packages.contains(p)));
             if job.state == "failed" {
-                failures.push(Failure { package: job.package.clone(), command: job.command.clone(), message: job.error.clone() });
+                failures.push(Failure { packages: job.packages.clone(), command: job.command.clone(), message: job.error.clone() });
             }
         }
         self.sources = rows;
@@ -166,7 +165,7 @@ impl ProjectSettings {
     }
 
     fn failure(&self, package: &str) -> Option<String> {
-        self.failures.iter().find(|f| f.package == package).map(|f| failure_text(&f.command, &f.package, &f.message))
+        self.failures.iter().find(|f| f.packages.iter().any(|p| p == package)).map(|f| failure_text(&f.command, &f.packages.join(", "), &f.message))
     }
 }
 
@@ -174,7 +173,7 @@ fn jobs(app: &FigApp, root: &str) -> Vec<Job> {
     app.session
         .capture_jobs()
         .into_iter()
-        .filter(|job| [ADD, SET_VERSION, REMOVE].contains(&job.command.as_str()) && file_access::same_file(&job.root, root))
+        .filter(|job| [ADD, ADD_MANY, SET_VERSION, REMOVE].contains(&job.command.as_str()) && file_access::same_file(&job.root, root))
         .map(|job| {
             let (state, error) = match job.state {
                 JobState::Queued => ("queued", String::new()),
@@ -182,7 +181,8 @@ fn jobs(app: &FigApp, root: &str) -> Vec<Job> {
                 JobState::Done => ("done", String::new()),
                 JobState::Failed(message) => ("failed", message),
             };
-            Job { command: job.command, package: job.package, state: state.to_string(), error }
+            let command = if job.command == ADD_MANY { ADD.to_string() } else { job.command };
+            Job { command, packages: job.packages, state: state.to_string(), error }
         })
         .collect()
 }
@@ -219,7 +219,7 @@ pub(crate) fn pump(app: &mut FigApp) {
             }
             continue;
         }
-        if ![ADD, SET_VERSION, REMOVE].contains(&event.command.as_str()) {
+        if ![ADD, ADD_MANY, SET_VERSION, REMOVE].contains(&event.command.as_str()) {
             continue;
         }
         match &event.outcome {
@@ -250,18 +250,31 @@ fn sync(app: &mut FigApp) {
     }
 }
 
-/// Install `package` (the latest version when `version` is empty) as a source of the project.
-pub fn add_package(app: &mut FigApp, package: &str, version: &str) {
-    let (package, version) = (package.trim(), version.trim());
-    let version = if version.is_empty() { LATEST } else { version };
-    let checked = npm::validate_package_name(package).and_then(|()| npm::validate_version(version, true));
-    edit(app, |state| state.add_error = checked.as_ref().err().map(ToString::to_string));
-    if checked.is_ok() && app.run(ADD, json!({"package": package, "version": version})).is_some() {
-        edit(app, |state| {
-            state.package_input.clear();
-            state.version_input.clear();
-        });
+fn refusal_text(error: &ProjectError) -> String {
+    match error {
+        ProjectError::Invalid { field, reason } if field == "line" => reason.clone(),
+        ProjectError::Invalid { field, reason } => format!("{field}: {reason}"),
+        other => other.to_string(),
     }
+}
+
+/// Install the packages typed on `line` (`name`, `name@1.2.0`, after an optional `npm install`) as
+/// sources of the project in one go. A refused line starts nothing and keeps what was typed.
+pub fn add_packages(app: &mut FigApp, line: &str) {
+    let refusal = match npm::parse_install_line(line) {
+        Err(error) => Some(refusal_text(&error)),
+        Ok(_) => match app.session.execute(ADD_MANY, &json!({"line": line})) {
+            Ok(_) => None,
+            Err(EngineError::BadParams { msg, .. }) => Some(msg),
+            Err(other) => Some(other.to_string()),
+        },
+    };
+    edit(app, |state| {
+        if refusal.is_none() {
+            state.package_input.clear();
+        }
+        state.add_error = refusal;
+    });
     sync(app);
 }
 
@@ -285,11 +298,10 @@ fn remove_package(app: &mut FigApp, package: &str) {
 fn perform(app: &mut FigApp, act: Act) {
     match act {
         Act::Package(text) => edit(app, |s| s.package_input = text),
-        Act::Version(text) => edit(app, |s| s.version_input = text),
         Act::Add => {
             let Some(state) = app.ui.project_settings.as_ref() else { return };
-            let (package, version) = (state.package_input.clone(), state.version_input.clone());
-            add_package(app, &package, &version);
+            let line = state.package_input.clone();
+            add_packages(app, &line);
         }
         Act::AskRemoval(package) => edit(app, |s| {
             s.pending_removal = Some(package);
@@ -367,7 +379,6 @@ fn body(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, can_install: bool, foc
     if let Some(error) = state.add_error() {
         note(ui, error, t.danger);
     }
-    note(ui, tr("Leave the version empty for the latest one"), t.text_tertiary);
     ui.add_space(12.0);
     table(ui, t, state, can_install, &mut acts);
     ui.add_space(12.0);
@@ -395,11 +406,7 @@ fn add_row(ui: &mut Ui, state: &ProjectSettings, can_install: bool, focus_first:
         if let Some(text) = crate::widgets::text_field(ui, package, &state.package_input, ADD_PACKAGE_W, tr("Package")) {
             acts.push(Act::Package(text));
         }
-        let version = egui::Id::unique(("project_settings", "version"));
-        if let Some(text) = crate::widgets::text_field(ui, version, &state.version_input, VERSION_W, tr("Version")) {
-            acts.push(Act::Version(text));
-        }
-        if crate::widgets::button(ui, tr("Add an npm package"), true, can_install).clicked() {
+        if crate::widgets::button(ui, tr("Run"), true, can_install).clicked() {
             acts.push(Act::Add);
         }
     });
@@ -423,8 +430,8 @@ fn table(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, can_install: bool, ac
     let orphans: Vec<String> = state
         .failures
         .iter()
-        .filter(|f| !state.sources.iter().any(|r| r.package == f.package))
-        .map(|f| failure_text(&f.command, &f.package, &f.message))
+        .filter(|f| !f.packages.iter().any(|p| state.sources.iter().any(|r| r.package == *p)))
+        .map(|f| failure_text(&f.command, &f.packages.join(", "), &f.message))
         .collect();
     if state.sources.is_empty() && orphans.is_empty() {
         note(ui, tr("No source library yet"), t.text_secondary);

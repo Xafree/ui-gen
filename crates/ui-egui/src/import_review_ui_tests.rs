@@ -90,7 +90,7 @@ impl CaptureBackend for Backend {
             CaptureJob::Install { package, version, .. } => {
                 Ok(json!({"package": package, "version": version, "framework": "react", "license": "MIT"}))
             }
-            CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
+            CaptureJob::InstallMany { .. } | CaptureJob::Uninstall { .. } | CaptureJob::Playground { .. } => Ok(json!({})),
         };
         script.submitted.push(job);
         let id = u64::try_from(script.submitted.len()).unwrap();

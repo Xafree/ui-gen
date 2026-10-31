@@ -21,6 +21,10 @@ pub(crate) fn request_of(job: CaptureJob, timeouts: &Timeouts) -> Result<Request
         CaptureJob::Install { root, package, version } => {
             Request { method: "install", params: json!({"dir": root, "package": package, "version": version}), timeout: timeouts.install }
         }
+        CaptureJob::InstallMany { root, packages } => {
+            let packages: Vec<Value> = packages.iter().map(|spec| json!({"name": spec.name, "version": spec.version})).collect();
+            Request { method: "install", params: json!({"dir": root, "packages": packages}), timeout: timeouts.install }
+        }
         CaptureJob::Uninstall { root, package } => {
             Request { method: "uninstall", params: json!({"dir": root, "package": package}), timeout: timeouts.install }
         }
