@@ -372,6 +372,8 @@ mod lit_tokens_freeze_tests;
 #[cfg(test)]
 mod lit_tokens_tests;
 #[cfg(test)]
+mod lit_variant_reset_tests;
+#[cfg(test)]
 mod lit_write_review_tests;
 #[cfg(test)]
 mod live_access_tests;

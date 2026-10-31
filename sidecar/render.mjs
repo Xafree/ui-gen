@@ -16,19 +16,19 @@ const COMPONENT_SELECTOR = `[${COMPONENT_MARK}]`;
 const RENDERABLE = ['react', 'web-components'];
 const STATES = ['default', 'hover', 'focus', 'pressed', 'disabled'];
 const THEMES = ['light', 'dark'];
-const VIEWPORT = { width: 800, height: 600 };
+export const VIEWPORT = { width: 800, height: 600 };
 const RENDER_BUDGET_MS = 25_000;
 const RENDER_TOTAL_MS = 28_000;
 const MAX_SAMPLE_TEXT_CHARS = 256;
 const SAMPLE_TEXT_IGNORED = 'sampleText ignored: the component takes no content';
 const SETTLE_CAP_MS = 3_000;
-const BACKGROUNDS = { light: '#ffffff', dark: '#1e1e1e' };
+export const BACKGROUNDS = { light: '#ffffff', dark: '#1e1e1e' };
 
 const invalid = (message) => new ServiceError('invalidRequest', message);
 
 const htmlAttributes = (theme) => (theme === 'dark' ? 'class="dark" data-theme="dark"' : 'data-theme="light"');
 
-const pageHtml = (theme) => `<!doctype html>
+export const pageHtml = (theme) => `<!doctype html>
 <html ${htmlAttributes(theme)}><head><meta charset="utf-8"><style>
 html { background: ${BACKGROUNDS[theme]}; color-scheme: ${theme}; }
 body { margin: 20px; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
@@ -147,7 +147,7 @@ function markRenderedElement({ rootSelector, mark }) {
   return true;
 }
 
-async function screenshotPainted(page, selector, file) {
+export async function screenshotPainted(page, selector, file) {
   const target = page.locator(selector);
   const box = await target.boundingBox();
   const left = Math.round(box?.x ?? 0);

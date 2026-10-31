@@ -271,7 +271,7 @@ pub(crate) fn css_decls(doc: &Document, n: &Node, t: &mut Tokens, hug: (bool, bo
         put("border-radius", corners.join(" "));
     }
     if n.opacity < 1.0 {
-        put("opacity", tok(doc, n, &["opacity"], num(f64::from(n.opacity)), t));
+        put("opacity", opacity_value(doc, n, t));
     }
     if !matches!(n.blend, figcraft_color::BlendMode::Normal | figcraft_color::BlendMode::PassThrough) {
         put("mix-blend-mode", n.blend.css().into());
@@ -307,6 +307,14 @@ pub(crate) fn css_decls(doc: &Document, n: &Node, t: &mut Tokens, hug: (bool, bo
         text_decls(doc, n, tx, t, &mut put);
     }
     out
+}
+
+/// The opacity of `n`. A variable holds it as a percentage, the way the canvas reads any value above 1.
+fn opacity_value(doc: &Document, n: &Node, t: &mut Tokens) -> String {
+    let opacity = f64::from(n.opacity);
+    let percent = crate::devinspect::bound_variable(doc, n, "opacity")
+        .is_some_and(|v| !v.values.values().all(|value| matches!(value, figcraft_doc::VariableValue::Number(unit) if *unit <= 1.0)));
+    if percent { format!("calc({} / 100)", tok(doc, n, &["opacity"], num(opacity * 100.0), t)) } else { tok(doc, n, &["opacity"], num(opacity), t) }
 }
 
 /// The flex declarations of auto layout `l` on `n`.
@@ -361,9 +369,11 @@ fn layout_decls(doc: &Document, n: &Node, l: &figcraft_doc::AutoLayout, t: &mut 
 
 /// Shadows and blurs of `n`.
 fn effect_decls(n: &Node, t: &mut Tokens, put: &mut impl FnMut(&str, String)) {
+    // The canvas paints the last effect on top, CSS the first shadow.
     let shadows: Vec<String> = n
         .effects
         .iter()
+        .rev()
         .filter(|e| e.visible)
         .filter_map(|e| match &e.kind {
             EffectKind::DropShadow(s) => {

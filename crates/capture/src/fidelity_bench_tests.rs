@@ -3,6 +3,7 @@
 //! Parity % = 100 × (1 − differing pixels / pixels of the larger raster), all pixels of the variant, text
 //! included: differing = `shapes.differing` + `text.pixelPercent` of the pixels inside the text boxes.
 //! Shapes % is the same outside the text boxes only, the figure Compare judges. Every case runs in light and dark.
+//! `lit=` % compares the original with the exported Lit element rendered in Chromium, all pixels, per variant.
 //! `#[ignore]`d: it needs Node, Chromium and a project whose `.uigen/sources` holds the packages.
 //!
 //! ```text
@@ -23,6 +24,7 @@ use figcraft_engine::Session;
 use figcraft_engine::uigen_compare::{Raster, difference_image, library_raster, original_raster};
 use serde_json::{Value, json};
 
+use crate::lit_parity_tests::{LitShots, lit_percent, shoot_set};
 use crate::{CaptureService, locate};
 
 const CASES: &str = include_str!("../fixtures/fidelity-cases.json");
@@ -37,6 +39,7 @@ struct Bench {
     root: String,
     out: Option<PathBuf>,
     scores: Vec<f64>,
+    lit_scores: Vec<f64>,
 }
 
 fn variable(name: &str) -> Option<String> {
@@ -82,6 +85,18 @@ fn parity(row: &Value) -> f64 {
     if all > 0.0 { 100.0 * (1.0 - differing / all) } else { 0.0 }
 }
 
+/// The shots of the exported set of a case, in the folder of the bench inside the project.
+fn lit_shots(session: &mut Session, root: &str, title: &str, set: &Value) -> Option<LitShots> {
+    let folder = Path::new(root).join(".uigen").join("lit-bench").join(safe_name(title));
+    match shoot_set(session, set, &folder, &THEMES) {
+        Ok(shots) => Some(shots),
+        Err(message) => {
+            println!("{title}: LIT EXPORT FAILED: {message}");
+            None
+        }
+    }
+}
+
 fn side_by_side(parts: &[&Raster]) -> image::RgbaImage {
     let width = parts.iter().map(|raster| raster.width + GAP).sum::<u32>().max(1);
     let height = parts.iter().map(|raster| raster.height).max().unwrap_or(1).max(1);
@@ -110,6 +125,12 @@ fn save_sheet(doc: &Document, root: &str, out: &Path, (title, theme): (&str, &st
     side_by_side(&[&original, &library, &difference]).save(out.join(format!("{}.png", safe_name(title)))).map_err(|error| error.to_string())
 }
 
+fn reference_png(doc: &Document, root: &str, variant: NodeId, theme: &str) -> Result<Raster, String> {
+    let reference = figcraft_engine::reference_of(doc, variant).ok_or("no reference")?;
+    let png = reference.themes.get(theme).and_then(|kept| kept.png.clone()).ok_or("no original png")?;
+    original_raster(root, &png).map_err(str::to_string)
+}
+
 fn variant_id(doc: &Document, set: NodeId, name: &str) -> Option<NodeId> {
     doc.node(set)?.children.iter().copied().find(|id| doc.node(*id).is_some_and(|node| node.name == name))
 }
@@ -121,6 +142,7 @@ impl Bench {
             Ok(imported) => imported,
             Err(message) => return println!("{title}: IMPORT FAILED: {}", message.lines().next().unwrap_or_default()),
         };
+        let shots = lit_shots(&mut self.session, &self.root, &title, &imported["set"]);
         for theme in THEMES {
             let compared = match self.session.execute(COMPARE, &json!({"set": imported["set"], "theme": theme})) {
                 Ok(compared) => compared,
@@ -130,7 +152,8 @@ impl Bench {
                 }
             };
             for row in compared["rows"].as_array().into_iter().flatten() {
-                self.print_row((&title, theme), &imported, row);
+                let lit = shots.as_ref().and_then(|shots| self.lit_score(shots, &imported, row, theme));
+                self.print_row((&title, theme), &imported, row, lit);
             }
         }
         for warning in imported["warnings"].as_array().into_iter().flatten() {
@@ -138,15 +161,34 @@ impl Bench {
         }
     }
 
-    fn print_row(&mut self, (title, theme): (&str, &str), imported: &Value, row: &Value) {
+    fn lit_score(&mut self, shots: &LitShots, imported: &Value, row: &Value, theme: &str) -> Option<f64> {
+        let doc = self.session.docs[self.session.active].doc.as_ref();
+        let id = figcraft_engine::params::id_of(&imported["set"]).and_then(|set| variant_id(doc, set, row["variant"].as_str()?))?;
+        let reference = reference_png(doc, &self.root, id, theme).ok()?;
+        let lit = shots.raster(theme, id).ok()?;
+        let score = lit_percent(&reference, &lit);
+        self.lit_scores.push(score);
+        if let Some(out) = &self.out {
+            let difference = difference_image(&reference, &lit);
+            let name = format!("{}.png", safe_name(&format!("lit {theme} {}", row["variant"].as_str()?)));
+            let sheet = side_by_side(&[&reference, &lit, &difference]);
+            if std::fs::create_dir_all(out).and_then(|()| sheet.save(out.join(&name)).map_err(std::io::Error::other)).is_err() {
+                println!("  no Lit sheet for {name}");
+            }
+        }
+        Some(score)
+    }
+
+    fn print_row(&mut self, (title, theme): (&str, &str), imported: &Value, row: &Value, lit: Option<f64>) {
         let variant = row["variant"].as_str().unwrap_or_default();
         let size = |side: &Value| format!("{}x{}", side["width"], side["height"]);
         match row["shapes"]["percent"].as_f64() {
             Some(percent) => {
                 let score = parity(row);
+                let lit = lit.map_or_else(|| "n/a".to_string(), |lit| format!("{lit:.2}%"));
                 self.scores.push(score);
                 println!(
-                    "{score:7.2} %  {title} {theme} [{variant}] shapes={:.2}% status={} original={} library={} text={} textPixels={:.2}%",
+                    "{score:7.2} %  {title} {theme} [{variant}] shapes={:.2}% status={} original={} library={} text={} textPixels={:.2}% lit={lit}",
                     100.0 - percent,
                     row["status"].as_str().unwrap_or_default(),
                     size(&row["original"]),
@@ -180,7 +222,7 @@ fn fidelity_bench() {
     let opened = session.execute("project.open", &json!({"path": root})).unwrap_or_else(|error| panic!("{root}: {error}"));
     assert_eq!(opened["opened"], json!(true), "{opened}");
     let cases: Vec<Value> = serde_json::from_str(CASES).expect("fixtures/fidelity-cases.json is valid");
-    let mut bench = Bench { session, root, out: variable("UIGEN_BENCH_OUT").map(PathBuf::from), scores: Vec::new() };
+    let mut bench = Bench { session, root, out: variable("UIGEN_BENCH_OUT").map(PathBuf::from), scores: Vec::new(), lit_scores: Vec::new() };
     for case in cases.iter().filter(|case| wanted(case)) {
         bench.run_case(case);
     }
@@ -188,4 +230,7 @@ fn fidelity_bench() {
     let mean = bench.scores.iter().sum::<f64>() / measured.max(1) as f64;
     let lowest = bench.scores.iter().copied().fold(100.0, f64::min);
     println!("summary: {measured} variants measured, mean {mean:.2} %, lowest {lowest:.2} %");
+    let lit_mean = bench.lit_scores.iter().sum::<f64>() / bench.lit_scores.len().max(1) as f64;
+    let lit_lowest = bench.lit_scores.iter().copied().fold(100.0, f64::min);
+    println!("lit: {} variants measured, mean {lit_mean:.2} %, lowest {lit_lowest:.2} %", bench.lit_scores.len());
 }
