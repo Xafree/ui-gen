@@ -1,6 +1,6 @@
 //! Snapshot → layers: an element becomes a frame placed relative to its parent, a text run a text
-//! layer, an `<svg>` an imported vector layer. A value that cannot be read is left out and named
-//! in the warnings; nothing is made up in its place.
+//! layer, an `<svg>` an imported vector layer. A value that cannot be read or drawn as it is, is left
+//! out or drawn in its nearest form (a double border as a solid stroke), and named in the warnings.
 
 mod baseline;
 mod cleanup;

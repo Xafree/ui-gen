@@ -410,7 +410,7 @@ Références et thème appliqué ont été **validés par l'utilisateur**.
 | `uigen.applyTheme` | applique un thème (un pas d'annulation) |
 | `uigen.compare` | une ligne par variante : statut, tailles, écart des formes, verdict du texte |
 | `uigen.updateSource` | recapture les composants importés d'une source (travaux de capture, la lib ne change pas) |
-| `uigen.sourceDiff` | différences entre la copie et la dernière capture (`clean`, `modified`, `unknown`) |
+| `uigen.sourceDiff` | différences entre la copie et la dernière capture (`clean`, `modified`, `unknown`), calques appariés par leur nom anglais stable (`uigen.stableName`), le nom localisé servant à l'affichage (`label`) |
 | `uigen.applyDifferences` | prend des différences dans la copie, sur demande seulement |
 | `panel.compare` | demande à l'interface d'ouvrir l'onglet Comparer |
 

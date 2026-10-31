@@ -43,7 +43,7 @@ fn every_computed_colour_form_gives_the_same_fill() {
     }
 }
 
-// covers: T2
+// covers: T9
 #[test]
 fn a_background_image_no_paint_can_hold_is_reported_not_flattened() {
     let run = frame(json!({ "backgroundColor": "rgb(0, 0, 0)", "backgroundImage": "conic-gradient(rgb(255, 0, 0), rgb(0, 0, 255))" }));
