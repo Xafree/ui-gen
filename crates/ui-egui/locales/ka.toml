@@ -2032,6 +2032,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "{package} is already a source of this project" = "{package} უკვე ამ პროექტის წყაროა"
 "A change to {package} is already in progress" = "{package}-ის ცვლილება უკვე მიმდინარეობს"
 "The import is already running." = "იმპორტი უკვე მიმდინარეობს."
+"Show parts" = "ნაწილების ჩვენება"
 
 [commands]
 "align.bottom" = "ქვემოთ სწორება"

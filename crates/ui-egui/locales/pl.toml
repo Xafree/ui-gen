@@ -2047,6 +2047,7 @@ name = "Polski"
 "{package} is already a source of this project" = "{package} jest już źródłem tego projektu"
 "A change to {package} is already in progress" = "Zmiana pakietu {package} już trwa"
 "The import is already running." = "Import już trwa."
+"Show parts" = "Pokaż części"
 
 [commands]
 "align.bottom" = "Wyrównaj do dołu"

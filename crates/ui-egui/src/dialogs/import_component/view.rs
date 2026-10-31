@@ -55,6 +55,7 @@ pub(super) enum Act {
     State(usize),
     Theme(bool),
     Animations,
+    ShowParts,
     Import,
     Cancel,
     Retry(String),
@@ -78,6 +79,8 @@ pub(super) struct Model<'a> {
     pub message: Option<String>,
     pub at_top: bool,
     pub focus_first: bool,
+    pub has_parts: bool,
+    pub show_parts: bool,
 }
 
 fn state_label(state: &str) -> &'static str {
@@ -221,6 +224,9 @@ fn left(ui: &mut Ui, t: &Tokens, model: &mut Model, acts: &mut Vec<Act>) {
     }
     if !model.cards.is_empty() || model.search_active() {
         search_field(ui, model);
+    }
+    if model.has_parts && chips(ui, t, &[(tr("Show parts"), model.show_parts)]).is_some() {
+        acts.push(Act::ShowParts);
     }
     for status in &model.statuses {
         match status {

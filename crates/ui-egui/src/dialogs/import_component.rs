@@ -4,7 +4,7 @@
 //! another, until the set is in the import page. Only a user opens it (`dialog.importComponent`);
 //! the control channel never does.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 
 use egui::Ui;
@@ -13,6 +13,7 @@ use figcraft_engine::{file_access, Inspected, InspectedComponent, MAX_RENDERS, P
 use serde_json::{Value, json};
 
 use crate::FigApp;
+use crate::component_parts::parts;
 use crate::dialogs::project_settings::page;
 use crate::i18n::{tr, trf};
 use crate::source_family::{Family, SourceFacts, dependencies_of, group_sources};
@@ -74,6 +75,7 @@ pub struct ImportWindow {
     message: Option<String>,
     run: Run,
     just_opened: bool,
+    show_parts: bool,
     focus_first: bool,
 }
 
@@ -114,6 +116,7 @@ impl ImportWindow {
             message: None,
             run: Run::Idle,
             just_opened: true,
+            show_parts: false,
             focus_first: true,
         }
     }
@@ -364,6 +367,9 @@ fn cards_of(app: &FigApp, state: &ImportWindow, families: &[Family]) -> Vec<Card
         .filter_map(|package| app.session.inspected(package).map(|found| (package.clone(), found)))
         .collect();
     let is_ticked = |package: &str, name: &str| state.ticked.iter().any(|(p, n)| p == package && n == name);
+    let shows = |package: &str, found: &Inspected, name: &str| {
+        state.show_parts || !parts_of(found).contains(name) || is_ticked(package, name)
+    };
     ordered
         .into_iter()
         .filter_map(|family| {
@@ -372,7 +378,7 @@ fn cards_of(app: &FigApp, state: &ImportWindow, families: &[Family]) -> Vec<Card
                 .iter()
                 .filter_map(|package| all.iter().find(|(p, _)| p == package))
                 .flat_map(|(package, found)| {
-                    offered(found).map(move |component| RowView {
+                    offered(found).filter(|component| shows(package, found, &component.name)).map(move |component| RowView {
                         package: package.clone(),
                         name: component.name.clone(),
                         ticked: is_ticked(package, &component.name),
@@ -389,6 +395,15 @@ fn cards_of(app: &FigApp, state: &ImportWindow, families: &[Family]) -> Vec<Card
             (!rows.is_empty()).then(|| CardView { label: family.label.clone(), ticked, total: rows.len(), rows })
         })
         .collect()
+}
+
+fn parts_of(found: &Inspected) -> HashSet<String> {
+    let list: Vec<(&str, Option<&str>)> = offered(found).map(|component| (component.name.as_str(), component.part_of.as_deref())).collect();
+    parts(&list)
+}
+
+fn has_parts(app: &FigApp, sources: &[Source]) -> bool {
+    sources.iter().filter_map(|s| app.session.inspected(&s.package)).any(|found| !parts_of(&found).is_empty())
 }
 
 fn statuses_of(app: &FigApp, state: &ImportWindow, sources: &[Source]) -> Vec<Status> {
@@ -487,6 +502,8 @@ fn draw(app: &mut FigApp, ui: &mut Ui) -> Vec<Act> {
             message: state.message.clone(),
             at_top: std::mem::take(&mut state.just_opened),
             focus_first: state.focus_first,
+            has_parts: has_parts(app, &sources),
+            show_parts: state.show_parts,
         };
         view::show(ui, &t, &mut model, &mut acts);
     });
@@ -525,6 +542,7 @@ fn perform(app: &mut FigApp, act: Act) {
             }
             state.message = None;
         }),
+        Act::ShowParts => edit(app, |state| state.show_parts = !state.show_parts),
         Act::Animations => edit(app, |state| state.animations = !state.animations),
         Act::Import => import(app),
         Act::Cancel => {

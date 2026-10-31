@@ -2075,6 +2075,7 @@ status = "draft — needs native review"
 "{package} is already a source of this project" = "{package} ya es una fuente de este proyecto"
 "A change to {package} is already in progress" = "Ya hay un cambio en curso en {package}"
 "The import is already running." = "La importación ya está en curso."
+"Show parts" = "Mostrar partes"
 
 [commands]
 "align.bottom" = "Alinear abajo"

@@ -634,3 +634,15 @@ fn the_render_count_saturates_and_refusal_starts_one_render_above_the_maximum() 
     assert!(render_count(257, 1, 1, 1) > MAX_RENDERS, "257 renders are refused");
     assert!(render_count(8, 4, 4, 3) > MAX_RENDERS);
 }
+
+#[test]
+fn the_part_a_component_is_of_is_kept_when_it_is_a_usable_name() {
+    let answer = json!({"package": PACKAGE, "version": VERSION, "framework": "react", "components": [
+        {"name": "Panel", "props": []},
+        {"name": "PanelRoot", "props": [], "partOf": "Panel"},
+        {"name": "Odd", "props": [], "partOf": 3},
+    ], "notes": []});
+    let read = crate::uigen_import::validate_for_tests(PACKAGE, &answer);
+    let of: Vec<Option<&str>> = read.components.iter().map(|c| c.part_of.as_deref()).collect();
+    assert_eq!(of, [None, Some("Panel"), None]);
+}

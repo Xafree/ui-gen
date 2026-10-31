@@ -2035,6 +2035,7 @@ status = "draft — needs native review"
 "{package} is already a source of this project" = "{package} is al een bron van dit project"
 "A change to {package} is already in progress" = "Een wijziging van {package} is al bezig"
 "The import is already running." = "De import loopt al."
+"Show parts" = "Onderdelen tonen"
 
 [commands]
 "align.bottom" = "Onder uitlijnen"

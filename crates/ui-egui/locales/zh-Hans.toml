@@ -1951,6 +1951,7 @@ status = "draft — needs native review"
 "{package} is already a source of this project" = "{package} 已是此项目的来源"
 "A change to {package} is already in progress" = "{package} 的更改已在进行中"
 "The import is already running." = "导入已在运行。"
+"Show parts" = "显示部件"
 
 [commands]
 "align.bottom" = "底部对齐"

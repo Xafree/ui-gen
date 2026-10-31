@@ -2047,6 +2047,7 @@ name = "Svenska"
 "{package} is already a source of this project" = "{package} är redan en källa i det här projektet"
 "A change to {package} is already in progress" = "En ändring av {package} pågår redan"
 "The import is already running." = "Importen pågår redan."
+"Show parts" = "Visa delar"
 
 [commands]
 

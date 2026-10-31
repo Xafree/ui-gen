@@ -274,3 +274,26 @@ fn the_selection_panel_stays_in_view_while_the_list_scrolls() {
     let import_after = top(&mut b, "Import");
     assert!(import_after > 0.0, "Import is still on screen: {import_before} to {import_after}");
 }
+
+#[test]
+fn parts_are_hidden_until_show_parts_and_a_ticked_part_stays_listed() {
+    let mut b = Bench::nominal("parts", &["Card", "CardHeader", "CardRoot", "Chip"]);
+    b.open(None);
+    b.wait_until("the rows are listed", |b| b.has("Card"));
+    assert!(!b.has("CardHeader") && !b.has("CardRoot"), "{:?}", b.shown());
+    assert!(b.has("Chip"));
+    assert!(mentions(&b.shown(), "0 of 2"), "{:?}", b.shown());
+    b.click("Show parts");
+    assert!(b.has("CardHeader") && b.has("CardRoot"), "nothing is out of reach");
+    assert!(mentions(&b.shown(), "0 of 4"), "{:?}", b.shown());
+    b.click("CardHeader");
+    b.click("Show parts");
+    assert!(b.has("CardHeader"), "a ticked part stays");
+    assert!(!b.has("CardRoot"));
+}
+
+#[test]
+fn a_library_with_no_part_has_no_show_parts_control() {
+    let mut b = open_pair("no-parts");
+    assert!(!b.has("Show parts"));
+}

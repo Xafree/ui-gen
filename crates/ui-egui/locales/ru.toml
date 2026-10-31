@@ -2047,6 +2047,7 @@ name = "Русский"
 "{package} is already a source of this project" = "{package} уже является источником этого проекта"
 "A change to {package} is already in progress" = "Изменение {package} уже выполняется"
 "The import is already running." = "Импорт уже выполняется."
+"Show parts" = "Показать части"
 
 [commands]
 "align.bottom" = "Выровнять по нижнему краю"

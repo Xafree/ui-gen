@@ -2031,6 +2031,7 @@ status = "draft — needs native review"
 "{package} is already a source of this project" = "{package} ইতিমধ্যে এই প্রকল্পের একটি উৎস"
 "A change to {package} is already in progress" = "{package}-এর একটি পরিবর্তন ইতিমধ্যে চলছে"
 "The import is already running." = "ইমপোর্ট ইতিমধ্যে চলছে।"
+"Show parts" = "অংশগুলো দেখান"
 
 [commands]
 "board.connector" = "সংযোগকারী"

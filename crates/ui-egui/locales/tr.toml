@@ -1998,6 +1998,7 @@ name = "Türkçe"
 "{package} is already a source of this project" = "{package} zaten bu projenin bir kaynağı"
 "A change to {package} is already in progress" = "{package} için bir değişiklik zaten sürüyor"
 "The import is already running." = "İçe aktarma zaten çalışıyor."
+"Show parts" = "Parçaları göster"
 
 [commands]
 "align.bottom" = "Alta hizala"
