@@ -571,6 +571,7 @@ pub(crate) fn key_nav(app: &mut FigApp, key: egui::Key, shift: bool) -> bool {
     }
     let Ok(ds) = app.session.ds() else { return false };
     let (doc, page, sel) = (ds.doc.clone(), ds.page, ds.selection.clone());
+    app.ui.layers_walking = true;
     // The rows as listed: the expanded tree, or the search results.
     let filter = app.ui.layer_filter.trim().to_lowercase();
     let rows = listed_rows(&doc, page, &app.ui.expanded, &filter);
@@ -591,7 +592,6 @@ pub(crate) fn key_nav(app: &mut FigApp, key: egui::Key, shift: bool) -> bool {
         Key::ArrowUp | Key::ArrowDown => {
             let j = if key == Key::ArrowUp { i.checked_sub(1) } else { Some(i + 1).filter(|j| *j < rows.len()) };
             let Some((j, next)) = j.and_then(|j| rows.get(j).map(|r| (j, r.id))) else { return true };
-            app.ui.layers_walking = true;
             if shift {
                 // The rows from the anchor to the new one, with the moving end last.
                 let anchor = app.ui.layer_anchor.filter(|a| sel.contains(a)).unwrap_or(cur);
@@ -961,13 +961,13 @@ fn eye_lock(
     (vis, lock)
 }
 
-/// Expands a selection not seen yet and its ancestors (once, so manual collapsing sticks); whether it was new.
+/// Expands a selection not seen yet and its ancestors (once, so manual collapsing sticks), the selected layer itself when it is alone and not walked to; whether it was new.
 fn reveal_selection(app: &mut FigApp, doc: &Document, page: NodeId, sel: &[NodeId]) -> bool {
     let reveal = sel != app.ui.layers_seen_sel;
     let walking = std::mem::take(&mut app.ui.layers_walking);
     if reveal {
         for s in sel {
-            if !walking {
+            if !walking && sel.len() == 1 {
                 app.ui.expanded.insert(*s);
             }
             for a in doc.ancestors(*s) {
