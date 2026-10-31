@@ -2028,6 +2028,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Removes {packages}" = "წაშლის: {packages}"
 "Keeps {packages}: another library needs them" = "ტოვებს: {packages}, სხვა ბიბლიოთეკას სჭირდება"
 "{count} packages on one line: {max} at most" = "{count} პაკეტი ერთ ხაზზე: მაქსიმუმ {max}"
+"{name}: two different versions on one line" = "{name}: ორი განსხვავებული ვერსია ერთ ხაზზე"
 
 [commands]
 "align.bottom" = "ქვემოთ სწორება"

@@ -2043,6 +2043,7 @@ name = "Русский"
 "Removes {packages}" = "Удаляет {packages}"
 "Keeps {packages}: another library needs them" = "Оставляет {packages}: они нужны другой библиотеке"
 "{count} packages on one line: {max} at most" = "{count} пакетов в одной строке: не более {max}"
+"{name}: two different versions on one line" = "{name}: две разные версии в одной строке"
 
 [commands]
 "align.bottom" = "Выровнять по нижнему краю"

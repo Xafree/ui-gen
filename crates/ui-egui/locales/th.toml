@@ -2019,6 +2019,7 @@ status = "draft — needs native review"
 "Removes {packages}" = "ลบ {packages}"
 "Keeps {packages}: another library needs them" = "คงไว้ {packages}: ไลบรารีอื่นต้องใช้"
 "{count} packages on one line: {max} at most" = "{count} แพ็กเกจในบรรทัดเดียว: สูงสุด {max}"
+"{name}: two different versions on one line" = "{name}: สองเวอร์ชันที่ต่างกันในบรรทัดเดียว"
 
 [commands]
 "align.bottom" = "จัดแนวชิดล่าง"

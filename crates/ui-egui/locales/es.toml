@@ -2071,6 +2071,7 @@ status = "draft — needs native review"
 "Removes {packages}" = "Elimina {packages}"
 "Keeps {packages}: another library needs them" = "Conserva {packages}: otra biblioteca los necesita"
 "{count} packages on one line: {max} at most" = "{count} paquetes en una línea: {max} como máximo"
+"{name}: two different versions on one line" = "{name}: dos versiones distintas en una línea"
 
 [commands]
 "align.bottom" = "Alinear abajo"

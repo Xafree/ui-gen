@@ -2053,6 +2053,7 @@ status = "draft — needs native review"
 "Removes {packages}" = "{packages} 제거"
 "Keeps {packages}: another library needs them" = "{packages} 유지: 다른 라이브러리에 필요합니다"
 "{count} packages on one line: {max} at most" = "한 줄에 패키지 {count}개: 최대 {max}개"
+"{name}: two different versions on one line" = "{name}: 한 줄에 서로 다른 버전 두 개"
 
 [commands]
 "align.bottom" = "아래쪽 정렬"

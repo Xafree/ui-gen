@@ -2013,6 +2013,7 @@ status = "draft — needs native review"
 "Removes {packages}" = "{packages} を削除します"
 "Keeps {packages}: another library needs them" = "{packages} は残します: 別のライブラリが必要としています"
 "{count} packages on one line: {max} at most" = "1 行に {count} 個のパッケージ: 最大 {max} 個"
+"{name}: two different versions on one line" = "{name}: 1 行に異なる 2 つのバージョン"
 
 [commands]
 "align.bottom" = "下揃え"

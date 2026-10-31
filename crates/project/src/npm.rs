@@ -61,6 +61,7 @@ const MANAGERS: [&str; 4] = ["yarn", "pnpm", "npx", "bun"];
 pub const MAX_PACKAGES: usize = 32;
 const TOO_MANY_START: &str = " packages on one line: ";
 const TOO_MANY_END: &str = " at most";
+const TWO_VERSIONS: &str = "two different versions on one line";
 const EMPTY_LINE: &str = "type at least one package, for example: @scope/name another@1.2.0";
 
 pub fn parse_install_line(line: &str) -> Result<Vec<PackageSpec>, ProjectError> {
@@ -81,6 +82,9 @@ pub fn parse_install_line(line: &str) -> Result<Vec<PackageSpec>, ProjectError> 
     let mut specs: Vec<PackageSpec> = Vec::new();
     for token in tokens {
         let spec = parse_token(token)?;
+        if specs.iter().any(|other| other.name == spec.name && other.version != spec.version) {
+            return Err(invalid(&spec.name, TWO_VERSIONS));
+        }
         if !specs.contains(&spec) {
             specs.push(spec);
         }
@@ -98,6 +102,7 @@ pub fn parse_install_line(line: &str) -> Result<Vec<PackageSpec>, ProjectError> 
 pub enum LineRefusal {
     Empty,
     TooMany { count: usize, max: usize },
+    TwoVersions(String),
     NotInstall(String),
     NoPackagesAfterNpm,
     OtherManager(String),
@@ -122,6 +127,7 @@ pub fn line_refusal(error: &ProjectError) -> Option<LineRefusal> {
     let reason = reason.as_str();
     match (field.as_str(), reason) {
         ("line", EMPTY_LINE) => Some(LineRefusal::Empty),
+        (_, TWO_VERSIONS) => Some(LineRefusal::TwoVersions(field.clone())),
         ("line", _) => too_many(reason),
         (_, ONLY_NPM_INSTALL) => Some(LineRefusal::NotInstall(field.clone())),
         ("npm", NPM_WITHOUT_PACKAGES) => Some(LineRefusal::NoPackagesAfterNpm),

@@ -1947,6 +1947,7 @@ status = "draft — needs native review"
 "Removes {packages}" = "移除 {packages}"
 "Keeps {packages}: another library needs them" = "保留 {packages}：其他库需要它们"
 "{count} packages on one line: {max} at most" = "一行 {count} 个包：最多 {max} 个"
+"{name}: two different versions on one line" = "{name}：一行中有两个不同版本"
 
 [commands]
 "align.bottom" = "底部对齐"

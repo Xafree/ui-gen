@@ -2043,6 +2043,7 @@ name = "Polski"
 "Removes {packages}" = "Usuwa {packages}"
 "Keeps {packages}: another library needs them" = "Zachowuje {packages}: potrzebuje ich inna biblioteka"
 "{count} packages on one line: {max} at most" = "{count} pakietów w jednym wierszu: najwyżej {max}"
+"{name}: two different versions on one line" = "{name}: dwie różne wersje w jednym wierszu"
 
 [commands]
 "align.bottom" = "Wyrównaj do dołu"

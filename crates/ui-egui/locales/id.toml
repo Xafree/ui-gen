@@ -1994,6 +1994,7 @@ status = "draft — needs native review"
 "Removes {packages}" = "Menghapus {packages}"
 "Keeps {packages}: another library needs them" = "Mempertahankan {packages}: pustaka lain membutuhkannya"
 "{count} packages on one line: {max} at most" = "{count} paket dalam satu baris: paling banyak {max}"
+"{name}: two different versions on one line" = "{name}: dua versi berbeda dalam satu baris"
 
 [commands]
 "align.bottom" = "Ratakan bawah"

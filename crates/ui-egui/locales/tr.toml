@@ -1994,6 +1994,7 @@ name = "Türkçe"
 "Removes {packages}" = "{packages} kaldırılır"
 "Keeps {packages}: another library needs them" = "{packages} korunur: başka bir kitaplık gerektiriyor"
 "{count} packages on one line: {max} at most" = "Bir satırda {count} paket: en fazla {max}"
+"{name}: two different versions on one line" = "{name}: bir satırda iki farklı sürüm"
 
 [commands]
 "align.bottom" = "Alta hizala"

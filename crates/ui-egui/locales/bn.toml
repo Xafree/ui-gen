@@ -2027,6 +2027,7 @@ status = "draft — needs native review"
 "Removes {packages}" = "{packages} সরায়"
 "Keeps {packages}: another library needs them" = "{packages} রাখে: অন্য লাইব্রেরির দরকার"
 "{count} packages on one line: {max} at most" = "এক লাইনে {count}টি প্যাকেজ: সর্বোচ্চ {max}টি"
+"{name}: two different versions on one line" = "{name}: এক লাইনে দুটি ভিন্ন সংস্করণ"
 
 [commands]
 "board.connector" = "সংযোগকারী"

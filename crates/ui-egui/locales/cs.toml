@@ -1990,6 +1990,7 @@ status = "draft — needs native review"
 "Removes {packages}" = "Odebere {packages}"
 "Keeps {packages}: another library needs them" = "Ponechá {packages}: potřebuje je jiná knihovna"
 "{count} packages on one line: {max} at most" = "{count} balíčků na jednom řádku: nejvýše {max}"
+"{name}: two different versions on one line" = "{name}: dvě různé verze na jednom řádku"
 
 [commands]
 "align.bottom" = "Zarovnat dolů"

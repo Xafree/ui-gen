@@ -1969,6 +1969,7 @@ status = "draft — needs native review"
 "Removes {packages}" = "Xóa {packages}"
 "Keeps {packages}: another library needs them" = "Giữ {packages}: thư viện khác cần chúng"
 "{count} packages on one line: {max} at most" = "{count} gói trên một dòng: tối đa {max}"
+"{name}: two different versions on one line" = "{name}: hai phiên bản khác nhau trên một dòng"
 
 [commands]
 "align.bottom" = "Căn dưới"

@@ -2043,6 +2043,7 @@ name = "Svenska"
 "Removes {packages}" = "Tar bort {packages}"
 "Keeps {packages}: another library needs them" = "Behåller {packages}: ett annat bibliotek behöver dem"
 "{count} packages on one line: {max} at most" = "{count} paket på en rad: högst {max}"
+"{name}: two different versions on one line" = "{name}: två olika versioner på en rad"
 
 [commands]
 
