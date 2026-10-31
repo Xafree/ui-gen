@@ -76,6 +76,28 @@ fn pixel(s: &Session, node: NodeId, x: u32, y: u32) -> [u8; 4] {
 }
 
 #[test]
+fn ungrouping_a_group_an_old_file_left_in_a_set_moves_its_layers_out() {
+    let mut s = Session::new();
+    let page = s.ds().unwrap().page;
+    let doc = s.doc_mut().unwrap();
+    let set = doc.create(page, NodeKind::ComponentSet { description: String::new() }, "Set", 50.0, 50.0, 200.0, 200.0).unwrap();
+    let group = doc.create(page, NodeKind::Group, "Old", 10.0, 10.0, 40.0, 40.0).unwrap();
+    let inside = doc.create(group, NodeKind::Rectangle, "R", 5.0, 5.0, 10.0, 10.0).unwrap();
+    doc.get_mut(page).unwrap().children.retain(|child| *child != group);
+    doc.get_mut(set).unwrap().children.push(group);
+    doc.get_mut(group).unwrap().parent = Some(set);
+    let where_it_was = doc.world_bounds(inside).unwrap();
+
+    ex(&mut s, "object.ungroup", json!({"ids": [group]}));
+
+    let doc = s.doc().unwrap();
+    assert_eq!(doc.node(inside).unwrap().parent, Some(page));
+    assert!(doc.node(group).is_none());
+    assert!(doc.node(set).unwrap().children.is_empty());
+    assert_eq!(doc.world_bounds(inside).unwrap(), where_it_was);
+}
+
+#[test]
 fn resizing_a_frame_applies_constraints_and_a_group_scales() {
     // A 100-wide frame with a 20-wide child at x 10 is resized to 200 (one edit each).
     let cases = [

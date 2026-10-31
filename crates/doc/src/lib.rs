@@ -227,6 +227,8 @@ impl Default for Document {
     }
 }
 
+const ONLY_VARIANTS_IN_A_SET: &str = "a component set holds only its variants, which are components";
+
 impl Document {
     /// A new file with one empty page ("Page 1").
     pub fn new(name: impl Into<String>) -> Self {
@@ -448,12 +450,25 @@ impl Document {
         self.pages.iter().copied().find(|p| !self.is_divider(*p))
     }
 
+    /// Whether `parent` can hold `child` as far as component sets go: a set holds only its variants.
+    fn set_takes(parent: &Node, child: &Node) -> bool {
+        !matches!(parent.kind, NodeKind::ComponentSet { .. }) || matches!(child.kind, NodeKind::Component { .. })
+    }
+
+    /// Whether `child` may move into `parent` as far as component sets go.
+    pub fn may_hold(&self, parent: NodeId, child: NodeId) -> bool {
+        matches!((self.node(parent), self.node(child)), (Some(parent), Some(child)) if Self::set_takes(parent, child))
+    }
+
     /// Insert `node` (its id must come from [`alloc_id`](Self::alloc_id)) as a child of `parent` at
     /// `index` (None = on top).
     pub fn insert(&mut self, mut node: Node, parent: NodeId, index: Option<usize>) -> DocResult<NodeId> {
         let p = self.get(parent)?;
         if !p.kind.is_container() {
             return Err(DocError::NotContainer(parent));
+        }
+        if !Self::set_takes(p, &node) {
+            return Err(DocError::Invalid(ONLY_VARIANTS_IN_A_SET.into()));
         }
         let id = node.id;
         if self.nodes.contains_key(&id) {
@@ -602,8 +617,8 @@ impl Document {
         if matches!(node.kind, NodeKind::Section { .. }) && !self.takes_sections(new_parent) {
             return Err(DocError::Invalid("sections go on the page or in other sections, not in frames or groups".into()));
         }
-        if matches!(np.kind, NodeKind::ComponentSet { .. }) && !matches!(node.kind, NodeKind::Component { .. }) {
-            return Err(DocError::Invalid("a component set holds only its variants, which are components".into()));
+        if !Self::set_takes(np, node) {
+            return Err(DocError::Invalid(ONLY_VARIANTS_IN_A_SET.into()));
         }
         let world = self.world_transform(id);
         let old_parent = node.parent;
