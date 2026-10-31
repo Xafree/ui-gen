@@ -7,7 +7,7 @@ use figcraft_engine::capture::CaptureJob;
 use serde_json::{Value, json};
 
 use crate::dialogs::project_settings::{add_packages, change_version};
-use crate::import_window_ui_tests::{Bench, Dir, PACKAGE, VERSION, source};
+use crate::import_window_ui_tests::{Bench, Dir, PACKAGE};
 
 const HEAD: &str = "@acme/ui";
 const SAME: &str = "@acme/styles";
@@ -78,4 +78,26 @@ fn a_version_change_on_a_family_left_with_one_active_member_goes_to_that_member(
     change_version(&mut b.ui.app, HEAD, "4.0.0");
     let CaptureJob::Install { package, version, .. } = last_job(&b) else { panic!("{:?}", jobs(&b)) };
     assert_eq!((package.as_str(), version.as_str()), (SAME, "4.0.0"));
+}
+
+fn second_project(tag: &str) -> Dir {
+    let dir = Dir::new(tag);
+    let manifest = json!({"version": 1, "name": "second", "designFiles": ["lib.figcraft"], "sources": []});
+    std::fs::write(dir.0.join("uigen.json"), manifest.to_string()).unwrap();
+    let doc = figcraft_doc::Document::new("lib");
+    std::fs::write(dir.0.join("lib.figcraft"), figcraft_format::save_bytes(&doc, None).unwrap()).unwrap();
+    dir
+}
+
+#[test]
+fn the_state_of_the_page_does_not_follow_another_project_to_the_front() {
+    let mut b = Bench::nominal("settings-root", &["Alert"]);
+    b.open_settings();
+    add_packages(&mut b.ui.app, "npm uninstall a");
+    let error = |b: &Bench| b.ui.app.ui.project_settings.as_ref().and_then(|state| state.add_error().map(str::to_string));
+    assert!(error(&b).is_some(), "the refusal shows");
+    let dir = second_project("settings-root-second");
+    assert!(b.ui.app.open_project_at(dir.0.clone(), false), "the second project opens");
+    b.settle();
+    assert_eq!(error(&b), None, "the refusal stayed with its project");
 }

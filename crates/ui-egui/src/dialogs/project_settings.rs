@@ -187,6 +187,9 @@ impl ProjectSettings {
 
     fn refresh(&mut self, app: &mut FigApp) -> bool {
         let Some(binding) = app.session.project().cloned() else { return false };
+        if !self.root.is_empty() && !file_access::same_file(&self.root, &binding.root) {
+            *self = Self::default();
+        }
         let jobs = jobs(app, &binding.root);
         let working = |package: &str, command: &str| {
             jobs.iter().any(|j| j.packages.iter().any(|p| p == package) && j.command == command && matches!(j.state.as_str(), "queued" | "running"))
