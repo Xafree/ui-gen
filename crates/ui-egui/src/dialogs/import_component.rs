@@ -68,6 +68,7 @@ pub struct ImportWindow {
     animations: bool,
     message: Option<String>,
     run: Run,
+    just_opened: bool,
 }
 
 impl ImportWindow {
@@ -83,6 +84,7 @@ impl ImportWindow {
             animations: true,
             message: None,
             run: Run::Idle,
+            just_opened: true,
         }
     }
 }
@@ -343,6 +345,7 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
             search: &mut state.search,
             progress: progress_of(&state.run),
             message: state.message.clone(),
+            at_top: std::mem::take(&mut state.just_opened),
         };
         view::show(ui, &t, &mut model, &mut acts);
     });
@@ -397,6 +400,7 @@ fn perform(app: &mut FigApp, act: Act) {
         }
         Act::Show => {
             app.ui.import_window = None;
+            app.ui.project_settings = None;
             app.run(SHOW, json!({}));
         }
     }

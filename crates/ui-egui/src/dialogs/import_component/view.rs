@@ -22,6 +22,7 @@ const TAGGED_ROW_H: f32 = 45.0;
 const CHIP_H: f32 = 28.0;
 const CHIP_GAP: f32 = 6.0;
 const BOX: f32 = 16.0;
+const UNTICKED_BORDER: egui::Color32 = egui::Color32::from_rgb(0x76, 0x76, 0x76);
 
 pub(super) struct RowView {
     pub package: String,
@@ -74,11 +75,12 @@ pub(super) struct Model<'a> {
     pub search: &'a mut String,
     pub progress: Progress,
     pub message: Option<String>,
+    pub at_top: bool,
 }
 
 fn state_label(state: &str) -> &'static str {
     match state {
-        "Default" => tr("Default"),
+        "Default" => tr("Default|state"),
         "Hover" => tr("Hover"),
         "Focus" => tr("Focus"),
         "Pressed" => tr("Pressed"),
@@ -91,7 +93,9 @@ pub(super) fn show(ui: &mut Ui, t: &Tokens, model: &mut Model, acts: &mut Vec<Ac
         ui.spacing_mut().item_spacing.y = 0.0;
         track_keyboard_focus(ui);
         top_bar(ui, t, model.project, acts);
-        ScrollArea::vertical().id_salt("import_surface").auto_shrink([false, false]).show(ui, |ui| {
+        let area = ScrollArea::vertical().id_salt("import_surface").auto_shrink([false, false]);
+        let area = if model.at_top { area.vertical_scroll_offset(0.0) } else { area };
+        area.show(ui, |ui| {
             let avail = ui.available_width();
             let width = avail.min(MAX_WIDTH);
             let rect = Rect::from_min_size(pos2(ui.cursor().min.x + (avail - width) / 2.0, ui.cursor().min.y), vec2(width, ui.available_height()));
@@ -128,7 +132,7 @@ fn steps(ui: &mut Ui, t: &Tokens) {
     let column = (ui.available_width() - gap) / 2.0;
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 4.0 + 8.0 + 13.0 * BODY_LINE), Sense::hover());
     for (index, (number, label, weight)) in
-        [("01", format!("{} ✓", tr("Libraries")), false), ("02", tr("Components").to_string(), true)].into_iter().enumerate()
+        [("01", format!("{} ✓", tr("Libraries|import step")), false), ("02", tr("Components").to_string(), true)].into_iter().enumerate()
     {
         let left = rect.min.x + index as f32 * (column + gap);
         let bar = Rect::from_min_size(pos2(left, rect.min.y), vec2(column, 4.0));
@@ -298,8 +302,9 @@ fn draw_box(ui: &Ui, t: &Tokens, rect: Rect, on: bool, free: bool) {
         painter.line_segment([c + vec2(-4.0, 0.0), c + vec2(-1.0, 3.0)], stroke);
         painter.line_segment([c + vec2(-1.0, 3.0), c + vec2(4.5, -3.5)], stroke);
     } else {
-        let ink = if free { t.text_secondary } else { t.text_tertiary };
-        painter.rect_stroke(rect.shrink(0.5), CornerRadius::same(3), Stroke::new(1.0, ink), StrokeKind::Inside);
+        let (fill, ink) = if free { (egui::Color32::WHITE, UNTICKED_BORDER) } else { (egui::Color32::TRANSPARENT, t.text_tertiary) };
+        painter.rect_filled(rect, CornerRadius::same(3), fill);
+        painter.rect_stroke(rect, CornerRadius::same(3), Stroke::new(1.0, ink), StrokeKind::Inside);
     }
 }
 
