@@ -255,3 +255,22 @@ fn a_row_tagged_as_taken_can_still_be_ticked() {
     b.click_nth("Button", 1);
     assert!(b.checked_nth("Button", 1), "a click ticks it");
 }
+
+#[test]
+fn the_selection_panel_stays_in_view_while_the_list_scrolls() {
+    let names: Vec<String> = (0..70).map(|index| format!("Row{index}")).collect();
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    let mut b = Bench::nominal("sticky", &names);
+    b.open(None);
+    b.wait_until("the rows are listed", |b| b.has("Row0"));
+    let top = |b: &mut Bench, label: &str| b.control(label).and_then(|n| n.bounds()).map_or(f64::NAN, |bounds| bounds.y0);
+    let first_before = top(&mut b, "Row0");
+    let import_before = top(&mut b, "Import");
+    for _ in 0..60 {
+        b.press(Key::Tab, Modifiers::NONE);
+    }
+    let first_after = top(&mut b, "Row0");
+    assert!(first_after < first_before - 400.0, "the list scrolled: {first_before} to {first_after}");
+    let import_after = top(&mut b, "Import");
+    assert!(import_after > 0.0, "Import is still on screen: {import_before} to {import_after}");
+}

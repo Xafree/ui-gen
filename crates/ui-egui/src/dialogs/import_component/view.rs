@@ -22,6 +22,7 @@ const TAGGED_ROW_H: f32 = 45.0;
 const CHIP_H: f32 = 28.0;
 const CHIP_GAP: f32 = 6.0;
 const BOX: f32 = 16.0;
+const STICKY_GAP: f32 = 24.0;
 
 pub(super) struct RowView {
     pub package: String,
@@ -165,7 +166,7 @@ fn columns(ui: &mut Ui, t: &Tokens, model: &mut Model, acts: &mut Vec<Act>) {
     let main = inner - GUTTER - aside;
     ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing.x = GUTTER;
-        ui.allocate_ui_with_layout(vec2(main, 0.0), Layout::top_down(Align::Min), |ui| {
+        let list = ui.allocate_ui_with_layout(vec2(main, 0.0), Layout::top_down(Align::Min), |ui| {
             ui.set_width(main);
             ui.spacing_mut().item_spacing.y = 18.0;
             left(ui, t, model, acts);
@@ -173,9 +174,28 @@ fn columns(ui: &mut Ui, t: &Tokens, model: &mut Model, acts: &mut Vec<Act>) {
         ui.allocate_ui_with_layout(vec2(aside, 0.0), Layout::top_down(Align::Min), |ui| {
             ui.set_width(aside);
             ui.spacing_mut().item_spacing.y = 14.0;
+            ui.add_space(sticky_shift(ui, list.response.rect.height()));
+            let top = ui.cursor().min.y;
             panel(ui, t, model, acts);
+            let height = ui.cursor().min.y - top;
+            ui.data_mut(|data| data.insert_temp(panel_height_id(), height));
         });
     });
+}
+
+fn panel_height_id() -> egui::Id {
+    egui::Id::unique("import_surface_panel_height")
+}
+
+/// How far down the panel goes to stay in view. One taller than the view scrolls with the list, or
+/// its bottom could never be reached.
+fn sticky_shift(ui: &Ui, list_height: f32) -> f32 {
+    let height = ui.data(|data| data.get_temp::<f32>(panel_height_id())).unwrap_or(0.0);
+    let visible = ui.clip_rect();
+    if height <= 0.0 || height + 2.0 * STICKY_GAP > visible.height() {
+        return 0.0;
+    }
+    (visible.min.y + STICKY_GAP - ui.cursor().min.y).clamp(0.0, (list_height - height).max(0.0))
 }
 
 fn note(ui: &mut Ui, text: &str, size: f32, ink: egui::Color32) {
