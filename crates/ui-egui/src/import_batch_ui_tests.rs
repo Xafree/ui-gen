@@ -244,3 +244,14 @@ fn the_surfaces_take_their_colours_from_the_theme() {
     assert!(!include_str!("dialogs/import_component/view.rs").contains("Color32::WHITE"), "the unticked box has a token");
     assert!(!include_str!("dialogs/project_settings/page.rs").contains("line(ui, &format!(\"$ {}\", run.command), Color32::WHITE)"));
 }
+
+#[test]
+fn a_row_tagged_as_taken_can_still_be_ticked() {
+    let mut b = open_pair("tagged-free");
+    b.click_nth("Button", 0);
+    assert!(b.shows("Already taken in"), "{:?}", b.shown());
+    let tagged = b.controls("Button").remove(1);
+    assert!(!tagged.is_disabled(), "the tagged row is a normal row");
+    b.click_nth("Button", 1);
+    assert!(b.checked_nth("Button", 1), "a click ticks it");
+}

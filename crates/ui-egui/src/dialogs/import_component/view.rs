@@ -279,14 +279,10 @@ fn component_row(ui: &mut Ui, t: &Tokens, row: &RowView, acts: &mut Vec<Act>) {
     let height = if row.taken_in.is_some() { TAGGED_ROW_H } else { ROW_H };
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
     let id = ui.scope_id().with(("component", row.package.as_str(), row.name.as_str()));
-    let free = row.taken_in.is_none() || row.ticked;
-    let resp = ui.interact(rect, id, if free { Sense::click() } else { Sense::hover() });
+    let resp = ui.interact(rect, id, Sense::click());
     a11y::checkbox(&resp, &row.name, row.ticked);
     if let Some(package) = &row.taken_in {
         a11y::describe(&resp, &trf("Already taken in {package}", &[("package", package)]));
-    }
-    if !free {
-        a11y::disabled(&resp);
     }
     if resp.gained_focus() {
         resp.scroll_to_me(None);
@@ -295,14 +291,13 @@ fn component_row(ui: &mut Ui, t: &Tokens, row: &RowView, acts: &mut Vec<Act>) {
         return;
     }
     ui.painter().hline(rect.x_range(), rect.min.y + 0.5, Stroke::new(1.0, t.border));
-    if free && resp.hovered() {
+    if resp.hovered() {
         ui.painter().rect_filled(Rect::from_min_max(pos2(rect.min.x, rect.min.y + 1.0), rect.max), CornerRadius::ZERO, t.hover);
     }
     let centre_y = rect.min.y + 0.5 + (height - 1.0) / 2.0;
     let boxed = Rect::from_center_size(pos2(rect.min.x + 16.0 + BOX / 2.0, centre_y), vec2(BOX, BOX));
-    draw_box(ui, t, boxed, row.ticked, free);
-    let ink = if free { t.text } else { t.text_secondary };
-    let name = ui.painter().text(pos2(boxed.max.x + 12.0, centre_y), Align2::LEFT_CENTER, &row.name, regular(13.5), ink);
+    draw_box(ui, t, boxed, row.ticked);
+    let name = ui.painter().text(pos2(boxed.max.x + 12.0, centre_y), Align2::LEFT_CENTER, &row.name, regular(13.5), t.text);
     if let Some(package) = &row.taken_in {
         let text = trf("Already taken in {package}", &[("package", package)]);
         let left = (name.max.x + 12.0).max(rect.max.x - 16.0 - tag_width(ui, &text));
@@ -316,7 +311,7 @@ fn component_row(ui: &mut Ui, t: &Tokens, row: &RowView, acts: &mut Vec<Act>) {
     }
 }
 
-fn draw_box(ui: &Ui, t: &Tokens, rect: Rect, on: bool, free: bool) {
+fn draw_box(ui: &Ui, t: &Tokens, rect: Rect, on: bool) {
     let painter = ui.painter();
     if on {
         painter.rect_filled(rect, CornerRadius::same(3), t.accent);
@@ -325,9 +320,8 @@ fn draw_box(ui: &Ui, t: &Tokens, rect: Rect, on: bool, free: bool) {
         painter.line_segment([c + vec2(-4.0, 0.0), c + vec2(-1.0, 3.0)], stroke);
         painter.line_segment([c + vec2(-1.0, 3.0), c + vec2(4.5, -3.5)], stroke);
     } else {
-        let (fill, ink) = if free { (t.box_off, t.box_off_border) } else { (egui::Color32::TRANSPARENT, t.text_tertiary) };
-        painter.rect_filled(rect, CornerRadius::same(3), fill);
-        painter.rect_stroke(rect, CornerRadius::same(3), Stroke::new(1.0, ink), StrokeKind::Inside);
+        painter.rect_filled(rect, CornerRadius::same(3), t.box_off);
+        painter.rect_stroke(rect, CornerRadius::same(3), Stroke::new(1.0, t.box_off_border), StrokeKind::Inside);
     }
 }
 
