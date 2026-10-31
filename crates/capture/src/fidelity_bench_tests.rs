@@ -1,5 +1,8 @@
 //! A repeatable measure of how close imported components come to their originals: it imports a fixed
 //! list of components into an existing library project and prints `uigen.compare` for every variant.
+//! Parity % = 100 × (1 − differing pixels / pixels of the larger raster), all pixels of the variant, text
+//! included: differing = `shapes.differing` + `text.pixelPercent` of the pixels inside the text boxes.
+//! Shapes % is the same outside the text boxes only, the figure Compare judges.
 //! `#[ignore]`d: it needs Node, Chromium and a project whose `.uigen/sources` holds the packages.
 //!
 //! ```text
@@ -69,6 +72,15 @@ fn import(session: &mut Session, case: &Value) -> Result<Value, String> {
     Err(format!("no import event within {JOB_LIMIT:?}"))
 }
 
+fn parity(row: &Value) -> f64 {
+    let side = |key: &str| row["original"][key].as_f64().unwrap_or(0.0).max(row["library"][key].as_f64().unwrap_or(0.0));
+    let all = side("width") * side("height");
+    let number = |value: &Value| value.as_f64().unwrap_or(0.0);
+    let text_pixels = (all - number(&row["shapes"]["total"])).max(0.0);
+    let differing = number(&row["shapes"]["differing"]) + number(&row["text"]["pixelPercent"]) / 100.0 * text_pixels;
+    if all > 0.0 { 100.0 * (1.0 - differing / all) } else { 0.0 }
+}
+
 fn side_by_side(parts: &[&Raster]) -> image::RgbaImage {
     let width = parts.iter().map(|raster| raster.width + GAP).sum::<u32>().max(1);
     let height = parts.iter().map(|raster| raster.height).max().unwrap_or(1).max(1);
@@ -125,10 +137,11 @@ impl Bench {
         let size = |side: &Value| format!("{}x{}", side["width"], side["height"]);
         match row["shapes"]["percent"].as_f64() {
             Some(percent) => {
-                let score = 100.0 - percent;
+                let score = parity(row);
                 self.scores.push(score);
                 println!(
-                    "{score:7.2} %  {title} [{variant}] status={} original={} library={} text={} textPixels={:.2}%",
+                    "{score:7.2} %  {title} [{variant}] shapes={:.2}% status={} original={} library={} text={} textPixels={:.2}%",
+                    100.0 - percent,
                     row["status"].as_str().unwrap_or_default(),
                     size(&row["original"]),
                     size(&row["library"]),
