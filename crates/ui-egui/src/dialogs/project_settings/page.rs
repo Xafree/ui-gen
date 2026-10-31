@@ -79,6 +79,15 @@ pub(in crate::dialogs) fn keyboard_focus(ui: &Ui) -> bool {
     ui.data(|data| data.get_temp::<FocusTrack>(focus_track_id()).is_some_and(|track| track.keyboard))
 }
 
+/// egui drops the focus on Escape before anything runs, so a field remembers it had it.
+pub(in crate::dialogs) fn note_focus(ui: &Ui, field: egui::Id, focused: bool) {
+    ui.data_mut(|data| data.insert_temp(field.with("had_focus"), focused));
+}
+
+pub(in crate::dialogs) fn had_focus(ctx: &egui::Context, field: egui::Id) -> bool {
+    ctx.data(|data| data.get_temp::<bool>(field.with("had_focus"))).unwrap_or(false)
+}
+
 pub(in crate::dialogs) fn focus_ring(ui: &Ui, t: &Tokens, rect: Rect, radius: u8) {
     if !keyboard_focus(ui) {
         return;
@@ -273,6 +282,7 @@ fn command_field(ui: &mut Ui, t: &Tokens, input: &mut String, width: f32, focus_
             .desired_width(edit.width()),
     );
     a11y::text(&response, tr("Install command"), input);
+    note_focus(ui, package_field(), response.has_focus());
     if response.has_focus() {
         focus_ring(ui, t, rect, 12);
     }

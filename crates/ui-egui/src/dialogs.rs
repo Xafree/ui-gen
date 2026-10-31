@@ -216,16 +216,16 @@ pub fn keys(app: &mut FigApp, ctx: &Context) {
             return;
         }
     }
-    close_surface(u);
+    close_surface(u, ctx);
 }
 
 /// The full surfaces lie under every dialog: they take Escape last.
-fn close_surface(u: &mut crate::UiState) {
+fn close_surface(u: &mut crate::UiState, ctx: &Context) {
     if let Some(state) = u.import_window.as_mut() {
-        if !state.stop_running() {
+        if !state.takes_escape(ctx) && !state.stop_running() {
             u.import_window = None;
         }
-    } else {
+    } else if !u.project_settings.as_mut().is_some_and(|state| state.takes_escape(ctx)) {
         u.project_settings = None;
     }
 }

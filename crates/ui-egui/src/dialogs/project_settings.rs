@@ -133,6 +133,23 @@ impl ProjectSettings {
         }
     }
 
+    /// What Escape ends before the page: a removal being asked, a version being changed, a typed line.
+    pub(in crate::dialogs) fn takes_escape(&mut self, ctx: &egui::Context) -> bool {
+        if self.pending_removal.take().is_some() {
+            return true;
+        }
+        if self.changing.take().is_some() {
+            self.change_error = None;
+            return true;
+        }
+        let typed = page::had_focus(ctx, package_field()) && !self.package_input.is_empty();
+        if typed {
+            self.package_input.clear();
+            self.add_error = None;
+        }
+        typed
+    }
+
     pub fn add_error(&self) -> Option<&str> {
         self.add_error.as_deref()
     }

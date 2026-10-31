@@ -5,7 +5,7 @@ use egui::{
 
 use crate::a11y;
 use crate::dialogs::project_settings::page::{
-    BAR_H, BODY_LINE, Look, MAX_WIDTH, button, button_at, card_frame, focus_ring, keyboard_focus, mono, tag_at, tag_width, text_width,
+    BAR_H, BODY_LINE, Look, MAX_WIDTH, button, note_focus, button_at, card_frame, focus_ring, keyboard_focus, mono, tag_at, tag_width, text_width,
     track_keyboard_focus,
 };
 use crate::i18n::{tr, trf, trn};
@@ -235,10 +235,15 @@ impl Model<'_> {
     }
 }
 
+pub(super) fn search_id() -> egui::Id {
+    egui::Id::unique("import_surface_search")
+}
+
 fn search_field(ui: &mut Ui, model: &mut Model) {
     let width = ui.available_width().min(320.0);
-    let response = crate::widgets::text_input(ui, egui::Id::unique("import_surface_search"), model.search, width, tr("Search components"));
+    let response = crate::widgets::text_input(ui, search_id(), model.search, width, tr("Search components"));
     a11y::text(&response, tr("Search components"), model.search);
+    note_focus(ui, search_id(), response.has_focus());
 }
 
 fn library(ui: &mut Ui, t: &Tokens, card: &CardView, query: &str, acts: &mut Vec<Act>) {

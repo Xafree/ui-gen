@@ -265,12 +265,13 @@ impl FigApp {
             return;
         }
         if self.ui.import_window.is_some() || self.ui.project_settings.is_some() {
+            // Before the widgets: a text field that sees Escape gives up its focus and no one could tell.
+            dialogs::keys(self, &ctx);
             if self.ui.import_window.is_some() {
                 dialogs::import_component::show(self, ui);
             } else {
                 dialogs::project_settings::show(self, ui);
             }
-            dialogs::keys(self, &ctx);
             dialogs::show(self, &ctx);
             updates_ui::show(self, &ctx);
             self.toast_ui(&ctx);

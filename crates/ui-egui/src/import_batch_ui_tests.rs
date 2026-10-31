@@ -138,3 +138,32 @@ fn escape_closes_a_modal_over_a_surface_first_and_leaves_the_surface() {
     assert!(!b.ui.app.ui.preferences);
     assert!(b.flat().contains("Installed in this project"), "the page stays: {:?}", b.shown());
 }
+
+#[test]
+fn escape_goes_to_the_focused_search_first_then_to_the_surface() {
+    let mut b = open_pair("escape-search");
+    b.click("Search components");
+    b.type_text("chi");
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(b.window_open(), "the field takes the first Escape");
+    assert!(b.has("Alert"), "and it emptied: {:?}", b.shown());
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.window_open(), "the next one closes the surface");
+}
+
+#[test]
+fn escape_ends_the_version_being_changed_and_the_removal_being_asked_before_the_page() {
+    let mut b = Bench::nominal("escape-sub", &["Alert"]);
+    b.open_settings();
+    b.click("Change version");
+    assert!(b.has("Apply"));
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.has("Apply") && b.has("Change version"), "the row comes back: {:?}", b.shown());
+    b.click("Remove");
+    assert!(b.has("Confirm removal"));
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.has("Confirm removal") && b.has("Remove"), "{:?}", b.shown());
+    assert!(b.flat().contains("Installed in this project"), "the page stays");
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(!b.flat().contains("Installed in this project"), "the next Escape closes it");
+}

@@ -13,6 +13,7 @@ use figcraft_engine::{file_access, Inspected, InspectedComponent, MAX_RENDERS, P
 use serde_json::{Value, json};
 
 use crate::FigApp;
+use crate::dialogs::project_settings::page;
 use crate::i18n::{tr, trf};
 use crate::source_family::{Family, SourceFacts, dependencies_of, group_sources};
 use crate::theme::Tokens;
@@ -79,6 +80,15 @@ impl ImportWindow {
     fn awaits(&self, job: u64) -> bool {
         let reading = self.reads.iter().any(|read| read.job == Some(job));
         reading || matches!(&self.run, Run::Importing(Batch { current: Some((_, running)), .. }) if *running == job)
+    }
+
+    /// Escape in a search field with text in it empties the field and stays.
+    pub(crate) fn takes_escape(&mut self, ctx: &egui::Context) -> bool {
+        let takes = page::had_focus(ctx, view::search_id()) && !self.search.is_empty();
+        if takes {
+            self.search.clear();
+        }
+        takes
     }
 
     /// Cancel or Escape while a component is being captured: the service can't drop a job, so
