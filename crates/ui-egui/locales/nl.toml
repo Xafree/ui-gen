@@ -2032,6 +2032,8 @@ status = "draft — needs native review"
 "Keeps {packages}: another library needs them" = "Behoudt {packages}: een andere bibliotheek heeft ze nodig"
 "{count} packages on one line: {max} at most" = "{count} pakketten op één regel: hoogstens {max}"
 "{name}: two different versions on one line" = "{name}: twee verschillende versies op één regel"
+"{package} is already a source of this project" = "{package} is al een bron van dit project"
+"A change to {package} is already in progress" = "Een wijziging van {package} is al bezig"
 
 [commands]
 "align.bottom" = "Onder uitlijnen"

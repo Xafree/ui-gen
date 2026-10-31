@@ -134,3 +134,22 @@ fn an_install_line_goes_through_the_way_every_command_of_the_ui_goes() {
     add_packages(&mut b.ui.app, "other-lib");
     assert_eq!(crate::FigApp::runs_of("project.addSources").len(), 1, "it is in the run log");
 }
+
+#[test]
+fn a_package_already_there_is_said_in_words_the_catalog_translates() {
+    let mut b = Bench::nominal("refusal-source", &["Alert"]);
+    b.open_settings();
+    add_packages(&mut b.ui.app, PACKAGE);
+    let error = b.ui.app.ui.project_settings.as_ref().and_then(|state| state.add_error().map(str::to_string));
+    assert_eq!(error.as_deref(), Some("synthetic-ui is already a source of this project"));
+}
+
+#[test]
+fn a_change_already_running_is_said_in_words_the_catalog_translates() {
+    let mut b = Bench::nominal("refusal-running", &["Alert"]);
+    b.open_settings();
+    b.hold();
+    change_version(&mut b.ui.app, PACKAGE, "2.0.0");
+    change_version(&mut b.ui.app, PACKAGE, "3.0.0");
+    assert_eq!(b.ui.app.ui.last_error.as_deref(), Some("A change to synthetic-ui is already in progress"));
+}

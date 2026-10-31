@@ -2033,6 +2033,8 @@ status = "draft — needs native review"
 "Keeps {packages}: another library needs them" = "Säilyttää: {packages}, toinen kirjasto tarvitsee niitä"
 "{count} packages on one line: {max} at most" = "{count} pakettia yhdellä rivillä: enintään {max}"
 "{name}: two different versions on one line" = "{name}: kaksi eri versiota yhdellä rivillä"
+"{package} is already a source of this project" = "{package} on jo tämän projektin lähde"
+"A change to {package} is already in progress" = "Muutos pakettiin {package} on jo käynnissä"
 
 [commands]
 "align.bottom" = "Tasaa alas"

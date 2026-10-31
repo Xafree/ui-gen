@@ -110,7 +110,7 @@ fn submit(s: &mut Session, cmd: &str, binding: &ProjectBinding, packages: &[Stri
     file_access::allow(Path::new(&binding.root).join(WORK_DIR).join(SOURCES_DIR), Access::Write)?;
     file_access::allow(project::manifest_path(&binding.root), Access::Write)?;
     if let Some(package) = in_flight(s, job.root(), packages) {
-        return Err(bad(cmd, format!("a change to package \"{package}\" is already in progress")));
+        return Err(bad(cmd, project::in_progress(package)));
     }
     let id = s.submit_capture(cmd, &packages.join(", "), job).map_err(|e| bad(cmd, e.message))?;
     Ok(json!({"job": id}))
@@ -126,7 +126,7 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
     let package = package(ADD, p)?;
     let version = version(ADD, p, Some(LATEST))?;
     if is_active_source(&binding, &package) {
-        return Err(bad(ADD, format!("package \"{package}\" is already a source of this project")));
+        return Err(bad(ADD, project::already_source(&package)));
     }
     install(s, ADD, &binding, package, version)
 }
@@ -136,7 +136,7 @@ fn add_many(s: &mut Session, p: &Value) -> Result<Value> {
     let line = p.get("line").ok_or_else(|| bad(ADD_MANY, "line is required"))?.as_str().ok_or_else(|| bad(ADD_MANY, "line must be a string"))?;
     let specs = npm::parse_install_line(line).map_err(|e| bad(ADD_MANY, e.to_string()))?;
     if let Some(spec) = specs.iter().find(|spec| is_active_source(&binding, &spec.name)) {
-        return Err(bad(ADD_MANY, format!("package \"{}\" is already a source of this project", spec.name)));
+        return Err(bad(ADD_MANY, project::already_source(&spec.name)));
     }
     let names: Vec<String> = specs.iter().map(|spec| spec.name.clone()).collect();
     let job = CaptureJob::InstallMany { root: absolute_root(ADD_MANY, &binding.root)?, packages: specs };

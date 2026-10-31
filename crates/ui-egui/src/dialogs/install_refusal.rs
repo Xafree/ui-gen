@@ -1,7 +1,17 @@
+use figcraft_engine::project::{SourceRefusal, source_refusal};
 use figcraft_project::ProjectError;
 use figcraft_project::npm::{LineRefusal, TokenProblem, line_refusal};
 
 use crate::i18n::{tr, trf};
+
+/// A refusal of a source command, in the language of the user; any other message as it came.
+pub(crate) fn source_text(message: &str) -> String {
+    match source_refusal(message) {
+        Some(SourceRefusal::AlreadySource(package)) => trf("{package} is already a source of this project", &[("package", &package)]),
+        Some(SourceRefusal::InProgress(package)) => trf("A change to {package} is already in progress", &[("package", &package)]),
+        None => message.to_string(),
+    }
+}
 
 /// The reason `parse_install_line` refused a line, in the language of the user.
 pub(crate) fn text(error: &ProjectError) -> Option<String> {

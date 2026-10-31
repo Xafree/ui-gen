@@ -1991,6 +1991,8 @@ status = "draft — needs native review"
 "Keeps {packages}: another library needs them" = "Ponechá {packages}: potřebuje je jiná knihovna"
 "{count} packages on one line: {max} at most" = "{count} balíčků na jednom řádku: nejvýše {max}"
 "{name}: two different versions on one line" = "{name}: dvě různé verze na jednom řádku"
+"{package} is already a source of this project" = "{package} už je zdrojem tohoto projektu"
+"A change to {package} is already in progress" = "Změna balíčku {package} už probíhá"
 
 [commands]
 "align.bottom" = "Zarovnat dolů"

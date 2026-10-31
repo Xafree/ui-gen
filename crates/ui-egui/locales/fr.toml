@@ -2035,6 +2035,8 @@ status = "draft — needs native review"
 "Keeps {packages}: another library needs them" = "Garde {packages} : une autre bibliothèque en a besoin"
 "{count} packages on one line: {max} at most" = "{count} paquets sur une ligne : {max} au plus"
 "{name}: two different versions on one line" = "{name} : deux versions différentes sur une ligne"
+"{package} is already a source of this project" = "{package} est déjà une source de ce projet"
+"A change to {package} is already in progress" = "Une modification de {package} est déjà en cours"
 
 [commands]
 "align.bottom" = "Aligner en bas"

@@ -1970,6 +1970,8 @@ status = "draft — needs native review"
 "Keeps {packages}: another library needs them" = "Giữ {packages}: thư viện khác cần chúng"
 "{count} packages on one line: {max} at most" = "{count} gói trên một dòng: tối đa {max}"
 "{name}: two different versions on one line" = "{name}: hai phiên bản khác nhau trên một dòng"
+"{package} is already a source of this project" = "{package} đã là nguồn của dự án này"
+"A change to {package} is already in progress" = "Một thay đổi cho {package} đang diễn ra"
 
 [commands]
 "align.bottom" = "Căn dưới"

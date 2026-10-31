@@ -2044,6 +2044,8 @@ name = "Svenska"
 "Keeps {packages}: another library needs them" = "Behåller {packages}: ett annat bibliotek behöver dem"
 "{count} packages on one line: {max} at most" = "{count} paket på en rad: högst {max}"
 "{name}: two different versions on one line" = "{name}: två olika versioner på en rad"
+"{package} is already a source of this project" = "{package} är redan en källa i det här projektet"
+"A change to {package} is already in progress" = "En ändring av {package} pågår redan"
 
 [commands]
 

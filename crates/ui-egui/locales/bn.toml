@@ -2028,6 +2028,8 @@ status = "draft — needs native review"
 "Keeps {packages}: another library needs them" = "{packages} রাখে: অন্য লাইব্রেরির দরকার"
 "{count} packages on one line: {max} at most" = "এক লাইনে {count}টি প্যাকেজ: সর্বোচ্চ {max}টি"
 "{name}: two different versions on one line" = "{name}: এক লাইনে দুটি ভিন্ন সংস্করণ"
+"{package} is already a source of this project" = "{package} ইতিমধ্যে এই প্রকল্পের একটি উৎস"
+"A change to {package} is already in progress" = "{package}-এর একটি পরিবর্তন ইতিমধ্যে চলছে"
 
 [commands]
 "board.connector" = "সংযোগকারী"

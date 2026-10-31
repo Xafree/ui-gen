@@ -1995,6 +1995,8 @@ status = "draft — needs native review"
 "Keeps {packages}: another library needs them" = "Mempertahankan {packages}: pustaka lain membutuhkannya"
 "{count} packages on one line: {max} at most" = "{count} paket dalam satu baris: paling banyak {max}"
 "{name}: two different versions on one line" = "{name}: dua versi berbeda dalam satu baris"
+"{package} is already a source of this project" = "{package} sudah menjadi sumber proyek ini"
+"A change to {package} is already in progress" = "Perubahan pada {package} sedang berlangsung"
 
 [commands]
 "align.bottom" = "Ratakan bawah"

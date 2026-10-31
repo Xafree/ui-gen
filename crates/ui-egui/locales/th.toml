@@ -2020,6 +2020,8 @@ status = "draft — needs native review"
 "Keeps {packages}: another library needs them" = "คงไว้ {packages}: ไลบรารีอื่นต้องใช้"
 "{count} packages on one line: {max} at most" = "{count} แพ็กเกจในบรรทัดเดียว: สูงสุด {max}"
 "{name}: two different versions on one line" = "{name}: สองเวอร์ชันที่ต่างกันในบรรทัดเดียว"
+"{package} is already a source of this project" = "{package} เป็นซอร์สของโปรเจกต์นี้อยู่แล้ว"
+"A change to {package} is already in progress" = "การเปลี่ยนแปลง {package} กำลังดำเนินอยู่"
 
 [commands]
 "align.bottom" = "จัดแนวชิดล่าง"

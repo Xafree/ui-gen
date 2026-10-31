@@ -414,7 +414,7 @@ pub fn add_packages(app: &mut FigApp, line: &str) {
         Err(error) => Some(refusal_text(error)),
         Ok(_) => match app.run_quietly(ADD_MANY, json!({"line": line})).0 {
             Ok(_) => None,
-            Err(EngineError::BadParams { msg, .. }) => Some(msg),
+            Err(EngineError::BadParams { msg, .. }) => Some(super::install_refusal::source_text(&msg)),
             Err(other) => Some(other.to_string()),
         },
     };
@@ -437,6 +437,21 @@ pub fn add_packages(app: &mut FigApp, line: &str) {
     sync(app);
 }
 
+fn run_source_command(app: &mut FigApp, id: &str, params: serde_json::Value) -> bool {
+    match app.run_quietly(id, params).0 {
+        Ok(_) => true,
+        Err(EngineError::BadParams { msg, .. }) => {
+            log::warn!("{id}: {msg}");
+            app.show_error(super::install_refusal::source_text(&msg));
+            false
+        }
+        Err(other) => {
+            app.failed(id, &other);
+            false
+        }
+    }
+}
+
 /// Install another version of source `package`; the row shows it once the install has succeeded.
 pub fn change_version(app: &mut FigApp, package: &str, version: &str) {
     let version = version.trim();
@@ -447,7 +462,7 @@ pub fn change_version(app: &mut FigApp, package: &str, version: &str) {
         [single] => json!({"package": single, "version": version}),
         _ => json!({"packages": packages, "version": version}),
     };
-    if checked.is_ok() && app.run(SET_VERSION, params).is_some() {
+    if checked.is_ok() && run_source_command(app, SET_VERSION, params) {
         edit(app, |state| state.changing = None);
     }
     sync(app);
@@ -457,7 +472,7 @@ fn remove_package(app: &mut FigApp, package: &str) {
     let packages = app.ui.project_settings.as_ref().map_or_else(|| vec![package.to_string()], |state| state.removal(package).0);
     edit(app, |state| state.pending_removal = None);
     for package in packages {
-        app.run(REMOVE, json!({"package": package}));
+        run_source_command(app, REMOVE, json!({"package": package}));
     }
     sync(app);
 }
