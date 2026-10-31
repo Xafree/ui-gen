@@ -419,3 +419,50 @@ fn the_window_command_only_asks_the_app_to_open_the_export_window() {
     assert_eq!((s.ui_requests[0].kind.as_str(), &s.ui_requests[0].data), ("export.lit", &json!({})));
     changed_nothing(&s, (&before, depth));
 }
+
+fn mark_import_page(s: &mut Session, name: &str) -> NodeId {
+    let page = idv(&ex(s, "page.add", json!({"name": name})));
+    let marker = json!({"package": "@acme/ui", "version": "1.0.0"}).to_string();
+    ex(s, "node.set", json!({"id": page, "props": {"pluginData": {"uigen.importPage": marker}}}));
+    page
+}
+
+fn go_to(s: &mut Session, page: NodeId) {
+    ex(s, "page.select", json!({"id": page}));
+}
+
+#[test]
+fn the_sets_of_an_import_page_are_left_out_of_the_export_and_do_not_clash_with_their_copy() {
+    let mut s = Session::new();
+    let placed = plain(&mut s, "ui-Button", 0.0);
+    let library = s.doc().unwrap().page_of(placed).unwrap();
+    let import = mark_import_page(&mut s, "Imported");
+    go_to(&mut s, import);
+    let staged = plain(&mut s, "ui-Button", 0.0);
+    go_to(&mut s, library);
+
+    let v = export(&mut s, json!({"prefix": ""}));
+    assert_eq!(v["ready"], true, "{v}");
+    let listed: Vec<&Value> = v["components"].as_array().unwrap().iter().collect();
+    assert_eq!(listed.len(), 1, "{v}");
+    assert_eq!(listed[0]["id"], json!(placed), "{v}");
+
+    let asked = export(&mut s, json!({"prefix": "", "ids": [staged]}));
+    assert_eq!(asked["components"][0]["id"], json!(staged), "an explicit id still reads a set of an import page: {asked}");
+}
+
+#[test]
+fn two_copies_of_one_component_are_refused_by_a_message_that_names_both_pages() {
+    let mut s = Session::new();
+    let first = plain(&mut s, "ui-Button", 0.0);
+    let page = s.doc().unwrap().page_of(first).unwrap();
+    ex(&mut s, "node.set", json!({"id": page, "props": {"name": "Actions"}}));
+    let other = idv(&ex(&mut s, "page.add", json!({"name": "Actions 2"})));
+    go_to(&mut s, other);
+    plain(&mut s, "ui-Button", 0.0);
+
+    let refused = refusal(&mut s, &json!({"prefix": "", "path": std::env::temp_dir().join("figcraft-lit-twins").display().to_string()}));
+    for named in ["\"ui-Button\" on page \"Actions\"", "\"ui-Button\" on page \"Actions 2\"", "<ui-button>", "rename or delete one of them"] {
+        assert!(refused.contains(named), "{named} is missing from: {refused}");
+    }
+}

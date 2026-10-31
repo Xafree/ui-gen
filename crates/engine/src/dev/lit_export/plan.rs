@@ -11,8 +11,10 @@ use crate::codegen::LitNames;
 use crate::component_codegen::{Component, describe, main_of};
 use crate::components::variant_set;
 use crate::lit::{self, LitOptions, Note, StateRecipe, TagIssue};
+use crate::uigen_import::is_import_page;
 
 const MAX_SHOWN_NAME: usize = 60;
+const DUPLICATE: &str = "duplicate";
 
 /// What to export, and how the package is named.
 #[derive(Clone, Debug)]
@@ -100,7 +102,7 @@ impl ExportPlan {
         self.components
             .iter()
             .filter(|c| !c.issues.is_empty())
-            .map(|c| format!("{} ({})", shown(&c.name), c.issues.iter().map(|i| i.code).collect::<Vec<_>>().join(", ")))
+            .map(|c| format!("{} ({})", shown(&c.name), c.issues.iter().map(blocker).collect::<Vec<_>>().join(", ")))
             .collect()
     }
 }
@@ -120,6 +122,22 @@ fn shown(name: &str) -> String {
 
 fn issue(code: &'static str, message: String) -> Issue {
     Issue { code, message }
+}
+
+/// What a refusal says of an issue: a clash names both components, any other only its kind.
+fn blocker(issue: &Issue) -> String {
+    if issue.code == DUPLICATE { format!("{DUPLICATE}: {}", issue.message) } else { issue.code.to_string() }
+}
+
+fn located(doc: &Document, c: &Candidate) -> String {
+    let page = doc.page_of(c.id).and_then(|page| doc.node(page)).map(|page| page.name.as_str());
+    page.map_or_else(|| format!("\"{}\"", shown(&c.name)), |page| format!("\"{}\" on page \"{}\"", shown(&c.name), shown(page)))
+}
+
+fn clash(doc: &Document, c: &Candidate, rivals: &[String], what: &str) -> Issue {
+    let others = rivals.iter().filter(|rival| **rival != located(doc, c)).cloned().collect::<Vec<_>>();
+    let also = if others.is_empty() { "another component".to_string() } else { others.join(" and ") };
+    issue(DUPLICATE, format!("{} gives {what}, which {also} gives too: rename or delete one of them", located(doc, c)))
 }
 
 fn tag_issue(why: TagIssue, name: &str) -> Issue {
@@ -152,6 +170,7 @@ fn all_entries(doc: &Document) -> Vec<NodeId> {
             NodeKind::ComponentSet { .. } => true,
             _ => false,
         })
+        .filter(|n| !doc.page_of(n.id).is_some_and(|page| is_import_page(doc, page)))
         .map(|n| n.id)
         .collect()
 }
@@ -205,20 +224,27 @@ pub(crate) fn plan_named(doc: &Document, opts: &ExportOptions) -> (ExportPlan, L
             *classes.entry(lit::class_of(tag)).or_default() += 1;
         }
     }
+    let holders = |same: &dyn Fn(&str) -> bool| -> Vec<String> {
+        found.iter().zip(&tags).filter(|(c, tag)| !c.empty && tag.as_ref().is_ok_and(|tag| same(tag))).map(|(c, _)| located(doc, c)).collect()
+    };
+    let holders = |same: &dyn Fn(&str) -> bool| -> Vec<String> {
+        found.iter().zip(&tags).filter(|(c, tag)| !c.empty && tag.as_ref().is_ok_and(|tag| same(tag))).map(|(c, _)| located(doc, c)).collect()
+    };
     let (mut components, mut notes, mut sources) = (Vec::new(), Vec::new(), Vec::new());
     let mut reads: Vec<(String, Vec<String>)> = Vec::new();
     for (c, tag) in found.iter().zip(&tags) {
         let mut issues = Vec::new();
         match tag {
             Err(why) if !c.empty => issues.push(tag_issue(*why, &c.name)),
-            Ok(tag) if !c.empty && taken.get(tag.as_str()).is_some_and(|n| *n > 1) => issues.push(issue(
-                "duplicate",
-                format!("\"{}\" gives the element name <{tag}>, which another component has too: rename one of them", shown(&c.name)),
-            )),
-            Ok(tag) if !c.empty && classes.get(&lit::class_of(tag)).is_some_and(|n| *n > 1) => issues.push(issue(
-                "duplicate",
-                format!("\"{}\" gives the class {}, which another component has too: rename one of them", shown(&c.name), lit::class_of(tag)),
-            )),
+            Ok(tag) if !c.empty && taken.get(tag.as_str()).is_some_and(|n| *n > 1) => {
+                let rivals = holders(&|other: &str| other == tag);
+                issues.push(clash(doc, c, &rivals, &format!("the element name <{tag}>")));
+            }
+            Ok(tag) if !c.empty && classes.get(&lit::class_of(tag)).is_some_and(|n| *n > 1) => {
+                let class = lit::class_of(tag);
+                let rivals = holders(&|other: &str| lit::class_of(other) == class);
+                issues.push(clash(doc, c, &rivals, &format!("the class {class}")));
+            }
             _ => {}
         }
         let status = match (issues.is_empty(), c.empty, &c.needed_by) {
