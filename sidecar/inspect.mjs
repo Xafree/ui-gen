@@ -55,7 +55,8 @@ async function listReactExports(installed) {
     contents: `import * as lib from ${JSON.stringify(installed.name)};
 const isComponent = ${IS_COMPONENT};
 const partsOf = ${PARTS_OF};
-const exported = Object.keys(lib).filter((key) => /^[A-Z]/.test(key) && isComponent(lib[key]));
+const paintsNothing = (key) => /(Context|Provider)$/.test(key) || lib[key]?.$$typeof === Symbol.for('react.context');
+const exported = Object.keys(lib).filter((key) => /^[A-Z]/.test(key) && isComponent(lib[key]) && !paintsNothing(key));
 window.__uigenExports = exported;
 window.__uigenParts = partsOf(lib, exported);`,
   });
