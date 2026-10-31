@@ -11,15 +11,17 @@ use super::{Walk, cleanup, facts, finite_or_zero, layout, motion, names};
 use crate::error::ImportError;
 use crate::model::Snapshot;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TranslateOptions {
     pub auto_layout: bool,
     pub cleanup: bool,
+    /// The layer names of `ROLE_NAMES` in the language of the interface; a role left out stays in English.
+    pub role_names: BTreeMap<String, String>,
 }
 
 impl Default for TranslateOptions {
     fn default() -> Self {
-        Self { auto_layout: true, cleanup: true }
+        Self { auto_layout: true, cleanup: true, role_names: BTreeMap::new() }
     }
 }
 
@@ -82,9 +84,8 @@ pub fn translate_snapshot(
     let root = walk.run(&snapshot.root, parent, (finite_or_zero(x), finite_or_zero(y)))?;
     let Walk { doc, mut warnings, elements, svgs, .. } = walk;
     let sources: BTreeMap<_, _> = elements.into_iter().collect();
-    if options.cleanup {
-        cleanup::run(doc, root, &sources)?;
-    }
+    let root = if options.cleanup { cleanup::run(doc, root, &sources)? } else { root };
+    names::by_role(doc, root, &sources, options);
     names::make_unique(doc, root);
     if options.auto_layout {
         layout::apply(doc, root, &sources, &mut warnings);

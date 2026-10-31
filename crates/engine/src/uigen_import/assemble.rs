@@ -96,8 +96,9 @@ fn build(s: &mut Session, request: &Request, destination: &Destination, finished
     let mut warnings: Vec<String> = finished.warnings.clone();
     let mut placed: Vec<(NodeId, usize, usize)> = Vec::with_capacity(finished.variants.len());
     let mut themed: Vec<VariantTokens> = Vec::with_capacity(finished.variants.len());
+    let options = TranslateOptions { role_names: request.role_names.clone(), ..TranslateOptions::default() };
     for variant in &finished.variants {
-        let mut translated = figcraft_dom::translate_snapshot(s.doc_mut()?, &variant.snapshot, parent, 0.0, 0.0, &TranslateOptions::default())
+        let mut translated = figcraft_dom::translate_snapshot(s.doc_mut()?, &variant.snapshot, parent, 0.0, 0.0, &options)
             .map_err(|e| bad(COMMAND, format!("{}: {e}", variant.label)))?;
         if !request.animations {
             drop_effects(s.doc_mut()?, &mut translated.layers);
@@ -108,7 +109,7 @@ fn build(s: &mut Session, request: &Request, destination: &Destination, finished
         let others = variant
             .others
             .iter()
-            .map(scratch_facts)
+            .map(|snapshot| scratch_facts(snapshot, &options))
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|e| bad(COMMAND, format!("{}: {e}", variant.label)))?;
         let axes = [variant.style.clone(), variant.size.clone(), Some(variant.state.label().to_lowercase())];
@@ -197,10 +198,10 @@ fn drop_effects(doc: &mut Document, layers: &mut [LayerFacts]) {
 }
 
 /// The layer facts of another theme's render, translated in a scratch document: the document keeps only the layers of the first theme.
-fn scratch_facts(snapshot: &Snapshot) -> std::result::Result<Vec<LayerFacts>, ImportError> {
+fn scratch_facts(snapshot: &Snapshot, options: &TranslateOptions) -> std::result::Result<Vec<LayerFacts>, ImportError> {
     let mut scratch = Document::new("scratch");
     let page = scratch.pages.first().copied().ok_or(ImportError::NothingToImport("the scratch document has no page"))?;
-    figcraft_dom::translate_snapshot(&mut scratch, snapshot, page, 0.0, 0.0, &TranslateOptions::default()).map(|translated| translated.layers)
+    figcraft_dom::translate_snapshot(&mut scratch, snapshot, page, 0.0, 0.0, options).map(|translated| translated.layers)
 }
 
 fn origin(doc: &Document, parent: NodeId, page: NodeId, at: Option<(f64, f64)>) -> (f64, f64) {

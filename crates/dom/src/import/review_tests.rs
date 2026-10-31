@@ -58,8 +58,8 @@ fn animation_with(field: &str, value: Value) -> Value {
 fn an_svg_turning_forever_is_a_spinner() {
     let run = svg_with(json!([turning("transform")]));
 
-    assert_eq!(facts_of(&run, "svg").effect, Some(Effect::Spinner));
-    assert_eq!(run.by_name("svg").plugin_data.get(EFFECT_KEY).map(String::as_str), Some("spinner"));
+    assert_eq!(facts_of(&run, "Icon").effect, Some(Effect::Spinner));
+    assert_eq!(run.by_name("Icon").plugin_data.get(EFFECT_KEY).map(String::as_str), Some("spinner"));
     assert_eq!(run.by_name("Host").plugin_data.get(EFFECT_KEY), None);
 }
 
@@ -68,7 +68,7 @@ fn the_css_rotate_property_turns_an_element_or_an_svg_into_a_spinner() {
     let on_svg = svg_with(json!([turning("rotate")]));
     let on_element = element_with(json!([turning("rotate")]));
 
-    assert_eq!(facts_of(&on_svg, "svg").effect, Some(Effect::Spinner));
+    assert_eq!(facts_of(&on_svg, "Icon").effect, Some(Effect::Spinner));
     assert_eq!(facts_of(&on_element, "Wheel").effect, Some(Effect::Spinner));
 }
 
@@ -77,8 +77,8 @@ fn an_svg_with_another_animation_is_not_a_spinner_and_gets_a_note() {
     let fade = json!({ "name": "fade-in", "durationMs": 300, "easing": "ease", "iterations": "infinite", "properties": ["opacity"] });
     let run = svg_with(json!([fade]));
 
-    assert_eq!(facts_of(&run, "svg").effect, None);
-    let labels = run.note_labels(run.by_name("svg"));
+    assert_eq!(facts_of(&run, "Icon").effect, None);
+    let labels = run.note_labels(run.by_name("Icon"));
     assert!(labels.iter().any(|label| label.contains("fade-in")), "{labels:?}");
 }
 

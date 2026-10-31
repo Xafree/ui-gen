@@ -602,6 +602,9 @@ impl Document {
         if matches!(node.kind, NodeKind::Section { .. }) && !self.takes_sections(new_parent) {
             return Err(DocError::Invalid("sections go on the page or in other sections, not in frames or groups".into()));
         }
+        if matches!(np.kind, NodeKind::ComponentSet { .. }) && !matches!(node.kind, NodeKind::Component { .. }) {
+            return Err(DocError::Invalid("a component set holds only its variants, which are components".into()));
+        }
         let world = self.world_transform(id);
         let old_parent = node.parent;
         let old_index = self.index_in_parent(id);
