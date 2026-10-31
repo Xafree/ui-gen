@@ -3,6 +3,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { loadBundle, withPage } from './browser.mjs';
 import { IS_COMPONENT, cachedBundle } from './bundle.mjs';
+import { checkComposition, compositionOf } from './composition.mjs';
 import { startBudget } from './deadline.mjs';
 import { insideRoot, readInstalledPackage } from './installed-package.mjs';
 import { ServiceError } from './protocol.mjs';
@@ -41,12 +42,36 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 const isComponent = ${IS_COMPONENT};
 const fail = (error) => { window.__uigenError = String(error?.message ?? error); };
-export function mount({ component, props, text }) {
+const exportAt = (typePath) => {
+  let value = lib;
+  for (const key of typePath.split('.')) {
+    if (value === null || !['object', 'function'].includes(typeof value) || !Object.hasOwn(value, key)) {
+      return undefined;
+    }
+    value = value[key];
+  }
+  return isComponent(value) ? value : undefined;
+};
+const unknownType = (node) => {
+  if (typeof node === 'string') return undefined;
+  if (exportAt(node.type) === undefined) return node.type;
+  return (node.children ?? []).map(unknownType).find((type) => type !== undefined);
+};
+const elementOf = (node) => (typeof node === 'string' ? node : createElement(exportAt(node.type), node.props, ...(node.children ?? []).map(elementOf)));
+export function mount({ component, props, text, composition }) {
   if (!Object.hasOwn(lib, component) || !isComponent(lib[component])) {
     window.__uigenMissing = true;
     return;
   }
+  window.__uigenUnknownType = composition && unknownType(composition);
+  if (window.__uigenUnknownType !== undefined) {
+    return;
+  }
   const root = createRoot(document.querySelector(${JSON.stringify(ROOT_SELECTOR)}), { onUncaughtError: fail, onCaughtError: fail });
+  if (composition) {
+    flushSync(() => root.render(elementOf({ ...composition, props: { ...composition.props, ...props } })));
+    return;
+  }
   window.__uigenParts = Object.keys(lib[component]).filter((key) => key !== 'Root' && /^[A-Z]/.test(key) && isComponent(lib[component][key]));
   const content = text === undefined ? [] : [text];
   flushSync(() => root.render(createElement(lib[component], props, ...content)));
@@ -114,15 +139,33 @@ const settle = (page, budget) =>
     await Promise.race([settled, new Promise((resolve) => setTimeout(resolve, capMs))]);
   }, Math.min(SETTLE_CAP_MS, budget.remaining()));
 
-async function forceState(page, state, budget) {
-  const target = page.locator(`${ROOT_SELECTOR} > :not(style, script)`).first();
-  if (state === 'hover') {
-    await target.hover();
-  } else if (state === 'pressed') {
-    await target.hover();
-    await page.mouse.down();
-  } else if (state === 'focus') {
-    await target.focus();
+function findStateTarget({ captured, state }) {
+  const INTERACTIVE =
+    'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"]), [role="button"], [role="combobox"], [role="switch"], [role="checkbox"], [role="radio"], [role="slider"], [role="tab"]';
+  const MIN_POINTER_SIDE = 4;
+  const IGNORED = new Set(['style', 'script', 'link', 'meta', 'template', 'noscript']);
+  const hasBox = (element) => {
+    const { x, y, width, height } = element.getBoundingClientRect();
+    const reached = document.elementFromPoint(x + width / 2, y + height / 2);
+    return width >= MIN_POINTER_SIDE && height >= MIN_POINTER_SIDE && reached !== null && element.contains(reached);
+  };
+  const owner = document.querySelector(captured);
+  const candidates = [owner, ...owner.querySelectorAll(INTERACTIVE)].filter((element) => element.matches(INTERACTIVE));
+  const interactive = state === 'focus' ? candidates[0] : candidates.find(hasBox);
+  return interactive ?? [...owner.children].find((child) => !IGNORED.has(child.localName) && hasBox(child)) ?? owner;
+}
+
+async function forceState(page, captured, state, budget) {
+  if (state === 'hover' || state === 'pressed' || state === 'focus') {
+    const target = (await page.evaluateHandle(findStateTarget, { captured, state })).asElement();
+    if (state === 'focus') {
+      await target.focus();
+    } else {
+      await target.hover();
+    }
+    if (state === 'pressed') {
+      await page.mouse.down();
+    }
   }
   await settle(page, budget);
 }
@@ -147,6 +190,16 @@ function markRenderedElement({ rootSelector, mark }) {
   return true;
 }
 
+async function refuseEmptyRoot(page, component) {
+  const box = await page.locator(ROOT_SELECTOR).boundingBox();
+  if (box !== null && box.width > 0 && box.height > 0) {
+    return;
+  }
+  const parts = await page.evaluate(() => window.__uigenParts ?? []);
+  const needs = parts.length === 0 ? '' : ` without its parts: ${parts.join(', ')}`;
+  throw new ServiceError('render', `component "${component}" rendered nothing visible${needs}`);
+}
+
 export async function screenshotPainted(page, selector, file) {
   const target = page.locator(selector);
   const box = await target.boundingBox();
@@ -161,8 +214,9 @@ export async function screenshotPainted(page, selector, file) {
   }
 }
 
-function pngSegments(installed, { component, props, state, theme }) {
-  const hash = createHash('sha256').update(JSON.stringify(props)).digest('hex').slice(0, 12);
+function pngSegments(installed, { component, props, composition, text, state, theme }) {
+  const hashed = composition === undefined && text === undefined ? props : [props, composition ?? null, text ?? null];
+  const hash = createHash('sha256').update(JSON.stringify(hashed)).digest('hex').slice(0, 12);
   const name = `${safeSegment(component)}-${hash}-${state}-${theme}.png`;
   return ['.uigen', 'captures', safeSegment(installed.name), safeSegment(installed.version), name];
 }
@@ -178,12 +232,19 @@ async function renderInPage(page, installed, params, { code, styles }, budget) {
   if (await page.evaluate(() => window.__uigenMissing === true)) {
     throw new ServiceError('componentNotFound', `component "${component}" is not exported by ${installed.name}`);
   }
+  const unknownType = await page.evaluate(() => window.__uigenUnknownType);
+  if (unknownType !== undefined) {
+    throw invalid(`the composition of "${component}" uses "${unknownType}", which ${installed.name} does not export as a component`);
+  }
   await settle(page, budget);
-  await forceState(page, state, budget);
-  const source = { package: installed.name, version: installed.version, component, props, state };
   const captured = await page.evaluate(markRenderedElement, { rootSelector: ROOT_SELECTOR, mark: COMPONENT_MARK }) ? COMPONENT_SELECTOR : ROOT_SELECTOR;
+  if (captured === ROOT_SELECTOR) {
+    await refuseEmptyRoot(page, component);
+  }
+  await forceState(page, captured, state, budget);
+  const source = { package: installed.name, version: installed.version, component, props, state };
   const snapshot = await captureSnapshot(page, captured, source);
-  const segments = pngSegments(installed, { component, props, state, theme });
+  const segments = pngSegments(installed, { component, props, composition: params.composition, text: params.text, state, theme });
   const file = path.join(params.dir, ...segments);
   await mkdir(path.dirname(file), { recursive: true });
   await screenshotPainted(page, captured, file);
@@ -202,6 +263,14 @@ export async function render(params) {
   if (!RENDERABLE.includes(installed.framework)) {
     throw new ServiceError('frameworkUnsupported', `${installed.framework} packages cannot be rendered yet (supported: ${RENDERABLE.join(', ')})`);
   }
+  const isElement = installed.tags.has(params.component);
+  if (params.composition !== undefined && isElement) {
+    throw invalid(`"composition" applies to React components, not to the web component "${params.component}"`);
+  }
+  const composition =
+    params.composition === undefined
+      ? isElement ? undefined : await compositionOf(params.dir, installed.name, params.component)
+      : checkComposition(params.composition, params.component);
   const props = params.state === 'disabled' ? { ...params.props, disabled: true, isDisabled: true } : params.props;
   const { styles, notes } = await budget.bound(findStylesheets(installed));
   const withNotes = (result, extra = []) => {
@@ -209,11 +278,11 @@ export async function render(params) {
     return all.length === 0 ? result : { ...result, note: all.join('; ') };
   };
   const inPage = async (text) => {
-    const code = mountScript(bundled, { component: params.component, props, text });
+    const code = mountScript(bundled, { component: params.component, props, text, composition });
     try {
       return await budget.bound(
         withPage({ viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: params.theme }, (page) =>
-          budget.bound(renderInPage(page, installed, params, { code, styles }, budget)),
+          budget.bound(renderInPage(page, installed, { ...params, composition, text }, { code, styles }, budget)),
         ),
       );
     } catch (error) {
@@ -226,10 +295,11 @@ export async function render(params) {
   const bundled = await budget.bound(
     cachedBundle({ contents: buildEntry(installed, params.component), resolveDir: installed.sources, globalName: MOUNT_GLOBAL, stamps: installStamps(installed) }),
   );
+  const sampleText = composition === undefined ? params.sampleText : undefined;
   try {
-    return withNotes(await inPage(params.sampleText));
+    return withNotes(await inPage(sampleText));
   } catch (error) {
-    const refusedText = params.sampleText !== undefined && error instanceof ServiceError && error.kind === 'render' && budget.remaining() > 0;
+    const refusedText = sampleText !== undefined && error instanceof ServiceError && error.kind === 'render' && budget.remaining() > 0;
     if (!refusedText) {
       throw error;
     }

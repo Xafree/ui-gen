@@ -394,6 +394,29 @@ fn a_reference_without_png_is_a_missing_reference_not_a_command_error() {
 
 // covers: E5-3.4
 #[test]
+fn a_new_import_fills_the_dark_value_an_existing_variable_lacks() {
+    let themes = json!({"themes": ["light", "dark"]});
+    let mut lab = lab("compare-dark-gap", &themes);
+    let doc = lab.bench.session.doc_mut().unwrap();
+    let dark = doc.variables.collections.iter().flat_map(|collection| &collection.modes).find(|mode| mode.name == "Dark").unwrap().id.clone();
+    let expected: Vec<_> = doc.variables.variables.iter().map(|variable| (variable.id.clone(), variable.values[&dark].clone())).collect();
+    assert!(!expected.is_empty());
+    for variable in &mut doc.variables.variables {
+        variable.values.remove(&dark);
+    }
+
+    lab.bench.import(&import_request(&themes)).unwrap();
+    let events = lab.bench.pump_to_end();
+    assert!(events.iter().any(|event| event.command == IMPORT && event.outcome.is_ok()), "{events:?}");
+
+    let doc = document_of(&lab);
+    for (id, value) in expected {
+        let variable = doc.variables.variables.iter().find(|variable| variable.id == id).unwrap();
+        assert_eq!(variable.values.get(&dark), Some(&value), "{}", variable.name);
+    }
+}
+
+#[test]
 fn the_dark_theme_is_measured_in_the_dark_mode_of_the_collection() {
     let mut lab = lab("compare-dark", &json!({"themes": ["light", "dark"]}));
     let set = lab.set;

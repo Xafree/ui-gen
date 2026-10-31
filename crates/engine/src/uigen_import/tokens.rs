@@ -290,12 +290,13 @@ fn claim(doc: &mut Document, ctx: &Ctx, claims: &mut BTreeMap<String, Claim>, na
     }
 }
 
-/// Give `variable` the value of each theme in the mode of that name: only in the modes this import added
-/// when `only_added` (the other modes hold the variable's own values), else in every mode a theme names.
+/// Give `variable` the value of each theme in the mode of that name: when `only_added`, only in the modes
+/// this import added and those the variable has no value for (the others hold its own values), else in
+/// every mode a theme names. A mode without a value would silently draw the value of the default mode.
 fn fill(variable: &mut Variable, ctx: &Ctx, values: &[TokenValue], only_added: bool) {
     for (theme, value) in ctx.themes.iter().zip(values) {
-        let mode = ctx.owner.modes.iter().find(|mode| mode.name == theme.mode() && (!only_added || ctx.added.contains(&mode.id)));
-        if let Some(mode) = mode {
+        let Some(mode) = ctx.owner.modes.iter().find(|mode| mode.name == theme.mode()) else { continue };
+        if !only_added || ctx.added.contains(&mode.id) || !variable.values.contains_key(&mode.id) {
             variable.values.insert(mode.id.clone(), stored(*value));
         }
     }

@@ -1,5 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { makeSourcesProject } from './helpers/review-project.mjs';
 import { makeProject, startService } from './helpers/service-client.mjs';
 
 describe('inspect', () => {
@@ -33,6 +34,23 @@ describe('inspect', () => {
       { name: 'disabled', type: 'boolean', values: null },
     ]);
     assert.deepEqual(props['x-chip'], [{ name: 'label', type: 'string', values: null }]);
+  });
+
+  it('does not offer contexts and providers, which paint nothing', async () => {
+    const library = `import { createContext, createElement } from 'react';
+export const Shown = () => createElement('div', null, 'shown');
+export const ThemeContext = createContext(null);
+export const Scope = createContext(null);
+export const RouterProvider = ({ children }) => children;
+`;
+    const { dir, remove } = await makeSourcesProject({ 'context-lib': { 'index.js': library } });
+    try {
+      const response = await service.request('inspect', { dir, package: 'context-lib' });
+      assert.equal(response.ok, true, JSON.stringify(response));
+      assert.deepEqual(response.result.components.map((component) => component.name), ['Shown']);
+    } finally {
+      await remove();
+    }
   });
 
   // covers: E2-3.3
