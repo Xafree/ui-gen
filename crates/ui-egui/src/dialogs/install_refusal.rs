@@ -7,6 +7,7 @@ use crate::i18n::{tr, trf};
 pub(crate) fn text(error: &ProjectError) -> Option<String> {
     Some(match line_refusal(error)? {
         LineRefusal::Empty => tr("type at least one package, for example: @scope/name another@1.2.0").to_string(),
+        LineRefusal::TooMany { count, max } => trf("{count} packages on one line: {max} at most", &[("count", &count), ("max", &max)]),
         LineRefusal::NotInstall(word) => {
             trf("{word}: only \"npm install\" or \"npm i\" is understood here; type the package names", &[("word", &word)])
         }

@@ -1946,6 +1946,7 @@ status = "draft — needs native review"
 "Stopped after {done} of {total} components" = "已在 {done}/{total} 个组件后停止"
 "Removes {packages}" = "移除 {packages}"
 "Keeps {packages}: another library needs them" = "保留 {packages}：其他库需要它们"
+"{count} packages on one line: {max} at most" = "一行 {count} 个包：最多 {max} 个"
 
 [commands]
 "align.bottom" = "底部对齐"

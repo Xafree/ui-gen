@@ -2026,6 +2026,7 @@ status = "draft — needs native review"
 "Stopped after {done} of {total} components" = "{total}টির মধ্যে {done}টি কম্পোনেন্টের পরে থামানো হয়েছে"
 "Removes {packages}" = "{packages} সরায়"
 "Keeps {packages}: another library needs them" = "{packages} রাখে: অন্য লাইব্রেরির দরকার"
+"{count} packages on one line: {max} at most" = "এক লাইনে {count}টি প্যাকেজ: সর্বোচ্চ {max}টি"
 
 [commands]
 "board.connector" = "সংযোগকারী"

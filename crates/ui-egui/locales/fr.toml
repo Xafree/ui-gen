@@ -2033,6 +2033,7 @@ status = "draft — needs native review"
 "Stopped after {done} of {total} components" = "Arrêté après {done} composants sur {total}"
 "Removes {packages}" = "Retire {packages}"
 "Keeps {packages}: another library needs them" = "Garde {packages} : une autre bibliothèque en a besoin"
+"{count} packages on one line: {max} at most" = "{count} paquets sur une ligne : {max} au plus"
 
 [commands]
 "align.bottom" = "Aligner en bas"

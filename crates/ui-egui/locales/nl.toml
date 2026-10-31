@@ -2030,6 +2030,7 @@ status = "draft — needs native review"
 "Stopped after {done} of {total} components" = "Gestopt na {done} van {total} onderdelen"
 "Removes {packages}" = "Verwijdert {packages}"
 "Keeps {packages}: another library needs them" = "Behoudt {packages}: een andere bibliotheek heeft ze nodig"
+"{count} packages on one line: {max} at most" = "{count} pakketten op één regel: hoogstens {max}"
 
 [commands]
 "align.bottom" = "Onder uitlijnen"

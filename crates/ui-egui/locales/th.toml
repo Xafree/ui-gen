@@ -2018,6 +2018,7 @@ status = "draft — needs native review"
 "Stopped after {done} of {total} components" = "หยุดหลังจาก {done} จาก {total} คอมโพเนนต์"
 "Removes {packages}" = "ลบ {packages}"
 "Keeps {packages}: another library needs them" = "คงไว้ {packages}: ไลบรารีอื่นต้องใช้"
+"{count} packages on one line: {max} at most" = "{count} แพ็กเกจในบรรทัดเดียว: สูงสุด {max}"
 
 [commands]
 "align.bottom" = "จัดแนวชิดล่าง"

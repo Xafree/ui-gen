@@ -2042,6 +2042,7 @@ name = "Svenska"
 "Stopped after {done} of {total} components" = "Stoppad efter {done} av {total} komponenter"
 "Removes {packages}" = "Tar bort {packages}"
 "Keeps {packages}: another library needs them" = "Behåller {packages}: ett annat bibliotek behöver dem"
+"{count} packages on one line: {max} at most" = "{count} paket på en rad: högst {max}"
 
 [commands]
 

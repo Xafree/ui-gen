@@ -57,6 +57,10 @@ pub struct PackageSpec {
 }
 
 const MANAGERS: [&str; 4] = ["yarn", "pnpm", "npx", "bun"];
+/// What the capture service takes in one install (`sidecar/install.mjs`).
+pub const MAX_PACKAGES: usize = 32;
+const TOO_MANY_START: &str = " packages on one line: ";
+const TOO_MANY_END: &str = " at most";
 const EMPTY_LINE: &str = "type at least one package, for example: @scope/name another@1.2.0";
 
 pub fn parse_install_line(line: &str) -> Result<Vec<PackageSpec>, ProjectError> {
@@ -84,12 +88,16 @@ pub fn parse_install_line(line: &str) -> Result<Vec<PackageSpec>, ProjectError> 
     if specs.is_empty() {
         return Err(invalid("line", EMPTY_LINE));
     }
+    if specs.len() > MAX_PACKAGES {
+        return Err(invalid("line", format!("{}{TOO_MANY_START}{MAX_PACKAGES}{TOO_MANY_END}", specs.len())));
+    }
     Ok(specs)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LineRefusal {
     Empty,
+    TooMany { count: usize, max: usize },
     NotInstall(String),
     NoPackagesAfterNpm,
     OtherManager(String),
@@ -114,11 +122,17 @@ pub fn line_refusal(error: &ProjectError) -> Option<LineRefusal> {
     let reason = reason.as_str();
     match (field.as_str(), reason) {
         ("line", EMPTY_LINE) => Some(LineRefusal::Empty),
+        ("line", _) => too_many(reason),
         (_, ONLY_NPM_INSTALL) => Some(LineRefusal::NotInstall(field.clone())),
         ("npm", NPM_WITHOUT_PACKAGES) => Some(LineRefusal::NoPackagesAfterNpm),
         (_, ONLY_NPM) => Some(LineRefusal::OtherManager(field.clone())),
         _ => token_problem(reason).map(|problem| LineRefusal::Token { token: field.clone(), problem }),
     }
+}
+
+fn too_many(reason: &str) -> Option<LineRefusal> {
+    let (count, rest) = reason.split_once(TOO_MANY_START)?;
+    Some(LineRefusal::TooMany { count: count.parse().ok()?, max: rest.strip_suffix(TOO_MANY_END)?.parse().ok()? })
 }
 
 fn token_problem(reason: &str) -> Option<TokenProblem> {

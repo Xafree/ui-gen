@@ -2027,6 +2027,7 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Stopped after {done} of {total} components" = "შეჩერდა {total}-დან {done} კომპონენტის შემდეგ"
 "Removes {packages}" = "წაშლის: {packages}"
 "Keeps {packages}: another library needs them" = "ტოვებს: {packages}, სხვა ბიბლიოთეკას სჭირდება"
+"{count} packages on one line: {max} at most" = "{count} პაკეტი ერთ ხაზზე: მაქსიმუმ {max}"
 
 [commands]
 "align.bottom" = "ქვემოთ სწორება"

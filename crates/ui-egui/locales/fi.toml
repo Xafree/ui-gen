@@ -2031,6 +2031,7 @@ status = "draft — needs native review"
 "Stopped after {done} of {total} components" = "Pysäytetty {done}/{total} komponentin jälkeen"
 "Removes {packages}" = "Poistaa: {packages}"
 "Keeps {packages}: another library needs them" = "Säilyttää: {packages}, toinen kirjasto tarvitsee niitä"
+"{count} packages on one line: {max} at most" = "{count} pakettia yhdellä rivillä: enintään {max}"
 
 [commands]
 "align.bottom" = "Tasaa alas"

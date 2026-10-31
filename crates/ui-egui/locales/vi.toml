@@ -1968,6 +1968,7 @@ status = "draft — needs native review"
 "Stopped after {done} of {total} components" = "Đã dừng sau {done} trên {total} thành phần"
 "Removes {packages}" = "Xóa {packages}"
 "Keeps {packages}: another library needs them" = "Giữ {packages}: thư viện khác cần chúng"
+"{count} packages on one line: {max} at most" = "{count} gói trên một dòng: tối đa {max}"
 
 [commands]
 "align.bottom" = "Căn dưới"

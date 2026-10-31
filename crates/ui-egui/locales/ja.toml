@@ -2012,6 +2012,7 @@ status = "draft — needs native review"
 "Stopped after {done} of {total} components" = "{total} 個中 {done} 個のコンポーネントで停止しました"
 "Removes {packages}" = "{packages} を削除します"
 "Keeps {packages}: another library needs them" = "{packages} は残します: 別のライブラリが必要としています"
+"{count} packages on one line: {max} at most" = "1 行に {count} 個のパッケージ: 最大 {max} 個"
 
 [commands]
 "align.bottom" = "下揃え"

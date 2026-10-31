@@ -1967,6 +1967,7 @@ status = "draft — needs native review"
 "Stopped after {done} of {total} components" = "Interrotto dopo {done} componenti su {total}"
 "Removes {packages}" = "Rimuove {packages}"
 "Keeps {packages}: another library needs them" = "Mantiene {packages}: servono a un’altra libreria"
+"{count} packages on one line: {max} at most" = "{count} pacchetti su una riga: al massimo {max}"
 
 [commands]
 "align.bottom" = "Allinea in basso"

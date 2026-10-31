@@ -1989,6 +1989,7 @@ status = "draft — needs native review"
 "Stopped after {done} of {total} components" = "Zastaveno po {done} z {total} komponent"
 "Removes {packages}" = "Odebere {packages}"
 "Keeps {packages}: another library needs them" = "Ponechá {packages}: potřebuje je jiná knihovna"
+"{count} packages on one line: {max} at most" = "{count} balíčků na jednom řádku: nejvýše {max}"
 
 [commands]
 "align.bottom" = "Zarovnat dolů"
