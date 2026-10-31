@@ -2022,6 +2022,9 @@ status = "draft — reviewed by a native speaker, awaiting a maintainer's approv
 "Default|state" = "ნაგულისხმევი"
 "Libraries|import step" = "ბიბლიოთეკები"
 "the file it was started from is closed" = "ფაილი, საიდანაც დაიწყო, დახურულია"
+"Stopping…" = "ჩერდება…"
+"Stopping… the component in progress finishes first" = "ჩერდება… მიმდინარე კომპონენტი ჯერ დასრულდება"
+"Stopped after {done} of {total} components" = "შეჩერდა {total}-დან {done} კომპონენტის შემდეგ"
 
 [commands]
 "align.bottom" = "ქვემოთ სწორება"

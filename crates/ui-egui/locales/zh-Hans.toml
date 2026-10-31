@@ -1941,6 +1941,9 @@ status = "draft — needs native review"
 "Default|state" = "默认"
 "Libraries|import step" = "库"
 "the file it was started from is closed" = "启动它的文件已关闭"
+"Stopping…" = "正在停止…"
+"Stopping… the component in progress finishes first" = "正在停止… 进行中的组件先完成"
+"Stopped after {done} of {total} components" = "已在 {done}/{total} 个组件后停止"
 
 [commands]
 "align.bottom" = "底部对齐"

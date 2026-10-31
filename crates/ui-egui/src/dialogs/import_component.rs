@@ -44,6 +44,7 @@ struct Batch {
     total: usize,
     done: usize,
     failures: Vec<String>,
+    stopping: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -75,6 +76,15 @@ pub struct ImportWindow {
 }
 
 impl ImportWindow {
+    /// Cancel or Escape while a component is being captured: the service can't drop a job, so
+    /// nothing more starts and the surface waits for it. `false`: nothing runs, the surface can go.
+    pub(crate) fn stop_running(&mut self) -> bool {
+        let Run::Importing(batch) = &mut self.run else { return false };
+        batch.queue.clear();
+        batch.stopping = true;
+        batch.current.is_some()
+    }
+
     fn new(first: Option<&str>) -> Self {
         Self {
             first: first.map(str::to_string),
@@ -141,8 +151,21 @@ fn finish(app: &mut FigApp, job: u64, outcome: &CaptureOutcome) -> bool {
         log::warn!("{IMPORT} {name}: {}", error.message);
         batch.failures.push(trf("Couldn't import {name}: {cause}", &[("name", &name), ("cause", &error.message)]));
     }
-    start_next(app);
+    if batch.stopping {
+        end_stopped(app);
+    } else {
+        start_next(app);
+    }
     true
+}
+
+fn end_stopped(app: &mut FigApp) {
+    let Some(ImportWindow { run: Run::Importing(batch), .. }) = app.ui.import_window.take() else { return };
+    let done = batch.done - batch.failures.len();
+    app.toast(trf("Stopped after {done} of {total} components", &[("done", &done), ("total", &batch.total)]));
+    if !batch.failures.is_empty() {
+        app.show_error(batch.failures.join("\n"));
+    }
 }
 
 /// Run `work` with file `doc` in front, then bring back the file that was; `None` once it is closed.
@@ -362,6 +385,7 @@ fn notes_of(app: &FigApp, sources: &[Source]) -> Vec<String> {
 fn progress_of(run: &Run) -> Progress {
     match run {
         Run::Idle => Progress::Idle,
+        Run::Importing(batch) if batch.stopping => Progress::Stopping,
         Run::Importing(batch) => Progress::Importing { done: batch.done, total: batch.total },
         Run::Summary { done, total, failures, .. } => Progress::Summary { done: *done, total: *total, failures: failures.clone() },
     }
@@ -476,7 +500,11 @@ fn perform(app: &mut FigApp, act: Act) {
         }),
         Act::Animations => edit(app, |state| state.animations = !state.animations),
         Act::Import => import(app),
-        Act::Cancel => app.ui.import_window = None,
+        Act::Cancel => {
+            if !app.ui.import_window.as_mut().is_some_and(ImportWindow::stop_running) {
+                app.ui.import_window = None;
+            }
+        }
         Act::Retry(package) => {
             if let Some(mut state) = app.ui.import_window.take() {
                 fetch(app, &mut state, &package, true);
@@ -565,7 +593,7 @@ fn plan(app: &FigApp, state: &mut ImportWindow) -> Option<Batch> {
     let queue: VecDeque<(String, Value)> =
         all.iter().map(|(package, component)| (component.name.clone(), params_of(state, package, component))).collect();
     let total = queue.len();
-    Some(Batch { doc, root, queue, current: None, total, done: 0, failures: Vec::new() })
+    Some(Batch { doc, root, queue, current: None, total, done: 0, failures: Vec::new(), stopping: false })
 }
 
 fn families_in_order(app: &FigApp, state: &ImportWindow, sources: &[Source]) -> Vec<(String, InspectedComponent)> {

@@ -2013,6 +2013,9 @@ status = "draft — needs native review"
 "Default|state" = "ค่าเริ่มต้น"
 "Libraries|import step" = "ไลบรารี"
 "the file it was started from is closed" = "ไฟล์ที่เริ่มต้นถูกปิดแล้ว"
+"Stopping…" = "กำลังหยุด…"
+"Stopping… the component in progress finishes first" = "กำลังหยุด… คอมโพเนนต์ที่กำลังทำจะเสร็จก่อน"
+"Stopped after {done} of {total} components" = "หยุดหลังจาก {done} จาก {total} คอมโพเนนต์"
 
 [commands]
 "align.bottom" = "จัดแนวชิดล่าง"

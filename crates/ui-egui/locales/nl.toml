@@ -2025,6 +2025,9 @@ status = "draft — needs native review"
 "Default|state" = "Standaard"
 "Libraries|import step" = "Bibliotheken"
 "the file it was started from is closed" = "het bestand waaruit het is gestart is gesloten"
+"Stopping…" = "Stoppen…"
+"Stopping… the component in progress finishes first" = "Stoppen… het lopende onderdeel wordt eerst afgerond"
+"Stopped after {done} of {total} components" = "Gestopt na {done} van {total} onderdelen"
 
 [commands]
 "align.bottom" = "Onder uitlijnen"

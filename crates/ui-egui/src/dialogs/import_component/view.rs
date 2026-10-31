@@ -46,6 +46,7 @@ pub(super) enum Status {
 pub(super) enum Progress {
     Idle,
     Importing { done: usize, total: usize },
+    Stopping,
     Summary { done: usize, total: usize, failures: Vec<String> },
 }
 
@@ -92,7 +93,7 @@ pub(super) fn show(ui: &mut Ui, t: &Tokens, model: &mut Model, acts: &mut Vec<Ac
     ui.scope(|ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
         track_keyboard_focus(ui);
-        top_bar(ui, t, model.project, acts);
+        top_bar(ui, t, model.project, matches!(model.progress, Progress::Stopping), acts);
         let area = ScrollArea::vertical().id_salt("import_surface").auto_shrink([false, false]);
         let area = if model.at_top { area.vertical_scroll_offset(0.0) } else { area };
         area.show(ui, |ui| {
@@ -111,7 +112,7 @@ pub(super) fn show(ui: &mut Ui, t: &Tokens, model: &mut Model, acts: &mut Vec<Ac
     });
 }
 
-fn top_bar(ui: &mut Ui, t: &Tokens, project: &str, acts: &mut Vec<Act>) {
+fn top_bar(ui: &mut Ui, t: &Tokens, project: &str, stopping: bool, acts: &mut Vec<Act>) {
     let (bar, _) = ui.allocate_exact_size(vec2(ui.available_width(), BAR_H), Sense::hover());
     ui.painter().rect_filled(bar, CornerRadius::ZERO, t.bg);
     ui.painter().hline(bar.x_range(), bar.max.y - 0.5, Stroke::new(1.0, t.border));
@@ -121,7 +122,8 @@ fn top_bar(ui: &mut Ui, t: &Tokens, project: &str, acts: &mut Vec<Act>) {
     ui.painter().text(pos2(slash.max.x + 6.0, centre_y), Align2::LEFT_CENTER, tr("Import components"), regular(13.5), t.text);
     let inner = Rect::from_min_max(pos2(bar.min.x + 20.0, bar.min.y), pos2(bar.max.x - 20.0, bar.max.y));
     ui.scope_builder(UiBuilder::new().max_rect(inner).layout(Layout::right_to_left(Align::Center)), |ui| {
-        if button(ui, t, tr("Cancel"), Look::Ghost, 32.0, 10.0, true).clicked() {
+        let label = if stopping { tr("Stopping…") } else { tr("Cancel") };
+        if button(ui, t, label, Look::Ghost, 32.0, 10.0, !stopping).clicked() {
             acts.push(Act::Cancel);
         }
     });
@@ -401,6 +403,7 @@ fn status(ui: &mut Ui, t: &Tokens, model: &Model, acts: &mut Vec<Act>) {
     match &model.progress {
         Progress::Idle => {}
         Progress::Importing { done, total } => note(ui, &trf("Importing… {done} of {total}", &[("done", done), ("total", total)]), 13.5, t.text),
+        Progress::Stopping => note(ui, tr("Stopping… the component in progress finishes first"), 13.5, t.text),
         Progress::Summary { done, total, failures } => {
             note(ui, &trf("Imported {done} of {total} components", &[("done", done), ("total", total)]), 13.5, t.text);
             for failure in failures {

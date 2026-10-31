@@ -2037,6 +2037,9 @@ name = "Polski"
 "Default|state" = "Domyślne"
 "Libraries|import step" = "Biblioteki"
 "the file it was started from is closed" = "plik, z którego uruchomiono import, jest zamknięty"
+"Stopping…" = "Zatrzymywanie…"
+"Stopping… the component in progress finishes first" = "Zatrzymywanie… bieżący komponent zakończy się najpierw"
+"Stopped after {done} of {total} components" = "Zatrzymano po {done} z {total} komponentów"
 
 [commands]
 "align.bottom" = "Wyrównaj do dołu"

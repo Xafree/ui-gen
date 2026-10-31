@@ -1962,6 +1962,9 @@ status = "draft — needs native review"
 "Default|state" = "Predefinito"
 "Libraries|import step" = "Librerie"
 "the file it was started from is closed" = "il file da cui è partito è chiuso"
+"Stopping…" = "Arresto in corso…"
+"Stopping… the component in progress finishes first" = "Arresto in corso… il componente in corso termina prima"
+"Stopped after {done} of {total} components" = "Interrotto dopo {done} componenti su {total}"
 
 [commands]
 "align.bottom" = "Allinea in basso"

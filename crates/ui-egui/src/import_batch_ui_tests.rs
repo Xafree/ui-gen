@@ -1,6 +1,7 @@
 //! The queue of the "Choose your components" surface: it belongs to the file it started from, whatever
 //! tab comes to the front, and it stops cleanly. The bench is the one of `import_window_ui_tests`.
 
+use egui::{Key, Modifiers};
 use serde_json::json;
 
 use crate::import_window_ui_tests::{Bench, IMPORT, OTHER, PACKAGE, mentions};
@@ -61,4 +62,40 @@ fn closing_the_file_of_the_queue_stops_it_and_counts_the_rest_as_failed_with_a_m
     assert_eq!(b.ran_since(mark, IMPORT).len(), 1, "nothing starts once the file is gone");
     let failure = b.ui.app.ui.last_error.clone().unwrap_or_default();
     assert!(failure.contains("Slider") && failure.contains("closed"), "the message says what happened: {failure:?}");
+}
+
+#[test]
+fn cancel_during_a_run_keeps_the_surface_until_the_running_component_ends_and_starts_nothing_else() {
+    let mut b = open_pair("stop-cancel");
+    b.click("Alert");
+    b.click("Slider");
+    b.hold();
+    let mark = b.mark();
+    b.click("Import");
+    b.click("Cancel");
+    assert!(b.window_open(), "the surface stays while the job runs: {:?}", b.shown());
+    assert!(b.shows("Stopping"), "and says so: {:?}", b.shown());
+
+    b.release_all();
+    b.settle();
+    assert!(!b.window_open(), "it goes once the job ended");
+    assert_eq!(b.ran_since(mark, IMPORT).len(), 1, "the next component never starts");
+    let toast = b.ui.app.ui.toast.as_ref().map(|t| t.0.clone()).unwrap_or_default();
+    assert!(toast.contains("Stopped after 1 of 2"), "{toast:?}");
+}
+
+#[test]
+fn escape_during_a_run_stops_like_cancel() {
+    let mut b = open_pair("stop-escape");
+    b.click("Alert");
+    b.click("Slider");
+    b.hold();
+    let mark = b.mark();
+    b.click("Import");
+    b.press(Key::Escape, Modifiers::NONE);
+    assert!(b.window_open() && b.shows("Stopping"), "{:?}", b.shown());
+    b.release_all();
+    b.settle();
+    assert!(!b.window_open());
+    assert_eq!(b.ran_since(mark, IMPORT).len(), 1);
 }

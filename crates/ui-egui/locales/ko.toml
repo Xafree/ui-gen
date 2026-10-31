@@ -2047,6 +2047,9 @@ status = "draft — needs native review"
 "Default|state" = "기본값"
 "Libraries|import step" = "라이브러리"
 "the file it was started from is closed" = "시작한 파일이 닫혔습니다"
+"Stopping…" = "중지하는 중…"
+"Stopping… the component in progress finishes first" = "중지하는 중… 진행 중인 컴포넌트가 먼저 끝납니다"
+"Stopped after {done} of {total} components" = "컴포넌트 {total}개 중 {done}개 후 중지됨"
 
 [commands]
 "align.bottom" = "아래쪽 정렬"

@@ -1988,6 +1988,9 @@ name = "Türkçe"
 "Default|state" = "Varsayılan"
 "Libraries|import step" = "Kitaplıklar"
 "the file it was started from is closed" = "başlatıldığı dosya kapalı"
+"Stopping…" = "Durduruluyor…"
+"Stopping… the component in progress finishes first" = "Durduruluyor… devam eden bileşen önce biter"
+"Stopped after {done} of {total} components" = "{total} bileşenden {done} tanesinden sonra durduruldu"
 
 [commands]
 "align.bottom" = "Alta hizala"

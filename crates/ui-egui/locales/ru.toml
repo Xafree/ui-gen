@@ -2037,6 +2037,9 @@ name = "Русский"
 "Default|state" = "По умолчанию"
 "Libraries|import step" = "Библиотеки"
 "the file it was started from is closed" = "файл, из которого запущен импорт, закрыт"
+"Stopping…" = "Остановка…"
+"Stopping… the component in progress finishes first" = "Остановка… сначала завершится текущий компонент"
+"Stopped after {done} of {total} components" = "Остановлено после {done} из {total} компонентов"
 
 [commands]
 "align.bottom" = "Выровнять по нижнему краю"

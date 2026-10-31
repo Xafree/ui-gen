@@ -1988,6 +1988,9 @@ status = "draft — needs native review"
 "Default|state" = "Default"
 "Libraries|import step" = "Pustaka"
 "the file it was started from is closed" = "berkas tempat memulainya sudah ditutup"
+"Stopping…" = "Menghentikan…"
+"Stopping… the component in progress finishes first" = "Menghentikan… komponen yang berjalan selesai lebih dulu"
+"Stopped after {done} of {total} components" = "Dihentikan setelah {done} dari {total} komponen"
 
 [commands]
 "align.bottom" = "Ratakan bawah"

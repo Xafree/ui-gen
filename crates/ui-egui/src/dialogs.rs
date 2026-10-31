@@ -164,6 +164,10 @@ fn about_body(ui: &mut egui::Ui, t: &Tokens) {
     );
 }
 
+fn figcraft_stop(state: &mut import_component::ImportWindow) -> bool {
+    state.stop_running()
+}
+
 /// Escape closes the topmost simple dialog (one without menus of its own), before the canvas's
 /// shortcuts see it (it doesn't deselect), like a system dialog: from one of its fields too. A menu
 /// open over the dialog (Preferences ▸ Interface size) takes the first Escape and closes alone.
@@ -198,7 +202,7 @@ pub fn keys(app: &mut FigApp, ctx: &Context) {
         || u.batch_rename.take().is_some()
         || u.import_report.take().is_some()
         || u.lit_export.take().is_some()
-        || u.import_window.take().is_some()
+        || u.import_window.as_mut().is_some_and(figcraft_stop)
         || u.project_settings.take().is_some()
         || u.missing_fonts.take().is_some()
         || u.tab_close.take().is_some()

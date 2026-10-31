@@ -2021,6 +2021,9 @@ status = "draft — needs native review"
 "Default|state" = "ডিফল্ট"
 "Libraries|import step" = "লাইব্রেরিসমূহ"
 "the file it was started from is closed" = "যে ফাইল থেকে এটি শুরু হয়েছিল তা বন্ধ হয়ে গেছে"
+"Stopping…" = "থামানো হচ্ছে…"
+"Stopping… the component in progress finishes first" = "থামানো হচ্ছে… চলমান কম্পোনেন্টটি আগে শেষ হবে"
+"Stopped after {done} of {total} components" = "{total}টির মধ্যে {done}টি কম্পোনেন্টের পরে থামানো হয়েছে"
 
 [commands]
 "board.connector" = "সংযোগকারী"

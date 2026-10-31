@@ -1963,6 +1963,9 @@ status = "draft — needs native review"
 "Default|state" = "Mặc định"
 "Libraries|import step" = "Thư viện"
 "the file it was started from is closed" = "tệp khởi đầu đã bị đóng"
+"Stopping…" = "Đang dừng…"
+"Stopping… the component in progress finishes first" = "Đang dừng… thành phần đang chạy sẽ hoàn tất trước"
+"Stopped after {done} of {total} components" = "Đã dừng sau {done} trên {total} thành phần"
 
 [commands]
 "align.bottom" = "Căn dưới"

@@ -2044,6 +2044,9 @@ status = "draft — needs native review"
 "Default|state" = "Padrão"
 "Libraries|import step" = "Bibliotecas"
 "the file it was started from is closed" = "o arquivo de onde começou está fechado"
+"Stopping…" = "Parando…"
+"Stopping… the component in progress finishes first" = "Parando… o componente em andamento termina primeiro"
+"Stopped after {done} of {total} components" = "Parado após {done} de {total} componentes"
 
 [commands]
 "align.bottom" = "Alinhar embaixo"

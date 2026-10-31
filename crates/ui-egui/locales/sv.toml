@@ -2037,6 +2037,9 @@ name = "Svenska"
 "Default|state" = "Standard"
 "Libraries|import step" = "Bibliotek"
 "the file it was started from is closed" = "filen den startades från är stängd"
+"Stopping…" = "Stoppar…"
+"Stopping… the component in progress finishes first" = "Stoppar… komponenten som pågår blir klar först"
+"Stopped after {done} of {total} components" = "Stoppad efter {done} av {total} komponenter"
 
 [commands]
 

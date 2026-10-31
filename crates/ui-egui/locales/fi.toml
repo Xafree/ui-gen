@@ -2026,6 +2026,9 @@ status = "draft — needs native review"
 "Default|state" = "Oletus"
 "Libraries|import step" = "Kirjastot"
 "the file it was started from is closed" = "tiedosto, josta se aloitettiin, on suljettu"
+"Stopping…" = "Pysäytetään…"
+"Stopping… the component in progress finishes first" = "Pysäytetään… käynnissä oleva komponentti valmistuu ensin"
+"Stopped after {done} of {total} components" = "Pysäytetty {done}/{total} komponentin jälkeen"
 
 [commands]
 "align.bottom" = "Tasaa alas"

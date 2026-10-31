@@ -2007,6 +2007,9 @@ status = "draft — needs native review"
 "Default|state" = "デフォルト"
 "Libraries|import step" = "ライブラリ"
 "the file it was started from is closed" = "開始元のファイルが閉じられています"
+"Stopping…" = "停止中…"
+"Stopping… the component in progress finishes first" = "停止中… 処理中のコンポーネントを先に完了します"
+"Stopped after {done} of {total} components" = "{total} 個中 {done} 個のコンポーネントで停止しました"
 
 [commands]
 "align.bottom" = "下揃え"
