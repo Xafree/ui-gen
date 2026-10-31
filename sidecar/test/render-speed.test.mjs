@@ -227,6 +227,28 @@ describe('render speed', () => {
       assert.equal(elementWithClass(last.snapshot, 'spy').style.backgroundColor, 'rgb(17, 17, 17)');
     });
 
+    it('gives concurrent renders the same bytes as sequential ones', async () => {
+      const { dir } = await project({ 'spy-ui': { 'index.js': STATEFUL } });
+      const jobs = [
+        { state: 'default', theme: 'light' },
+        { state: 'hover', theme: 'light' },
+        { state: 'focus', theme: 'dark' },
+        { state: 'pressed', theme: 'dark' },
+      ].map((job) => params(dir, 'spy-ui', 'Spy', job));
+      const sequential = [];
+      for (const job of jobs) {
+        const result = await render(job);
+        sequential.push({ snapshot: result.snapshot, png: await pngOf(dir, result) });
+      }
+
+      const concurrent = await Promise.all(jobs.map(async (job) => ({ result: await render(job), job })));
+
+      for (const [index, { result }] of concurrent.entries()) {
+        assert.deepEqual(result.snapshot, sequential[index].snapshot);
+        assert.deepEqual(await pngOf(dir, result), sequential[index].png);
+      }
+    });
+
     it('still renders after a page that fails', async () => {
       const broken = `export function Broken() { throw new Error('synthetic failure'); }\n`;
       const { dir } = await project({ 'mixed-ui': { 'index.js': `${LABELLED}${broken}` } });
