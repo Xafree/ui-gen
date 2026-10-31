@@ -229,6 +229,8 @@ mod import_sections_ui_tests;
 #[cfg(test)]
 mod import_window_ui_tests;
 #[cfg(test)]
+mod install_refusal_tests;
+#[cfg(test)]
 mod project_divider_ui_tests;
 #[cfg(test)]
 mod project_open_tests;

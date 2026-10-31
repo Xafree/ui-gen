@@ -343,6 +343,9 @@ fn sync(app: &mut FigApp) {
 }
 
 fn refusal_text(error: &ProjectError) -> String {
+    if let Some(text) = super::install_refusal::text(error) {
+        return text;
+    }
     match error {
         ProjectError::Invalid { field, reason } if field == "line" => reason.clone(),
         ProjectError::Invalid { field, reason } => format!("{field}: {reason}"),

@@ -6,23 +6,32 @@ use crate::{ProjectError, invalid};
 const MAX_NAME_BYTES: usize = 214;
 const MAX_VERSION_BYTES: usize = 64;
 const LATEST: &str = "latest";
+const NAME_EMPTY: &str = "package name is empty";
+const NAME_DASH: &str = "package name must not start with \"-\"";
+const NAME_ARCHIVE: &str = "package name must be a registry name, not an archive";
+const NAME_SHAPE: &str = "package name must be a lowercase registry name: \"name\" or \"@scope/name\"";
+const LATEST_REFUSED: &str = "version \"latest\" is not allowed here, give an exact version";
+const VERSION_SHAPE: &str = "version must be an exact semver MAJOR.MINOR.PATCH, no range or tag";
+const ONLY_NPM_INSTALL: &str = "only \"npm install\" or \"npm i\" is understood here; type the package names";
+const NPM_WITHOUT_PACKAGES: &str = "type the package names after \"npm install\"";
+const ONLY_NPM: &str = "only npm is understood here; type the package names";
 
 pub fn validate_package_name(name: &str) -> Result<(), ProjectError> {
     let refuse = |reason: String| Err(invalid("package", reason));
     if name.is_empty() {
-        return refuse("package name is empty".to_string());
+        return refuse(NAME_EMPTY.to_string());
     }
     if name.len() > MAX_NAME_BYTES {
         return refuse(format!("package name is longer than {MAX_NAME_BYTES} bytes"));
     }
     if name.starts_with('-') {
-        return refuse("package name must not start with \"-\"".to_string());
+        return refuse(NAME_DASH.to_string());
     }
     if name.ends_with(".tgz") {
-        return refuse("package name must be a registry name, not an archive".to_string());
+        return refuse(NAME_ARCHIVE.to_string());
     }
     if !is_registry_name(name) {
-        return refuse("package name must be a lowercase registry name: \"name\" or \"@scope/name\"".to_string());
+        return refuse(NAME_SHAPE.to_string());
     }
     Ok(())
 }
@@ -33,10 +42,10 @@ pub fn validate_version(version: &str, allow_latest: bool) -> Result<(), Project
         return refuse(format!("version is longer than {MAX_VERSION_BYTES} bytes"));
     }
     if version == LATEST {
-        return if allow_latest { Ok(()) } else { refuse("version \"latest\" is not allowed here, give an exact version".to_string()) };
+        return if allow_latest { Ok(()) } else { refuse(LATEST_REFUSED.to_string()) };
     }
     if !is_exact_semver(version) {
-        return refuse("version must be an exact semver MAJOR.MINOR.PATCH, no range or tag".to_string());
+        return refuse(VERSION_SHAPE.to_string());
     }
     Ok(())
 }
@@ -59,11 +68,11 @@ pub fn parse_install_line(line: &str) -> Result<Vec<PackageSpec>, ProjectError> 
         tokens.next();
         match tokens.next() {
             Some("install" | "i") => {}
-            Some(other) => return Err(invalid(other, "only \"npm install\" or \"npm i\" is understood here; type the package names")),
-            None => return Err(invalid("npm", "type the package names after \"npm install\"")),
+            Some(other) => return Err(invalid(other, ONLY_NPM_INSTALL)),
+            None => return Err(invalid("npm", NPM_WITHOUT_PACKAGES)),
         }
     } else if let Some(manager) = tokens.peek().filter(|token| MANAGERS.contains(token)) {
-        return Err(invalid(*manager, "only npm is understood here; type the package names"));
+        return Err(invalid(*manager, ONLY_NPM));
     }
     let mut specs: Vec<PackageSpec> = Vec::new();
     for token in tokens {
@@ -76,6 +85,55 @@ pub fn parse_install_line(line: &str) -> Result<Vec<PackageSpec>, ProjectError> 
         return Err(invalid("line", EMPTY_LINE));
     }
     Ok(specs)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LineRefusal {
+    Empty,
+    NotInstall(String),
+    NoPackagesAfterNpm,
+    OtherManager(String),
+    Token { token: String, problem: TokenProblem },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenProblem {
+    NameEmpty,
+    NameTooLong(usize),
+    NameStartsWithDash,
+    NameIsArchive,
+    NameNotRegistry,
+    VersionTooLong(usize),
+    LatestNotAllowed,
+    VersionNotExact,
+}
+
+/// What `parse_install_line` refused, as a kind the caller can word in its own language.
+pub fn line_refusal(error: &ProjectError) -> Option<LineRefusal> {
+    let ProjectError::Invalid { field, reason } = error else { return None };
+    let reason = reason.as_str();
+    match (field.as_str(), reason) {
+        ("line", EMPTY_LINE) => Some(LineRefusal::Empty),
+        (_, ONLY_NPM_INSTALL) => Some(LineRefusal::NotInstall(field.clone())),
+        ("npm", NPM_WITHOUT_PACKAGES) => Some(LineRefusal::NoPackagesAfterNpm),
+        (_, ONLY_NPM) => Some(LineRefusal::OtherManager(field.clone())),
+        _ => token_problem(reason).map(|problem| LineRefusal::Token { token: field.clone(), problem }),
+    }
+}
+
+fn token_problem(reason: &str) -> Option<TokenProblem> {
+    let length = |text: &str| reason.strip_prefix(text)?.strip_suffix(" bytes")?.parse().ok();
+    match reason {
+        NAME_EMPTY => Some(TokenProblem::NameEmpty),
+        NAME_DASH => Some(TokenProblem::NameStartsWithDash),
+        NAME_ARCHIVE => Some(TokenProblem::NameIsArchive),
+        NAME_SHAPE => Some(TokenProblem::NameNotRegistry),
+        LATEST_REFUSED => Some(TokenProblem::LatestNotAllowed),
+        VERSION_SHAPE => Some(TokenProblem::VersionNotExact),
+        _ => length("package name is longer than ")
+            .map(TokenProblem::NameTooLong)
+            .or_else(|| length("version is longer than ").map(TokenProblem::VersionTooLong)),
+    }
 }
 
 fn parse_token(token: &str) -> Result<PackageSpec, ProjectError> {

@@ -17,6 +17,7 @@ use crate::theme::{Tokens, regular, semibold};
 mod batch_rename;
 mod color_profile;
 mod export;
+pub(crate) mod install_refusal;
 mod menu_input;
 mod playground_code;
 mod playground_save;
