@@ -254,9 +254,6 @@ fn library(ui: &mut Ui, t: &Tokens, card: &CardView, query: &str, acts: &mut Vec
 fn component_row(ui: &mut Ui, t: &Tokens, row: &RowView, acts: &mut Vec<Act>) {
     let height = if row.taken_in.is_some() { TAGGED_ROW_H } else { ROW_H };
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
-    if !ui.is_rect_visible(rect) {
-        return;
-    }
     let id = ui.scope_id().with(("component", row.package.as_str(), row.name.as_str()));
     let free = row.taken_in.is_none() || row.ticked;
     let resp = ui.interact(rect, id, if free { Sense::click() } else { Sense::hover() });
@@ -266,6 +263,9 @@ fn component_row(ui: &mut Ui, t: &Tokens, row: &RowView, acts: &mut Vec<Act>) {
     }
     if resp.gained_focus() {
         resp.scroll_to_me(None);
+    }
+    if !ui.is_rect_visible(rect) {
+        return;
     }
     ui.painter().hline(rect.x_range(), rect.min.y + 0.5, Stroke::new(1.0, t.border));
     if free && resp.hovered() {

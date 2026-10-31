@@ -397,6 +397,22 @@ fn only_the_visible_rows_of_a_long_list_are_drawn() {
 }
 
 #[test]
+fn tabbing_through_a_long_list_scrolls_to_the_row_that_has_the_focus() {
+    let mut lab = Lab::new("tab-scroll", "en");
+    lab.script.lock().unwrap().names = (1..=300).map(|n| format!("Widget{n:03}")).collect();
+    lab.open_window();
+    lab.wait_for("Widget001");
+    let last_drawn = |lab: &mut Lab| lab.shown().iter().filter_map(|text| text.strip_prefix("Widget")?.parse::<usize>().ok()).max().unwrap_or(0);
+    let before = last_drawn(&mut lab);
+    for _ in 0..80 {
+        lab.press(Key::Tab);
+    }
+    let after = last_drawn(&mut lab);
+    assert!(after > before + 30, "the rows came from {before} to {after}");
+    assert!(lab.shown().iter().filter(|text| text.starts_with("Widget")).count() <= 20, "still only the visible rows are drawn");
+}
+
+#[test]
 fn dev_mode_refuses_the_import_from_the_window() {
     let mut lab = Lab::new("dev-mode", "en");
     lab.open_window();
