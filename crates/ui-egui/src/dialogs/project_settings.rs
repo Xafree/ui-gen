@@ -150,6 +150,15 @@ impl ProjectSettings {
         typed
     }
 
+    fn version_targets(&self, package: &str) -> Vec<String> {
+        let Some(family) = self.families.iter().find(|family| family.packages.iter().any(|p| p == package)) else {
+            return vec![package.to_string()];
+        };
+        let shares_head = |name: &&String| self.sources.iter().any(|row| row.package == **name && row.version == family.version);
+        let same: Vec<String> = family.active.iter().filter(shares_head).cloned().collect();
+        if same.is_empty() { family.active.iter().take(1).cloned().collect() } else { same }
+    }
+
     pub fn add_error(&self) -> Option<&str> {
         self.add_error.as_deref()
     }
@@ -410,8 +419,11 @@ pub fn change_version(app: &mut FigApp, package: &str, version: &str) {
     let version = version.trim();
     let checked = npm::validate_version(version, true);
     edit(app, |state| state.change_error = checked.as_ref().err().map(ToString::to_string));
-    let packages = app.ui.project_settings.as_ref().map_or_else(|| vec![package.to_string()], |state| state.active_packages(package));
-    let params = if packages.len() > 1 { json!({"packages": packages, "version": version}) } else { json!({"package": package, "version": version}) };
+    let packages = app.ui.project_settings.as_ref().map_or_else(|| vec![package.to_string()], |state| state.version_targets(package));
+    let params = match packages.as_slice() {
+        [single] => json!({"package": single, "version": version}),
+        _ => json!({"packages": packages, "version": version}),
+    };
     if checked.is_ok() && app.run(SET_VERSION, params).is_some() {
         edit(app, |state| state.changing = None);
     }
