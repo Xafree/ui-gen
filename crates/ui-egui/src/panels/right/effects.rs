@@ -162,7 +162,7 @@ fn effect_settings(app: &mut FigApp, ui: &mut Ui, ids: &[NodeId], i: usize, e: &
                     fx_color(app, ui, ids, i, e, false, &edit_color)
                 });
             });
-            if !inner {
+            if offers_show_behind(inner, s) {
                 row(ui, 32.0, |ui| {
                     if widgets::checkbox(ui, s.show_behind, tr("Show behind transparent areas")) {
                         set(app, mk(Shadow { show_behind: !s.show_behind, ..s.clone() }), None);
@@ -542,4 +542,23 @@ fn grid_settings(app: &mut FigApp, ui: &mut Ui, ids: &[NodeId], list: &[LayoutGr
         let e = widgets::number_field(ui, Id::unique(("grid_alpha", i)), Lead::None, Some((f64::from(g.color.a) * 100.0).round()), "%", 56.0, 1.0);
         app.field_run(e, "node.set", |v| set(&|x| x.color = x.color.with_alpha((v / 100.0).clamp(0.0, 1.0) as f32)));
     });
+}
+
+/// A shadow cast by the box always stays out of it: the choice would change nothing.
+fn offers_show_behind(inner: bool, shadow: &Shadow) -> bool {
+    !inner && !shadow.from_outline
+}
+
+#[cfg(test)]
+mod show_behind_tests {
+    use super::{Shadow, offers_show_behind};
+
+    #[test]
+    fn only_an_ordinary_drop_shadow_offers_show_behind() {
+        let plain = Shadow::default();
+        let boxed = Shadow { from_outline: true, ..Shadow::default() };
+        assert!(offers_show_behind(false, &plain));
+        assert!(!offers_show_behind(true, &plain));
+        assert!(!offers_show_behind(false, &boxed));
+    }
 }
