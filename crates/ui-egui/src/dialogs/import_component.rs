@@ -74,6 +74,7 @@ pub struct ImportWindow {
     message: Option<String>,
     run: Run,
     just_opened: bool,
+    focus_first: bool,
 }
 
 impl ImportWindow {
@@ -113,6 +114,7 @@ impl ImportWindow {
             message: None,
             run: Run::Idle,
             just_opened: true,
+            focus_first: true,
         }
     }
 }
@@ -466,6 +468,7 @@ fn draw(app: &mut FigApp, ui: &mut Ui) -> Vec<Act> {
     let valid: Vec<(String, String)> =
         cards.iter().flat_map(|card| card.rows.iter().filter(|row| row.ticked).map(|row| (row.package.clone(), row.name.clone()))).collect();
     let t = Tokens::get(ui.ctx());
+    let first_control_drawn = !cards.is_empty() || sources.is_empty();
     let mut acts = Vec::new();
     egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.bg)).show(ui, |ui| {
         let mut model = Model {
@@ -483,9 +486,11 @@ fn draw(app: &mut FigApp, ui: &mut Ui) -> Vec<Act> {
             progress: progress_of(&state.run),
             message: state.message.clone(),
             at_top: std::mem::take(&mut state.just_opened),
+            focus_first: state.focus_first,
         };
         view::show(ui, &t, &mut model, &mut acts);
     });
+    state.focus_first &= !first_control_drawn;
     state.ticked = valid;
     app.ui.import_window = Some(state);
     acts

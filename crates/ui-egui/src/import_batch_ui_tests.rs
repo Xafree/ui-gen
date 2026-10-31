@@ -1,6 +1,7 @@
 //! The queue of the "Choose your components" surface: it belongs to the file it started from, whatever
 //! tab comes to the front, and it stops cleanly. The bench is the one of `import_window_ui_tests`.
 
+use egui::accesskit::{Node, Role};
 use egui::{Key, Modifiers};
 use serde_json::json;
 
@@ -218,4 +219,19 @@ fn import_clicked_during_a_run_says_it_is_running_and_starts_nothing() {
     b.release_all();
     b.wait_until("the summary is drawn", |b| b.shows("Imported 2 of 2 components"));
     assert!(!b.shows("The import is already running."), "the note ends with the run");
+}
+
+#[test]
+fn the_crumb_the_steps_the_cards_and_the_tag_reach_a_screen_reader_and_the_search_has_the_first_focus() {
+    let mut b = open_pair("speaks");
+    assert_eq!(crate::a11y::focused_name(&b.ui.ctx), "Search components", "the first control has the focus");
+    b.click_nth("Button", 0);
+    let nodes = b.nodes();
+    let labelled = |wanted: &str| nodes.iter().any(|n| n.role() == Role::Label && n.label().is_some_and(|l| l.trim() == wanted));
+    for wanted in ["mylib / Import components", "01 Libraries ✓", "02 Components", PACKAGE, OTHER] {
+        assert!(labelled(wanted), "{wanted:?} is spoken");
+    }
+    let rows: Vec<&Node> = nodes.iter().filter(|n| n.role() == Role::CheckBox && n.label().is_some_and(|l| l.trim() == "Button")).collect();
+    let tag = format!("Already taken in {PACKAGE}");
+    assert!(rows.iter().any(|n| n.description() == Some(tag.as_str())), "the row says its tag");
 }

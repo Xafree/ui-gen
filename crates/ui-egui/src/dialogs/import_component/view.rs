@@ -77,6 +77,7 @@ pub(super) struct Model<'a> {
     pub progress: Progress,
     pub message: Option<String>,
     pub at_top: bool,
+    pub focus_first: bool,
 }
 
 fn state_label(state: &str) -> &'static str {
@@ -119,7 +120,9 @@ fn top_bar(ui: &mut Ui, t: &Tokens, project: &str, stopping: bool, acts: &mut Ve
     let centre_y = bar.center().y;
     let name = ui.painter().text(pos2(bar.min.x + 20.0, centre_y), Align2::LEFT_CENTER, project, regular(13.5), t.text_secondary);
     let slash = ui.painter().text(pos2(name.max.x + 6.0, centre_y), Align2::LEFT_CENTER, "/", regular(13.5), t.text_secondary);
-    ui.painter().text(pos2(slash.max.x + 6.0, centre_y), Align2::LEFT_CENTER, tr("Import components"), regular(13.5), t.text);
+    let page = ui.painter().text(pos2(slash.max.x + 6.0, centre_y), Align2::LEFT_CENTER, tr("Import components"), regular(13.5), t.text);
+    let crumb = ui.interact(name.union(page), ui.id().with("crumb"), Sense::hover());
+    a11y::spoken(&crumb, &format!("{project} / {}", tr("Import components")));
     let inner = Rect::from_min_max(pos2(bar.min.x + 20.0, bar.min.y), pos2(bar.max.x - 20.0, bar.max.y));
     ui.scope_builder(UiBuilder::new().max_rect(inner).layout(Layout::right_to_left(Align::Center)), |ui| {
         let label = if stopping { tr("Stopping…") } else { tr("Cancel") };
@@ -142,7 +145,9 @@ fn steps(ui: &mut Ui, t: &Tokens) {
         let y = rect.min.y + 12.0 + 13.0 * BODY_LINE / 2.0;
         let digits = ui.painter().text(pos2(left, y), Align2::LEFT_CENTER, number, mono(13.0), t.text);
         let font = if weight { semibold(13.0) } else { regular(13.0) };
-        ui.painter().text(pos2(digits.max.x + 5.0, y), Align2::LEFT_CENTER, label, font, t.text);
+        let written = ui.painter().text(pos2(digits.max.x + 5.0, y), Align2::LEFT_CENTER, &label, font, t.text);
+        let step = ui.interact(digits.union(written), ui.id().with(("step", index)), Sense::hover());
+        a11y::spoken(&step, &format!("{number} {label}"));
     }
 }
 
@@ -186,7 +191,11 @@ fn left(ui: &mut Ui, t: &Tokens, model: &mut Model, acts: &mut Vec<Act>) {
     });
     if model.no_source {
         note(ui, tr("No source library yet. Add one in the project settings."), 13.5, t.text_secondary);
-        if button(ui, t, tr("Open project settings"), Look::Primary, 34.0, 14.0, true).clicked() {
+        let open = button(ui, t, tr("Open project settings"), Look::Primary, 34.0, 14.0, true);
+        if model.focus_first {
+            open.request_focus();
+        }
+        if open.clicked() {
             acts.push(Act::OpenSettings);
         }
         return;
@@ -243,6 +252,9 @@ fn search_field(ui: &mut Ui, model: &mut Model) {
     let width = ui.available_width().min(320.0);
     let response = crate::widgets::text_input(ui, search_id(), model.search, width, tr("Search components"));
     a11y::text(&response, tr("Search components"), model.search);
+    if model.focus_first {
+        response.request_focus();
+    }
     note_focus(ui, search_id(), response.has_focus());
 }
 
@@ -253,6 +265,8 @@ fn library(ui: &mut Ui, t: &Tokens, card: &CardView, query: &str, acts: &mut Vec
         let (head, _) = ui.allocate_exact_size(vec2(ui.available_width(), HEAD_H), Sense::hover());
         let top = CornerRadius { nw: 13, ne: 13, sw: 0, se: 0 };
         ui.painter().rect_filled(head, top, t.hover);
+        let heading = ui.interact(head, ui.id().with(("card", card.label.as_str())), Sense::hover());
+        a11y::spoken(&heading, &card.label);
         ui.painter().text(pos2(head.min.x + 16.0, head.center().y), Align2::LEFT_CENTER, &card.label, semibold(13.5), t.text);
         let count = trf("{n} of {m}", &[("n", &card.ticked), ("m", &card.total)]);
         ui.painter().text(pos2(head.max.x - 16.0, head.center().y), Align2::RIGHT_CENTER, count, regular(12.5), t.text_secondary);
@@ -269,6 +283,9 @@ fn component_row(ui: &mut Ui, t: &Tokens, row: &RowView, acts: &mut Vec<Act>) {
     let free = row.taken_in.is_none() || row.ticked;
     let resp = ui.interact(rect, id, if free { Sense::click() } else { Sense::hover() });
     a11y::checkbox(&resp, &row.name, row.ticked);
+    if let Some(package) = &row.taken_in {
+        a11y::describe(&resp, &trf("Already taken in {package}", &[("package", package)]));
+    }
     if !free {
         a11y::disabled(&resp);
     }
