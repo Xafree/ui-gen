@@ -3,6 +3,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { loadBundle, withPage } from './browser.mjs';
 import { IS_COMPONENT, cachedBundle } from './bundle.mjs';
+import { checkComposition } from './composition.mjs';
 import { startBudget } from './deadline.mjs';
 import { insideRoot, readInstalledPackage } from './installed-package.mjs';
 import { ServiceError } from './protocol.mjs';
@@ -41,12 +42,36 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 const isComponent = ${IS_COMPONENT};
 const fail = (error) => { window.__uigenError = String(error?.message ?? error); };
-export function mount({ component, props, text }) {
+const exportAt = (typePath) => {
+  let value = lib;
+  for (const key of typePath.split('.')) {
+    if (value === null || !['object', 'function'].includes(typeof value) || !Object.hasOwn(value, key)) {
+      return undefined;
+    }
+    value = value[key];
+  }
+  return isComponent(value) ? value : undefined;
+};
+const unknownType = (node) => {
+  if (typeof node === 'string') return undefined;
+  if (exportAt(node.type) === undefined) return node.type;
+  return (node.children ?? []).map(unknownType).find((type) => type !== undefined);
+};
+const elementOf = (node) => (typeof node === 'string' ? node : createElement(exportAt(node.type), node.props, ...(node.children ?? []).map(elementOf)));
+export function mount({ component, props, text, composition }) {
   if (!Object.hasOwn(lib, component) || !isComponent(lib[component])) {
     window.__uigenMissing = true;
     return;
   }
+  window.__uigenUnknownType = composition && unknownType(composition);
+  if (window.__uigenUnknownType !== undefined) {
+    return;
+  }
   const root = createRoot(document.querySelector(${JSON.stringify(ROOT_SELECTOR)}), { onUncaughtError: fail, onCaughtError: fail });
+  if (composition) {
+    flushSync(() => root.render(elementOf({ ...composition, props: { ...composition.props, ...props } })));
+    return;
+  }
   window.__uigenParts = Object.keys(lib[component]).filter((key) => key !== 'Root' && /^[A-Z]/.test(key) && isComponent(lib[component][key]));
   const content = text === undefined ? [] : [text];
   flushSync(() => root.render(createElement(lib[component], props, ...content)));
@@ -188,8 +213,9 @@ export async function screenshotPainted(page, selector, file) {
   }
 }
 
-function pngSegments(installed, { component, props, state, theme }) {
-  const hash = createHash('sha256').update(JSON.stringify(props)).digest('hex').slice(0, 12);
+function pngSegments(installed, { component, props, composition, text, state, theme }) {
+  const hashed = composition === undefined && text === undefined ? props : [props, composition ?? null, text ?? null];
+  const hash = createHash('sha256').update(JSON.stringify(hashed)).digest('hex').slice(0, 12);
   const name = `${safeSegment(component)}-${hash}-${state}-${theme}.png`;
   return ['.uigen', 'captures', safeSegment(installed.name), safeSegment(installed.version), name];
 }
@@ -205,6 +231,10 @@ async function renderInPage(page, installed, params, { code, styles }, budget) {
   if (await page.evaluate(() => window.__uigenMissing === true)) {
     throw new ServiceError('componentNotFound', `component "${component}" is not exported by ${installed.name}`);
   }
+  const unknownType = await page.evaluate(() => window.__uigenUnknownType);
+  if (unknownType !== undefined) {
+    throw invalid(`the composition of "${component}" uses "${unknownType}", which ${installed.name} does not export as a component`);
+  }
   await settle(page, budget);
   const captured = await page.evaluate(markRenderedElement, { rootSelector: ROOT_SELECTOR, mark: COMPONENT_MARK }) ? COMPONENT_SELECTOR : ROOT_SELECTOR;
   if (captured === ROOT_SELECTOR) {
@@ -213,7 +243,7 @@ async function renderInPage(page, installed, params, { code, styles }, budget) {
   await forceState(page, captured, state, budget);
   const source = { package: installed.name, version: installed.version, component, props, state };
   const snapshot = await captureSnapshot(page, captured, source);
-  const segments = pngSegments(installed, { component, props, state, theme });
+  const segments = pngSegments(installed, { component, props, composition: params.composition, text: params.text, state, theme });
   const file = path.join(params.dir, ...segments);
   await mkdir(path.dirname(file), { recursive: true });
   await screenshotPainted(page, captured, file);
@@ -232,6 +262,10 @@ export async function render(params) {
   if (!RENDERABLE.includes(installed.framework)) {
     throw new ServiceError('frameworkUnsupported', `${installed.framework} packages cannot be rendered yet (supported: ${RENDERABLE.join(', ')})`);
   }
+  const composition = params.composition === undefined ? undefined : checkComposition(params.composition, params.component);
+  if (composition !== undefined && installed.tags.has(params.component)) {
+    throw invalid(`"composition" applies to React components, not to the web component "${params.component}"`);
+  }
   const props = params.state === 'disabled' ? { ...params.props, disabled: true, isDisabled: true } : params.props;
   const { styles, notes } = await budget.bound(findStylesheets(installed));
   const withNotes = (result, extra = []) => {
@@ -239,11 +273,11 @@ export async function render(params) {
     return all.length === 0 ? result : { ...result, note: all.join('; ') };
   };
   const inPage = async (text) => {
-    const code = mountScript(bundled, { component: params.component, props, text });
+    const code = mountScript(bundled, { component: params.component, props, text, composition });
     try {
       return await budget.bound(
         withPage({ viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: params.theme }, (page) =>
-          budget.bound(renderInPage(page, installed, params, { code, styles }, budget)),
+          budget.bound(renderInPage(page, installed, { ...params, composition, text }, { code, styles }, budget)),
         ),
       );
     } catch (error) {
@@ -256,10 +290,11 @@ export async function render(params) {
   const bundled = await budget.bound(
     cachedBundle({ contents: buildEntry(installed, params.component), resolveDir: installed.sources, globalName: MOUNT_GLOBAL, stamps: installStamps(installed) }),
   );
+  const sampleText = composition === undefined ? params.sampleText : undefined;
   try {
-    return withNotes(await inPage(params.sampleText));
+    return withNotes(await inPage(sampleText));
   } catch (error) {
-    const refusedText = params.sampleText !== undefined && error instanceof ServiceError && error.kind === 'render' && budget.remaining() > 0;
+    const refusedText = sampleText !== undefined && error instanceof ServiceError && error.kind === 'render' && budget.remaining() > 0;
     if (!refusedText) {
       throw error;
     }
