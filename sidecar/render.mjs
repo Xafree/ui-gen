@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { loadBundle, withPage } from './browser.mjs';
-import { IS_COMPONENT, bundleEntry } from './bundle.mjs';
+import { IS_COMPONENT, cachedBundle } from './bundle.mjs';
 import { startBudget } from './deadline.mjs';
 import { insideRoot, readInstalledPackage } from './installed-package.mjs';
 import { ServiceError } from './protocol.mjs';
@@ -10,6 +10,7 @@ import { captureSnapshot } from './snapshot.mjs';
 import { findStylesheets } from './stylesheets.mjs';
 
 const ROOT_SELECTOR = '[data-uigen-root]';
+const MOUNT_GLOBAL = '__uigenMount';
 const RENDERABLE = ['react', 'web-components'];
 const STATES = ['default', 'hover', 'focus', 'pressed', 'disabled'];
 const THEMES = ['light', 'dark'];
@@ -31,30 +32,36 @@ body { margin: 20px; font-family: system-ui, -apple-system, "Segoe UI", Roboto, 
 [data-uigen-root] { display: inline-block; }
 </style></head><body><div data-uigen-root></div></body></html>`;
 
-const reactChildren = (sampleText) => (sampleText === undefined ? '' : `, ${JSON.stringify(sampleText)}`);
-
-const reactEntry = (name, component, props, sampleText) => `import * as lib from ${JSON.stringify(name)};
+const reactEntry = (name) => `import * as lib from ${JSON.stringify(name)};
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 const isComponent = ${IS_COMPONENT};
 const fail = (error) => { window.__uigenError = String(error?.message ?? error); };
-if (!Object.hasOwn(lib, ${JSON.stringify(component)}) || !isComponent(lib[${JSON.stringify(component)}])) {
-  window.__uigenMissing = true;
-} else {
+export function mount({ component, props, text }) {
+  if (!Object.hasOwn(lib, component) || !isComponent(lib[component])) {
+    window.__uigenMissing = true;
+    return;
+  }
   const root = createRoot(document.querySelector(${JSON.stringify(ROOT_SELECTOR)}), { onUncaughtError: fail, onCaughtError: fail });
-  flushSync(() => root.render(createElement(lib[${JSON.stringify(component)}], ${JSON.stringify(props)}${reactChildren(sampleText)})));
+  const content = text === undefined ? [] : [text];
+  flushSync(() => root.render(createElement(lib[component], props, ...content)));
 }`;
 
-const elementContent = (sampleText) =>
-  sampleText === undefined ? '' : `element.append(document.createTextNode(${JSON.stringify(sampleText)}));\n`;
+const elementEntry = (modulePath) => `import ${JSON.stringify(modulePath)};
+export function mount({ component, props, text }) {
+  const element = document.createElement(component);
+  for (const [key, value] of Object.entries(props)) {
+    if (key in element) { element[key] = value; } else { element.setAttribute(key, String(value)); }
+  }
+  if (text !== undefined) { element.append(document.createTextNode(text)); }
+  document.querySelector(${JSON.stringify(ROOT_SELECTOR)}).append(element);
+}`;
 
-const elementEntry = (modulePath, tag, props, sampleText) => `import ${JSON.stringify(modulePath)};
-const element = document.createElement(${JSON.stringify(tag)});
-for (const [key, value] of Object.entries(${JSON.stringify(props)})) {
-  if (key in element) { element[key] = value; } else { element.setAttribute(key, String(value)); }
-}
-${elementContent(sampleText)}document.querySelector(${JSON.stringify(ROOT_SELECTOR)}).append(element);`;
+const mountScript = (code, input) => `(() => {
+${code}
+${MOUNT_GLOBAL}.mount(${JSON.stringify(input)});
+})();`;
 
 const safeSegment = (text) => text.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^\.+/, '_');
 
@@ -76,20 +83,22 @@ function checkParams({ component, props, state, theme, sampleText }) {
   }
 }
 
-function buildEntry(installed, component, props, sampleText) {
+function buildEntry(installed, component) {
   const modulePath = installed.tags.get(component);
   if (modulePath !== undefined) {
     const file = insideRoot(installed.root, modulePath);
     if (file === null) {
       throw new ServiceError('componentNotFound', `component "${component}" is declared outside ${installed.name}`);
     }
-    return elementEntry(file, component, props, sampleText);
+    return elementEntry(file);
   }
   if (installed.framework !== 'react') {
     throw new ServiceError('componentNotFound', `component "${component}" is not declared by ${installed.name}`);
   }
-  return reactEntry(installed.name, component, props, sampleText);
+  return reactEntry(installed.name);
 }
+
+const installStamps = ({ root, sources }) => [path.join(root, 'package.json'), path.join(sources, 'package-lock.json'), path.join(sources, 'node_modules', '.package-lock.json')];
 
 const settle = (page, budget) =>
   page.evaluate(async (capMs) => {
@@ -150,14 +159,13 @@ export async function render(params) {
     throw new ServiceError('frameworkUnsupported', `${installed.framework} packages cannot be rendered yet (supported: ${RENDERABLE.join(', ')})`);
   }
   const props = params.state === 'disabled' ? { ...params.props, disabled: true, isDisabled: true } : params.props;
-  const bundle = (sampleText) =>
-    budget.bound(bundleEntry({ contents: buildEntry(installed, params.component, props, sampleText), resolveDir: installed.sources }));
   const { styles, notes } = await budget.bound(findStylesheets(installed));
   const withNotes = (result, extra = []) => {
     const all = [...notes, ...extra];
     return all.length === 0 ? result : { ...result, note: all.join('; ') };
   };
-  const inPage = async (code) => {
+  const inPage = async (text) => {
+    const code = mountScript(bundled, { component: params.component, props, text });
     try {
       return await budget.bound(
         withPage({ viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: params.theme }, (page) =>
@@ -171,14 +179,16 @@ export async function render(params) {
       throw new ServiceError('render', error instanceof Error ? error.message : 'the page could not be rendered');
     }
   };
-  const withText = await bundle(params.sampleText);
+  const bundled = await budget.bound(
+    cachedBundle({ contents: buildEntry(installed, params.component), resolveDir: installed.sources, globalName: MOUNT_GLOBAL, stamps: installStamps(installed) }),
+  );
   try {
-    return withNotes(await inPage(withText));
+    return withNotes(await inPage(params.sampleText));
   } catch (error) {
     const refusedText = params.sampleText !== undefined && error instanceof ServiceError && error.kind === 'render' && budget.remaining() > 0;
     if (!refusedText) {
       throw error;
     }
   }
-  return withNotes(await inPage(await bundle(undefined)), [SAMPLE_TEXT_IGNORED]);
+  return withNotes(await inPage(undefined), [SAMPLE_TEXT_IGNORED]);
 }
