@@ -1,7 +1,7 @@
 //! Lit web components: a component (or component set) becomes a `LitElement` in TypeScript. Its
 //! variant, boolean and text properties are reflected `@property` fields (a name that would shadow
 //! a member of `HTMLElement` or `LitElement` gets a `Variant` or `Value` suffix), its slots and
-//! instance swaps are named `<slot>` elements holding their default content, the differences
+//! instance swaps are named `<slot>` elements holding their default content (a root that can hold content also gets a default `<slot>`), the differences
 //! between variants are `:host([attribute="value"])` rules, and an instance is the custom element
 //! with the values that differ from the defaults. Interaction states (hover, focus, pressed,
 //! disabled, loading) are CSS pseudo-classes and reflected booleans rather than a `state` property.
@@ -490,6 +490,25 @@ pub(crate) fn member(c: &Component, p: &Param) -> Member {
         reflect: false,
         hidden: false,
     })
+}
+
+/// Whether a component's root frame can hold content: it lays its children out, or has a layer
+/// that is more than a drawn shape. An icon or an empty box takes none.
+pub(crate) fn takes_content(doc: &Document, root: &figcraft_doc::Node) -> bool {
+    let is_shape = |k: &NodeKind| {
+        matches!(
+            k,
+            NodeKind::Rectangle
+                | NodeKind::Ellipse { .. }
+                | NodeKind::Polygon { .. }
+                | NodeKind::Star { .. }
+                | NodeKind::Line
+                | NodeKind::Vector { .. }
+                | NodeKind::BooleanOp { .. }
+        )
+    };
+    matches!(root.kind, NodeKind::Frame | NodeKind::Component { .. })
+        && (root.layout.is_some() || root.children.iter().filter_map(|k| doc.node(*k)).any(|k| !is_shape(&k.kind)))
 }
 
 /// The `<slot name="…">` of a slot or instance swap parameter, unique among the component's.

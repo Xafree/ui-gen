@@ -11,7 +11,7 @@ use crate::control::{ControlReply, ControlRequest};
 use crate::{FigApp, NoServices};
 
 /// One main-window frame, as the desktop app runs it; `close` asks the window to close.
-fn frame(ctx: &egui::Context, app: &mut FigApp, close: bool) {
+pub(crate) fn frame(ctx: &egui::Context, app: &mut FigApp, close: bool) {
     let mut input = RawInput::default();
     if close {
         input.viewports.insert(ViewportId::ROOT, ViewportInfo { events: vec![ViewportEvent::Close], ..Default::default() });
@@ -314,9 +314,9 @@ fn an_emptied_window_forgets_its_ime_context() {
 
 /// Answers each Save as with the next of `paths` (none left: cancelled) and counts the dialogs
 /// asked for.
-struct SaveAs {
-    paths: Vec<std::path::PathBuf>,
-    asked: std::rc::Rc<std::cell::Cell<usize>>,
+pub(crate) struct SaveAs {
+    pub(crate) paths: Vec<std::path::PathBuf>,
+    pub(crate) asked: std::rc::Rc<std::cell::Cell<usize>>,
 }
 
 impl crate::Services for SaveAs {
@@ -327,7 +327,7 @@ impl crate::Services for SaveAs {
     }
 }
 
-fn temp_dir(tag: &str) -> std::path::PathBuf {
+pub(crate) fn temp_dir(tag: &str) -> std::path::PathBuf {
     let d = std::env::temp_dir().join(format!("figcraft-close-save-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
@@ -351,14 +351,14 @@ fn asking(path: Option<&std::path::Path>, save_as: Vec<std::path::PathBuf>) -> (
     (ctx, app, asked)
 }
 
-fn rects_in(path: &std::path::Path) -> usize {
+pub(crate) fn rects_in(path: &std::path::Path) -> usize {
     let mut s = Session::new();
     s.execute("file.open", &json!({"path": path.to_string_lossy()})).unwrap();
     s.doc().unwrap().nodes().filter(|n| n.name.starts_with("Rectangle")).count()
 }
 
 /// A few frames, as the window draws them.
-fn settle(ctx: &egui::Context, app: &mut FigApp) {
+pub(crate) fn settle(ctx: &egui::Context, app: &mut FigApp) {
     for _ in 0..4 {
         frame(ctx, app, false);
     }

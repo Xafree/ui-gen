@@ -19,6 +19,7 @@ pub mod menus;
 pub mod pending_open;
 pub mod present;
 pub mod shortcuts;
+mod tab_close;
 pub mod tabs;
 pub mod theme;
 pub mod toolbar;
@@ -237,6 +238,8 @@ mod project_settings_review_tests;
 mod project_sources_ui_tests;
 #[cfg(test)]
 mod project_themes_ui_tests;
+#[cfg(test)]
+mod tab_close_tests;
 #[cfg(test)]
 mod ui_scale_tests;
 #[cfg(test)]
@@ -584,6 +587,9 @@ pub struct UiState {
     /// Save was answered: the files save next frame, once a panel field the click took the
     /// keyboard from has committed what was typed (as [`UiState::after_field`]).
     pub save_on_close: bool,
+    /// A tab with unsaved changes was asked to close: the question about that file, and how far
+    /// the answer has gone.
+    pub(crate) tab_close: Option<tab_close::TabClose>,
 }
 
 impl Default for UiState {
@@ -705,6 +711,7 @@ impl Default for UiState {
             confirm_close: false,
             close_after_save_as: None,
             save_on_close: false,
+            tab_close: None,
         }
     }
 }

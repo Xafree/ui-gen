@@ -268,9 +268,13 @@ Chart</div>`, jamais un élément natif ni un composant externe.
 - Pendant une installation, une inspection ou un rendu, le service ne sert pas le playground : la vue garde la
   dernière image et le dit.
 - **Le contenu placé dans une balise de la lib n'apparaît que si le composant a un `<slot>` par défaut.** Les modèles
-  Tableau de bord et Finances imbriquent du contenu (dont `Chart`) dans `Card` ; avec une `Card` dont le design n'a pas
-  de slot, ce contenu, et un marqueur « composant absent » qu'il porte, n'est pas dessiné. Constaté au Task 8 sur un
-  composant synthétique ; un composant **absent** ne cache pas ses enfants.
+  Tableau de bord et Finances imbriquent du contenu (dont `Chart`) dans `Card`. L'export Lit donne donc un `<slot></slot>`
+  par défaut, après ses propres calques, à la racine de tout composant qui peut contenir du contenu : un cadre (ou un
+  composant) en auto layout, ou qui a au moins un calque qui n'est pas une simple forme (rectangle, ellipse, polygone,
+  étoile, ligne, vecteur, opération booléenne). Une icône faite de formes, ou un cadre vide sans auto layout (un champ
+  sans enfant), n'en a pas ; les slots nommés et les échanges d'instance gardent leur `<slot name>`. Un composant sans
+  slot par défaut ne dessine pas ce contenu, et le marqueur « composant absent » qu'il porte non plus ; un composant
+  **absent** ne cache pas ses enfants.
 - `playground.close` ferme la page ; le Chromium du service, partagé avec les rendus, ne s'arrête qu'avec le service.
 - Web (wasm) : `playground.open` répond « capture service unavailable in the browser » et l'onglet n'existe pas.
 

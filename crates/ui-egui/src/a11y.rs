@@ -547,7 +547,7 @@ pub fn end(app: &mut FigApp, ctx: &Context) {
 }
 
 /// Dialogs, the palette, the presenter and the home screen have no regions.
-fn blocked(app: &FigApp) -> bool {
+pub(crate) fn blocked(app: &FigApp) -> bool {
     let u = &app.ui;
     u.palette.is_some()
         || u.about
@@ -561,6 +561,7 @@ fn blocked(app: &FigApp) -> bool {
         || u.find.is_some()
         || u.playground.save_open
         || u.playground.code_open
+        || u.tab_close.is_some()
         || u.import_window.is_some()
         || u.compare.detail.is_some()
         || !app.has_files()

@@ -359,6 +359,12 @@ impl<'c, 'a> Markup<'c, 'a> {
         }
     }
 
+    /// Lit: the default `<slot>` line closing a component root that can hold content, else nothing.
+    fn default_slot(&self, n: &Node, root: bool, named: bool, depth: usize) -> String {
+        let holds = self.lang == CodeLang::Lit && root && !named && self.ctx.comp.is_some() && crate::lit::takes_content(self.ctx.doc, n);
+        if holds { format!("{}<slot></slot>\n", self.pad(depth)) } else { String::new() }
+    }
+
     fn element(&mut self, n: &Node, parent: Option<&Node>, depth: usize, path: &str) {
         let doc = self.ctx.doc;
         let root = n.id == self.ctx.root;
@@ -420,6 +426,7 @@ impl<'c, 'a> Markup<'c, 'a> {
                 let leptos = self.lang == CodeLang::Leptos;
                 let lit = self.lang == CodeLang::Lit;
                 let open = open("div");
+                let default_slot = self.default_slot(n, root, slot.is_some(), depth + 1);
                 let slot_ident = slot.map(|p| match self.ctx.comp {
                     Some(c) if lit => crate::lit::slot_name(c, p),
                     Some(c) => crate::component_codegen::slot_name(c, p),
@@ -441,7 +448,7 @@ impl<'c, 'a> Markup<'c, 'a> {
                     };
                     self.markup.push_str(&format!("{open}{content}</div>\n"));
                 } else if kids.is_empty() || self.ctx.too_deep(depth) {
-                    self.markup.push_str(&format!("{open}</div>\n"));
+                    self.markup.push_str(&format!("{open}{}</div>\n", default_slot.trim()));
                 } else {
                     self.markup.push_str(&format!("{open}\n"));
                     // A slot shows the instance's content, or else the main's.
@@ -476,6 +483,7 @@ impl<'c, 'a> Markup<'c, 'a> {
                         Some(_) => self.markup.push_str(&format!("{p2}</>\n{p1})}}\n")),
                         None => {}
                     }
+                    self.markup.push_str(&default_slot);
                     self.markup.push_str(&format!("{pad}</div>\n"));
                 }
             }
