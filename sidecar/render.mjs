@@ -46,6 +46,7 @@ export function mount({ component, props, text }) {
     return;
   }
   const root = createRoot(document.querySelector(${JSON.stringify(ROOT_SELECTOR)}), { onUncaughtError: fail, onCaughtError: fail });
+  window.__uigenParts = Object.keys(lib[component]).filter((key) => key !== 'Root' && /^[A-Z]/.test(key) && isComponent(lib[component][key]));
   const content = text === undefined ? [] : [text];
   flushSync(() => root.render(createElement(lib[component], props, ...content)));
 }`;
@@ -185,7 +186,8 @@ async function renderInPage(page, installed, params, { code, styles }, budget) {
   const file = path.join(params.dir, ...segments);
   await mkdir(path.dirname(file), { recursive: true });
   await screenshotPainted(page, captured, file);
-  return { snapshot, png: segments.join('/') };
+  const parts = await page.evaluate(() => window.__uigenParts ?? []);
+  return { snapshot, png: segments.join('/'), ...(parts.length === 0 ? {} : { note: `rendered without its parts: ${parts.join(', ')}` }) };
 }
 
 export async function render(params) {
@@ -199,7 +201,7 @@ export async function render(params) {
   const props = params.state === 'disabled' ? { ...params.props, disabled: true, isDisabled: true } : params.props;
   const { styles, notes } = await budget.bound(findStylesheets(installed));
   const withNotes = (result, extra = []) => {
-    const all = [...notes, ...extra];
+    const all = [...notes, ...(result.note === undefined ? [] : [result.note]), ...extra];
     return all.length === 0 ? result : { ...result, note: all.join('; ') };
   };
   const inPage = async (text) => {
