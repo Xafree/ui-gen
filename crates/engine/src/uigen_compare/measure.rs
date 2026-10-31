@@ -354,6 +354,7 @@ struct Context<'a> {
     scratch: Document,
     root: &'a str,
     theme: Theme,
+    set_follows_dark: bool,
 }
 
 impl Context<'_> {
@@ -366,7 +367,7 @@ impl Context<'_> {
         };
         let mut row = row;
         row.original = Size { width: kept.width, height: kept.height };
-        if self.theme == Theme::Dark && !kept.distinct {
+        if self.theme == Theme::Dark && !self.set_follows_dark {
             return row.without(Status::NotComparable, NOT_DISTINCT);
         }
         let Some(png) = kept.png.as_deref() else { return row.without(Status::MissingReference, NO_IMAGE) };
@@ -388,8 +389,15 @@ impl Context<'_> {
     }
 }
 
-pub(crate) fn measure(doc: &Document, root: &str, theme: Theme, variants: &[(NodeId, String)]) -> Vec<Row> {
+fn follows_dark(doc: &Document, set: NodeId) -> bool {
+    variants_of(doc, set)
+        .into_iter()
+        .any(|(id, _)| reference_of(doc, id).is_some_and(|reference| reference.themes.get(Theme::Dark.render()).is_some_and(|kept| kept.distinct)))
+}
+
+pub(crate) fn measure(doc: &Document, root: &str, theme: Theme, subject: &Subject) -> Vec<Row> {
     figcraft_text::scan_system_fonts();
-    let mut context = Context { doc, scratch: doc.clone(), root, theme };
+    let variants = &subject.variants;
+    let mut context = Context { doc, scratch: doc.clone(), root, theme, set_follows_dark: follows_dark(doc, subject.set) };
     variants.iter().map(|(id, name)| context.row(*id, name)).collect()
 }

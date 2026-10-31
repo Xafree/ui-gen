@@ -85,7 +85,7 @@ fn compare(s: &mut Session, p: &Value) -> Result<Value> {
     let set = opt_id(COMPARE, p, "set")?;
     let doc = s.doc()?;
     let subject = measure::subject(doc, set, s.page()?, wanted.as_deref()).map_err(|why| bad(COMPARE, why))?;
-    let rows = measure::measure(doc, &binding.root, theme, &subject.variants);
+    let rows = measure::measure(doc, &binding.root, theme, &subject);
     let listed = serde_json::to_value(&rows).map_err(|error| EngineError::Other(error.to_string()))?;
     let source = &subject.source;
     Ok(json!({
