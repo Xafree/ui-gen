@@ -101,3 +101,27 @@ fn the_state_of_the_page_does_not_follow_another_project_to_the_front() {
     b.settle();
     assert_eq!(error(&b), None, "the refusal stayed with its project");
 }
+
+#[test]
+fn a_package_with_no_dependency_is_read_once_until_a_job_ends() {
+    let dir = Dir::new("dependencies-cache");
+    let root = dir.0.to_string_lossy().into_owned();
+    assert!(crate::source_family::dependencies_of(&root, "late", "1.0.0").is_empty());
+    let folder = dir.0.join(".uigen/sources/node_modules/late");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("package.json"), json!({"dependencies": {"now": "1.0.0"}}).to_string()).unwrap();
+    assert!(crate::source_family::dependencies_of(&root, "late", "1.0.0").is_empty(), "the empty answer is kept");
+    crate::source_family::forget_dependencies();
+    assert_eq!(crate::source_family::dependencies_of(&root, "late", "1.0.0"), ["now"]);
+}
+
+#[test]
+fn a_finished_install_forgets_what_was_read() {
+    let mut b = Bench::with("dependencies-job", &[row(HEAD, "3.0.0", Some("react"), false)], Vec::new());
+    let root = b.ui.app.session.project().expect("a project").root.clone();
+    assert!(crate::source_family::dependencies_of(&root, HEAD, "3.0.0").is_empty());
+    depends(&b, HEAD, &[SAME]);
+    add_packages(&mut b.ui.app, PACKAGE);
+    b.settle();
+    assert_eq!(crate::source_family::dependencies_of(&root, HEAD, "3.0.0"), [SAME]);
+}

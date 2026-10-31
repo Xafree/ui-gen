@@ -15,7 +15,7 @@ pub(in crate::dialogs) mod page;
 use super::project_themes::{self, ThemeAct, Themes};
 use crate::FigApp;
 use crate::i18n::{tr_noop, trf};
-use crate::source_family::{SourceFacts, dependencies_of, group_sources};
+use crate::source_family::{SourceFacts, dependencies_of, forget_dependencies, group_sources};
 use crate::theme::{Tokens, regular};
 
 const ADD: &str = "project.addSource";
@@ -362,6 +362,7 @@ pub(crate) fn pump(app: &mut FigApp) {
         if ![ADD, ADD_MANY, SET_VERSION, REMOVE].contains(&event.command.as_str()) {
             continue;
         }
+        forget_dependencies();
         match &event.outcome {
             Ok(_) if event.command == REMOVE => app.toast(trf("Removed {package}", &[("package", &package)])),
             Ok(_) => app.toast(trf("Installed {package}", &[("package", &package)])),

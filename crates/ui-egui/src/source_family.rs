@@ -80,10 +80,15 @@ pub fn dependencies_of(root: &str, package: &str, version: &str) -> Vec<String> 
         return found.clone();
     }
     let read = figcraft_engine::project::installed_dependencies(root, package);
-    if !read.is_empty()
-        && let Ok(mut cache) = DEPENDENCIES.lock()
-    {
+    if let Ok(mut cache) = DEPENDENCIES.lock() {
         cache.get_or_insert_with(HashMap::new).insert(key, read.clone());
     }
     read
+}
+
+/// A job on the sources of a project ended: what is installed may have changed.
+pub fn forget_dependencies() {
+    if let Ok(mut cache) = DEPENDENCIES.lock() {
+        *cache = None;
+    }
 }
