@@ -434,6 +434,10 @@ pub struct TextData {
     /// line's baseline).
     #[serde(skip_serializing_if = "crate::node::is_default")]
     pub leading_trim: LeadingTrim,
+    /// Px added to every line's baseline: an imported text sits where its browser drew it, whose
+    /// rounded font metrics and floored half leading differ from the natural line.
+    #[serde(skip_serializing_if = "crate::node::is_default")]
+    pub baseline_nudge: f64,
     /// Max lines when truncating, or before an auto-height text ends in an ellipsis (0 = as many
     /// as fit).
     #[serde(skip_serializing_if = "crate::node::is_default")]

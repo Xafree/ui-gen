@@ -40,7 +40,7 @@ function walkInPage({ rootSelector, limits }) {
   const NO_SPECIFICITY = [0, 0, 0];
   const TEXT_KEYS = [
     'color', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing',
-    'textTransform', 'textAlign',
+    'textTransform', 'textAlign', 'textDecorationLine',
   ];
   const SVG_PRESENTATION = ['stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-dasharray', 'fill-opacity', 'stroke-opacity', 'fill-rule', 'opacity'];
   const PSEUDOS = ['::before', '::after'];
@@ -455,6 +455,13 @@ function walkInPage({ rootSelector, limits }) {
     return Number.isFinite(px) ? px : normalLineHeight(parent);
   };
 
+  const metricsCanvas = document.createElement('canvas').getContext('2d');
+
+  const fontAscentOf = (computed) => {
+    metricsCanvas.font = `${computed.fontStyle} ${computed.fontWeight} ${computed.fontSize} ${computed.fontFamily}`;
+    return Math.round(metricsCanvas.measureText('').fontBoundingBoxAscent);
+  };
+
   const isSingleLine = (range) => new Set([...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => Math.round(rect.top))).size <= 1;
 
   const markParent = (parent) => {
@@ -475,7 +482,8 @@ function walkInPage({ rootSelector, limits }) {
     const box = boxOf(range.getBoundingClientRect());
     const parent = node.parentElement;
     const computed = getComputedStyle(parent);
-    const result = { type: 'text', text, box, style: scaleText(pick(computed, TEXT_KEYS), inheritedScale(parent)), markId: markParent(parent) };
+    const scale = inheritedScale(parent);
+    const result = { type: 'text', text, box, style: scaleText(pick(computed, TEXT_KEYS), scale), markId: markParent(parent), baseline: box.y + fontAscentOf(computed) * scale };
     if (isSingleLine(range)) {
       const height = lineHeightOf(parent, computed);
       if (Number.isFinite(height) && height > 0) {

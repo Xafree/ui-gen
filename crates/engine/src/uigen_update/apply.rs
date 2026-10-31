@@ -141,6 +141,7 @@ fn copy_field(field: Field, to: &mut Node, from: &Node) {
                 into.paragraph_indent = source.paragraph_indent;
                 into.list_spacing = source.list_spacing;
                 into.leading_trim = source.leading_trim;
+                into.baseline_nudge = source.baseline_nudge;
                 into.auto_resize = source.auto_resize;
             }
             to.styles.text.clone_from(&from.styles.text);
