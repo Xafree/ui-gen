@@ -4,6 +4,8 @@ use figcraft_doc::TextData;
 
 use crate::model::{DomBox, TextRun};
 
+const MAX_HUG_NUDGE: f64 = 1.0;
+
 /// The line box the browser laid out, when the snapshot measured the baseline; an older snapshot keeps its estimate.
 pub(super) fn line_box(run: &TextRun) -> Option<DomBox> {
     let line = run.line_box?;
@@ -26,5 +28,5 @@ pub(super) fn nudge(run: &TextRun, data: &TextData) -> f64 {
 /// What `data`, its style final, must add to its natural width to hug the `width` the browser snapped its box to; nothing for a width out of reason.
 pub(super) fn hug_nudge(width: f64, data: &TextData) -> f64 {
     let wanted = width - figcraft_text::layout_cached(data, None, None).width;
-    if wanted.is_finite() && wanted.abs() <= data.style.font_size { wanted } else { 0.0 }
+    if wanted.is_finite() && wanted.abs() <= MAX_HUG_NUDGE { wanted } else { 0.0 }
 }
