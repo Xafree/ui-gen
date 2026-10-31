@@ -664,3 +664,6 @@ mod project_save_as_tests;
 
 #[cfg(test)]
 mod project_sources_tests;
+
+#[cfg(test)]
+mod project_sources_family_tests;

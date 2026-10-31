@@ -6,7 +6,7 @@ use egui::{
     StrokeKind, TextEdit, Ui, UiBuilder, pos2, vec2,
 };
 
-use super::{Act, ProjectSettings, RunState, SourceRow, Work, failure_text, package_field, project_themes};
+use super::{Act, FamilyRow, ProjectSettings, RunState, Work, failure_text, package_field, project_themes};
 use crate::a11y;
 use crate::i18n::{tr, trf, trn};
 use crate::theme::{Tokens, regular, semibold};
@@ -244,7 +244,7 @@ fn add_card(ui: &mut Ui, t: &Tokens, state: &mut ProjectSettings, can_install: b
         if let Some(run) = &state.last_run {
             log_block(ui, t, run);
             if let RunState::Done = run.state
-                && let Some(row) = run.packages.last().and_then(|p| state.sources.iter().find(|r| r.package == *p && r.status == "ready"))
+                && let Some(row) = run.packages.last().and_then(|p| state.families.iter().find(|f| f.packages.contains(p) && f.status == "ready"))
             {
                 ready_band(ui, t, row, can_install, acts);
             }
@@ -320,7 +320,7 @@ fn band_galley(ui: &Ui, text: String, font: FontId, color: Color32, wrap_width: 
     ui.painter().layout_job(job)
 }
 
-fn ready_band(ui: &mut Ui, t: &Tokens, row: &SourceRow, can_install: bool, acts: &mut Vec<Act>) {
+fn ready_band(ui: &mut Ui, t: &Tokens, row: &FamilyRow, can_install: bool, acts: &mut Vec<Act>) {
     const TICK: f32 = 36.0;
     const GAP: f32 = 14.0;
     const BUTTON_H: f32 = 34.0;
@@ -337,7 +337,7 @@ fn ready_band(ui: &mut Ui, t: &Tokens, row: &SourceRow, can_install: bool, acts:
     let inner = ui.available_width() - 2.0 * ROW_PAD_X;
     let wrapped = inner < TICK + GAP + READY_TEXT_BASIS + GAP + button_w;
     let text_w = if wrapped { inner - TICK - GAP } else { inner - TICK - GAP - GAP - button_w };
-    let title = band_galley(ui, trf("{package} is ready", &[("package", &row.package)]), semibold(13.5), t.text, text_w);
+    let title = band_galley(ui, trf("{package} is ready", &[("package", &row.name)]), semibold(13.5), t.text, text_w);
     let sub = band_galley(ui, facts.join(" · "), regular(12.5), t.text_secondary, text_w);
     let text_h = (title.size().y + sub.size().y).max(TEXT_MIN_H);
     let first_row = TICK.max(text_h);
@@ -362,7 +362,7 @@ fn ready_band(ui: &mut Ui, t: &Tokens, row: &SourceRow, can_install: bool, acts:
         Rect::from_min_size(pos2(rect.max.x - ROW_PAD_X - button_w, rect.center().y - BUTTON_H / 2.0), vec2(button_w, BUTTON_H))
     };
     if button_at(ui, t, button_rect, label, Look::Primary, can_install).clicked() {
-        acts.push(Act::Browse(Some(row.package.clone())));
+        acts.push(Act::Browse(Some(row.head().to_string())));
     }
 }
 
@@ -418,7 +418,7 @@ fn installed(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, can_install: bool
     });
 }
 
-fn state_tag(t: &Tokens, row: &SourceRow) -> (&'static str, Color32, Color32) {
+fn state_tag(t: &Tokens, row: &FamilyRow) -> (&'static str, Color32, Color32) {
     match (row.status == "removed", row.status == "installing", row.work) {
         (true, ..) => (tr("Removed source"), t.hover, t.text_tertiary),
         (_, true, _) | (_, _, Work::Installing) => (tr("Installing…"), t.warn_bg, t.warn_text),
@@ -430,8 +430,8 @@ fn state_tag(t: &Tokens, row: &SourceRow) -> (&'static str, Color32, Color32) {
 fn natural_widths(ui: &Ui, t: &Tokens, state: &ProjectSettings) -> [f32; COLUMNS] {
     let head = |title: &str| text_width(ui, title, regular(12.0));
     let mut width = [head(tr("Library")), head(tr("Version")), head(tr("Written for")), head(tr("State")), 0.0];
-    for row in &state.sources {
-        width[0] = width[0].max(text_width(ui, &row.package, semibold(13.5)));
+    for row in &state.families {
+        width[0] = width[0].max(text_width(ui, &row.name, semibold(13.5)));
         width[1] = width[1].max(text_width(ui, &row.version, mono(13.5)));
         width[2] = width[2].max(framework_name(&row.framework).map_or(0.0, |name| tag_width(ui, name)));
         width[3] = width[3].max(tag_width(ui, state_tag(t, row).0));
@@ -454,8 +454,8 @@ fn table(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, width: f32, closes_ta
     let table_w = width.max(natural.iter().sum());
     let edges = column_edges(&natural, table_w);
     header(ui, t, table_w, &edges);
-    let last = state.sources.len().saturating_sub(1);
-    for (i, row) in state.sources.iter().enumerate() {
+    let last = state.families.len().saturating_sub(1);
+    for (i, row) in state.families.iter().enumerate() {
         table_row(ui, t, state, row, &Slot { width: table_w, edges: &edges, last: i == last && closes_table }, can_install, acts);
     }
 }
@@ -475,13 +475,16 @@ struct Slot<'a> {
     last: bool,
 }
 
-fn table_row(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &SourceRow, slot: &Slot, can_install: bool, acts: &mut Vec<Act>) {
+fn table_row(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &FamilyRow, slot: &Slot, can_install: bool, acts: &mut Vec<Act>) {
     let Slot { width, edges, last } = *slot;
     let removed = row.status == "removed";
     let busy = row.status == "installing";
     let has_actions = !(removed || busy || row.work != Work::Idle);
-    let note =
-        state.failure(&row.package).or_else(|| state.changing.as_ref().filter(|(p, _)| *p == row.package).and_then(|_| state.change_error.clone()));
+    let note = row
+        .packages
+        .iter()
+        .find_map(|p| state.failure(p))
+        .or_else(|| state.changing.as_ref().filter(|(p, _)| p == row.head()).and_then(|_| state.change_error.clone()));
     let note_h = if note.is_some() { 24.0 } else { 0.0 };
     let content_h = if has_actions { ACTIONS_H } else { TAG_ROW_H };
     let height = 2.0 * ROW_PAD_Y + content_h + note_h + if last { 0.0 } else { 1.0 };
@@ -491,7 +494,7 @@ fn table_row(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &SourceRow, 
     }
     let y = rect.min.y + ROW_PAD_Y + content_h / 2.0;
     let ink = if removed { t.text_tertiary } else { t.text };
-    ui.painter().text(pos2(rect.min.x + ROW_PAD_X, y), Align2::LEFT_CENTER, &row.package, semibold(13.5), ink);
+    ui.painter().text(pos2(rect.min.x + ROW_PAD_X, y), Align2::LEFT_CENTER, &row.name, semibold(13.5), ink);
     ui.painter().text(pos2(rect.min.x + edges[1] + ROW_PAD_X, y), Align2::LEFT_CENTER, &row.version, mono(13.5), ink);
     match framework_name(&row.framework) {
         Some(name) => tag_at(ui, rect.min.x + edges[2] + ROW_PAD_X, y + 0.5, name, t.hover, t.text_secondary),
@@ -516,9 +519,9 @@ fn table_row(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &SourceRow, 
     row_actions(&mut cell, t, state, row, can_install, acts);
 }
 
-fn row_actions(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &SourceRow, can_install: bool, acts: &mut Vec<Act>) {
-    let package = row.package.clone();
-    if state.pending_removal() == Some(row.package.as_str()) {
+fn row_actions(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &FamilyRow, can_install: bool, acts: &mut Vec<Act>) {
+    let package = row.head().to_string();
+    if state.pending_removal() == Some(row.head()) {
         ui.spacing_mut().item_spacing.x = 8.0;
         if crate::widgets::button(ui, tr("Cancel"), false, true).clicked() {
             acts.push(Act::CancelRemoval);
@@ -526,7 +529,7 @@ fn row_actions(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &SourceRow
         if crate::widgets::button(ui, tr("Confirm removal"), true, can_install).clicked() {
             acts.push(Act::ConfirmRemoval(package));
         }
-    } else if let Some((_, draft)) = state.changing.as_ref().filter(|(p, _)| *p == row.package) {
+    } else if let Some((_, draft)) = state.changing.as_ref().filter(|(p, _)| p == row.head()) {
         ui.spacing_mut().item_spacing.x = 8.0;
         if crate::widgets::button(ui, tr("Cancel"), false, true).clicked() {
             acts.push(Act::CancelChange);
@@ -534,7 +537,7 @@ fn row_actions(ui: &mut Ui, t: &Tokens, state: &ProjectSettings, row: &SourceRow
         if crate::widgets::button(ui, tr("Apply"), true, can_install).clicked() {
             acts.push(Act::Apply(package));
         }
-        let field = egui::Id::unique(("project_settings_change", row.package.as_str()));
+        let field = egui::Id::unique(("project_settings_change", row.head()));
         if let Some(text) = crate::widgets::text_field(ui, field, draft, 90.0, tr("Version")) {
             acts.push(Act::Draft(text));
         }

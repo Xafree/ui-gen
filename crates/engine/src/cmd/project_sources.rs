@@ -41,7 +41,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "project.setSourceVersion",
             "Change source library version",
-            "{package, version (exact semver or \"latest\")}  asks the capture service to install that version of a source of the project and returns {job}; uigen.json keeps the old version unless the install succeeds",
+            "{package, version (exact semver or \"latest\")} or {packages (an array of package names), version}  asks the capture service to install that version of a source of the project, or of every listed source in one job, and returns {job}; uigen.json keeps the old versions unless the install succeeds, and then changes them all in one write",
             false,
             set_version
         ),
@@ -143,12 +143,33 @@ fn add_many(s: &mut Session, p: &Value) -> Result<Value> {
     submit(s, ADD_MANY, &binding, &names, job)
 }
 
+fn listed_packages(cmd: &str, p: &Value) -> Result<Vec<String>> {
+    let Some(list) = p.get("packages") else { return Ok(vec![package(cmd, p)?]) };
+    let list = list.as_array().filter(|list| !list.is_empty()).ok_or_else(|| bad(cmd, "packages must be a non-empty array"))?;
+    let mut names: Vec<String> = Vec::with_capacity(list.len());
+    for entry in list {
+        let name = package(cmd, &json!({"package": entry}))?;
+        if names.contains(&name) {
+            return Err(bad(cmd, format!("package \"{name}\" is listed twice")));
+        }
+        names.push(name);
+    }
+    Ok(names)
+}
+
 fn set_version(s: &mut Session, p: &Value) -> Result<Value> {
     let binding = binding(s, SET_VERSION)?;
-    let package = package(SET_VERSION, p)?;
+    let mut names = listed_packages(SET_VERSION, p)?;
     let version = version(SET_VERSION, p, None)?;
-    require_active_source(SET_VERSION, &binding, &package)?;
-    install(s, SET_VERSION, &binding, package, version)
+    for name in &names {
+        require_active_source(SET_VERSION, &binding, name)?;
+    }
+    if names.len() == 1 {
+        return install(s, SET_VERSION, &binding, names.remove(0), version);
+    }
+    let specs = names.iter().map(|name| npm::PackageSpec { name: name.clone(), version: version.clone() }).collect();
+    let job = CaptureJob::InstallMany { root: absolute_root(SET_VERSION, &binding.root)?, packages: specs };
+    submit(s, SET_VERSION, &binding, &names, job)
 }
 
 fn remove(s: &mut Session, p: &Value) -> Result<Value> {
@@ -208,7 +229,7 @@ pub(crate) fn apply(s: &mut Session, command: &str, packages: &[String], root: &
             Some(source) => source.removed = true,
             None => return Ok(()),
         }
-    } else if command == ADD_MANY {
+    } else if command == ADD_MANY || (command == SET_VERSION && packages.len() > 1) {
         upsert_all(&mut config, packages, result)?;
     } else {
         upsert(&mut config, &package, result)?;

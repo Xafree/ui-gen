@@ -485,7 +485,9 @@ fn families_in_order(app: &FigApp, state: &ImportWindow, sources: &[Source]) -> 
     let mut chosen = Vec::new();
     for card in &cards {
         for row in card.rows.iter().filter(|row| row.ticked) {
-            if let Some(component) = app.session.inspected(&row.package).and_then(|found| found.components.iter().find(|c| c.name == row.name).cloned()) {
+            if let Some(component) =
+                app.session.inspected(&row.package).and_then(|found| found.components.iter().find(|c| c.name == row.name).cloned())
+            {
                 chosen.push((row.package.clone(), component));
             }
         }

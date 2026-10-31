@@ -15,6 +15,7 @@ pub(in crate::dialogs) mod page;
 use super::project_themes::{self, ThemeAct, Themes};
 use crate::FigApp;
 use crate::i18n::{tr_noop, trf};
+use crate::source_family::{SourceFacts, dependencies_of, group_sources};
 use crate::theme::{Tokens, regular};
 
 const ADD: &str = "project.addSource";
@@ -38,6 +39,24 @@ pub struct SourceRow {
     pub license: String,
     pub status: String,
     work: Work,
+}
+
+#[derive(Clone, Debug)]
+pub struct FamilyRow {
+    pub name: String,
+    pub version: String,
+    pub framework: String,
+    pub license: String,
+    pub status: String,
+    work: Work,
+    pub packages: Vec<String>,
+    active: Vec<String>,
+}
+
+impl FamilyRow {
+    pub fn head(&self) -> &str {
+        self.packages.first().map_or("", String::as_str)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -71,6 +90,7 @@ struct Job {
 #[derive(Clone, Debug, Default)]
 pub struct ProjectSettings {
     sources: Vec<SourceRow>,
+    families: Vec<FamilyRow>,
     failures: Vec<Failure>,
     project_name: String,
     package_input: String,
@@ -100,6 +120,17 @@ enum Act {
 impl ProjectSettings {
     pub fn sources(&self) -> &[SourceRow] {
         &self.sources
+    }
+
+    pub fn families(&self) -> &[FamilyRow] {
+        &self.families
+    }
+
+    fn active_packages(&self, package: &str) -> Vec<String> {
+        match self.families.iter().find(|family| family.packages.iter().any(|p| p == package)) {
+            Some(family) => family.active.clone(),
+            None => vec![package.to_string()],
+        }
     }
 
     pub fn add_error(&self) -> Option<&str> {
@@ -175,19 +206,7 @@ impl ProjectSettings {
                 _ => RunState::Running,
             };
         }
-        self.project_name = binding.config.name.clone();
-        if let Some(run) = self.last_run.as_mut()
-            && let Some(job) = jobs
-                .iter()
-                .rev()
-                .find(|j| j.command == ADD && j.packages.len() == run.packages.len() && run.packages.iter().all(|p| j.packages.contains(p)))
-        {
-            run.state = match job.state.as_str() {
-                "failed" => RunState::Failed(job.error.clone()),
-                "done" => RunState::Done,
-                _ => RunState::Running,
-            };
-        }
+        self.families = family_rows(&binding.root, &rows);
         self.sources = rows;
         self.failures = failures;
         self.themes.refresh(app, &binding.root, &binding.config);
@@ -197,6 +216,49 @@ impl ProjectSettings {
     fn failure(&self, package: &str) -> Option<String> {
         self.failures.iter().find(|f| f.packages.iter().any(|p| p == package)).map(|f| failure_text(&f.command, &f.packages.join(", "), &f.message))
     }
+}
+
+fn family_rows(root: &str, rows: &[SourceRow]) -> Vec<FamilyRow> {
+    let dependencies: Vec<Vec<String>> =
+        rows.iter().map(|r| if r.status == "removed" { Vec::new() } else { dependencies_of(root, &r.package, &r.version) }).collect();
+    let borrowed: Vec<Vec<&str>> = dependencies.iter().map(|list| list.iter().map(String::as_str).collect()).collect();
+    let facts: Vec<SourceFacts> = rows
+        .iter()
+        .zip(&borrowed)
+        .map(|(r, depends_on)| SourceFacts {
+            package: &r.package,
+            version: &r.version,
+            framework: &r.framework,
+            components: usize::from(!r.framework.is_empty()),
+            depends_on,
+        })
+        .collect();
+    group_sources(&facts)
+        .into_iter()
+        .map(|family| {
+            let members: Vec<&SourceRow> = family.packages.iter().filter_map(|p| rows.iter().find(|r| r.package == *p)).collect();
+            let head = members.first();
+            let any = |status: &str| members.iter().any(|r| r.status == status);
+            let status = if members.iter().all(|r| r.status == "removed") {
+                "removed"
+            } else if any("installing") {
+                "installing"
+            } else {
+                "ready"
+            };
+            let work = [Work::Removing, Work::Installing].into_iter().find(|w| members.iter().any(|r| r.work == *w)).unwrap_or(Work::Idle);
+            FamilyRow {
+                name: family.name,
+                version: family.version,
+                framework: head.map(|r| r.framework.clone()).unwrap_or_default(),
+                license: head.map(|r| r.license.clone()).unwrap_or_default(),
+                status: status.to_string(),
+                work,
+                active: members.iter().filter(|r| r.status != "removed").map(|r| r.package.clone()).collect(),
+                packages: family.packages,
+            }
+        })
+        .collect()
 }
 
 fn jobs(app: &FigApp, root: &str) -> Vec<Job> {
@@ -324,15 +386,20 @@ pub fn change_version(app: &mut FigApp, package: &str, version: &str) {
     let version = version.trim();
     let checked = npm::validate_version(version, true);
     edit(app, |state| state.change_error = checked.as_ref().err().map(ToString::to_string));
-    if checked.is_ok() && app.run(SET_VERSION, json!({"package": package, "version": version})).is_some() {
+    let packages = app.ui.project_settings.as_ref().map_or_else(|| vec![package.to_string()], |state| state.active_packages(package));
+    let params = if packages.len() > 1 { json!({"packages": packages, "version": version}) } else { json!({"package": package, "version": version}) };
+    if checked.is_ok() && app.run(SET_VERSION, params).is_some() {
         edit(app, |state| state.changing = None);
     }
     sync(app);
 }
 
 fn remove_package(app: &mut FigApp, package: &str) {
+    let packages = app.ui.project_settings.as_ref().map_or_else(|| vec![package.to_string()], |state| state.active_packages(package));
     edit(app, |state| state.pending_removal = None);
-    app.run(REMOVE, json!({"package": package}));
+    for package in packages {
+        app.run(REMOVE, json!({"package": package}));
+    }
     sync(app);
 }
 

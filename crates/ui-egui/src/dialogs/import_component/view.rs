@@ -127,7 +127,9 @@ fn steps(ui: &mut Ui, t: &Tokens) {
     let gap = 8.0;
     let column = (ui.available_width() - gap) / 2.0;
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 4.0 + 8.0 + 13.0 * BODY_LINE), Sense::hover());
-    for (index, (number, label, weight)) in [("01", format!("{} ✓", tr("Libraries")), false), ("02", tr("Components").to_string(), true)].into_iter().enumerate() {
+    for (index, (number, label, weight)) in
+        [("01", format!("{} ✓", tr("Libraries")), false), ("02", tr("Components").to_string(), true)].into_iter().enumerate()
+    {
         let left = rect.min.x + index as f32 * (column + gap);
         let bar = Rect::from_min_size(pos2(left, rect.min.y), vec2(column, 4.0));
         ui.painter().rect_filled(bar, CornerRadius::same(2), t.accent);
@@ -206,7 +208,8 @@ fn left(ui: &mut Ui, t: &Tokens, model: &mut Model, acts: &mut Vec<Act>) {
     }
     if !model.cards.is_empty() {
         let query = model.search.trim().to_lowercase();
-        let shown: Vec<&CardView> = model.cards.iter().filter(|card| query.is_empty() || card.rows.iter().any(|row| matches(&row.name, &query))).collect();
+        let shown: Vec<&CardView> =
+            model.cards.iter().filter(|card| query.is_empty() || card.rows.iter().any(|row| matches(&row.name, &query))).collect();
         if shown.is_empty() {
             note(ui, tr("No matching components"), 13.5, t.text_secondary);
         }
@@ -370,7 +373,8 @@ fn chips(ui: &mut Ui, t: &Tokens, items: &[(&str, bool)]) -> Option<usize> {
         let rect = Rect::from_min_size(pos2(area.min.x + x, area.min.y + y), vec2(*w, CHIP_H));
         let resp = ui.interact(rect, ui.scope_id().with(("chip", *name)), Sense::click());
         a11y::toggle(&resp, name, *on);
-        let (fill, border, ink) = if *on { (t.selected_row, t.selected_row, t.accent_text) } else { (egui::Color32::TRANSPARENT, t.border, t.text_secondary) };
+        let (fill, border, ink) =
+            if *on { (t.selected_row, t.selected_row, t.accent_text) } else { (egui::Color32::TRANSPARENT, t.border, t.text_secondary) };
         ui.painter().rect_filled(rect, CornerRadius::same(14), fill);
         ui.painter().rect_stroke(rect, CornerRadius::same(14), Stroke::new(1.0, border), StrokeKind::Inside);
         ui.painter().text(rect.center(), Align2::CENTER_CENTER, name, regular(12.5), ink);
