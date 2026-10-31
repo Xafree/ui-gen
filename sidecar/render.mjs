@@ -145,6 +145,20 @@ function markRenderedElement({ rootSelector, mark }) {
   return true;
 }
 
+async function screenshotPainted(page, selector, file) {
+  const target = page.locator(selector);
+  const box = await target.boundingBox();
+  const left = Math.round(box?.x ?? 0);
+  const top = Math.round(box?.y ?? 0);
+  const right = Math.round((box?.x ?? 0) + (box?.width ?? 0));
+  const bottom = Math.round((box?.y ?? 0) + (box?.height ?? 0));
+  if (right > left && bottom > top && right <= VIEWPORT.width && bottom <= VIEWPORT.height) {
+    await page.screenshot({ path: file, clip: { x: left, y: top, width: right - left, height: bottom - top } });
+  } else {
+    await target.screenshot({ path: file });
+  }
+}
+
 function pngSegments(installed, { component, props, state, theme }) {
   const hash = createHash('sha256').update(JSON.stringify(props)).digest('hex').slice(0, 12);
   const name = `${safeSegment(component)}-${hash}-${state}-${theme}.png`;
@@ -170,7 +184,7 @@ async function renderInPage(page, installed, params, { code, styles }, budget) {
   const segments = pngSegments(installed, { component, props, state, theme });
   const file = path.join(params.dir, ...segments);
   await mkdir(path.dirname(file), { recursive: true });
-  await page.locator(captured).screenshot({ path: file });
+  await screenshotPainted(page, captured, file);
   return { snapshot, png: segments.join('/') };
 }
 
